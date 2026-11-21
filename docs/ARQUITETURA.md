@@ -1,6 +1,6 @@
 # Pipa — Nostalgia Online · Arquitetura Técnica
 
-> Documento vivo. Etapa atual: **1 — Demonstração jogável offline**.
+> Documento vivo. Etapa atual: **1 — Demonstração jogável offline (implementada)**.
 > Alvo: Godot 4.7 · GDScript · Android (paisagem) · Renderer Mobile.
 
 ---
@@ -75,7 +75,8 @@ Pipa/
 ├── src/                          # código + cenas, organizado por FUNCIONALIDADE
 │   ├── main/
 │   │   ├── main.tscn             # cena inicial: World + Player + Kite + HUD
-│   │   └── main.gd               # liga os sistemas (injeção de dependências)
+│   │   ├── main.gd               # liga os sistemas (injeção de dependências)
+│   │   └── autotest.gd           # teste headless da física (CI)
 │   ├── autoload/
 │   │   ├── game_config.gd        # qualidade gráfica, sensibilidade, constantes
 │   │   ├── event_bus.gd          # sinais globais (line_snapped, kite_crashed...)
@@ -83,9 +84,8 @@ Pipa/
 │   ├── input/
 │   │   ├── player_intent.gd      # class_name PlayerIntent (dados puros)
 │   │   ├── input_router.gd       # junta toque/teclado ► PlayerIntent
-│   │   ├── touch_controls.tscn
+│   │   ├── touch_controls.tscn/.gd  # roteia multitoque: joystick, olhar, botões
 │   │   ├── virtual_joystick.gd
-│   │   ├── look_pad.gd           # área de arrastar para câmera (multitoque)
 │   │   └── touch_button.gd       # botão com estado "segurando"
 │   ├── player/
 │   │   ├── player.tscn
@@ -106,9 +106,10 @@ Pipa/
 │   │   ├── kite_line.gd          # restrição unilateral + carretel (comprimento)
 │   │   └── line_renderer.gd      # corda visual Verlet ► ImmediateMesh (fita)
 │   ├── world/
-│   │   ├── world.tscn            # Sol, WorldEnvironment, chão, StreetBuilder
-│   │   ├── street_builder.gd     # monta rua/calçadas/casas/muros/postes por seed
-│   │   ├── house_builder.gd      # casa simples parametrizada (cores, telhado)
+│   │   ├── world.tscn / world.gd # Sol, WorldEnvironment, StreetBuilder, vento nas árvores
+│   │   ├── street_builder.gd     # monta rua/calçadas/lotes/postes/fios por seed
+│   │   ├── house_builder.gd      # casa parametrizada (muro, portão, telhado/laje)
+│   │   ├── mesh_batch.gd         # agrupa primitivas em poucas malhas (draw calls)
 │   │   ├── tree_sway.gdshader    # balanço de árvores no vértice (vento)
 │   │   └── environment/
 │   │       └── tarde.tres        # Environment: céu procedural, névoa leve
@@ -116,8 +117,6 @@ Pipa/
 │   │   ├── hud.tscn
 │   │   ├── wind_indicator.gd     # seta discreta + intensidade
 │   │   └── debug_overlay.gd      # FPS, tensão, ângulo de ataque (desligável)
-│   └── util/
-│       └── math_util.gd          # damping independente de framerate, etc.
 │
 ├── assets/                       # conteúdo importado (vazio na etapa 1)
 │   ├── models/  textures/  audio/  materials/  fonts/
@@ -164,9 +163,9 @@ Pipa/
 
 ### 4.4 Linha visual (separada da física)
 
-- Cadeia Verlet de **16–24 pontos** (configurável por qualidade), presa na mão e no cabresto.
-- Comprimento de repouso = comprimento atual da linha; gravidade + vento lateral nos pontos → curvatura natural (catenária) quando frouxa, quase reta quando tensa.
-- 2–3 iterações de restrição por frame; custo desprezível.
+- **Decisão na implementação:** em vez de uma cadeia Verlet (que estica com linhas de 100 m+ e poucas iterações), a forma é uma parábola com **flecha calculada pela física real**: esticada `w·D²/(8T)`, frouxa pelo excesso de comprimento.
+- A flecha segue o alvo com mola amortecida e cada ponto persegue sua posição com atraso maior no meio → ondula ao afrouxar/puxar.
+- 14–28 pontos conforme a qualidade; custo desprezível. A rabiola, curta, usa Verlet.
 - Renderizada como fita voltada para a câmera via `ImmediateMesh` (1 draw call, material unshaded fino com leve transparência na distância).
 
 ### 4.5 Vento (`WindField`)
