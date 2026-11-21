@@ -1,4 +1,4 @@
-class_name VirtualJoystick
+class_name TouchJoystick
 extends Control
 ## Joystick dinâmico: aparece onde o polegar toca. Só desenha e calcula o vetor;
 ## o roteamento dos toques (multitoque) é feito por TouchControls.

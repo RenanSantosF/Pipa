@@ -9,7 +9,7 @@ signal look_dragged(relative: Vector2)
 signal reset_pressed
 signal quality_pressed
 
-@onready var joystick: VirtualJoystick = $Joystick
+@onready var joystick: TouchJoystick = $Joystick
 @onready var pull_button: TouchButton = $PullButton
 @onready var release_button: TouchButton = $ReleaseButton
 @onready var reel_button: TouchButton = $ReelButton

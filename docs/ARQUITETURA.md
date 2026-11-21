@@ -85,7 +85,7 @@ Pipa/
 │   │   ├── player_intent.gd      # class_name PlayerIntent (dados puros)
 │   │   ├── input_router.gd       # junta toque/teclado ► PlayerIntent
 │   │   ├── touch_controls.tscn/.gd  # roteia multitoque: joystick, olhar, botões
-│   │   ├── virtual_joystick.gd
+│   │   ├── touch_joystick.gd
 │   │   └── touch_button.gd       # botão com estado "segurando"
 │   ├── player/
 │   │   ├── player.tscn

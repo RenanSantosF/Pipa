@@ -1,7 +1,7 @@
 [gd_scene format=3]
 
 [ext_resource type="Script" path="res://src/input/touch_controls.gd" id="1_tc"]
-[ext_resource type="Script" path="res://src/input/virtual_joystick.gd" id="2_vj"]
+[ext_resource type="Script" path="res://src/input/touch_joystick.gd" id="2_vj"]
 [ext_resource type="Script" path="res://src/input/touch_button.gd" id="3_tb"]
 
 [node name="TouchControls" type="Control"]
