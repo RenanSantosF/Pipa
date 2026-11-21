@@ -1,0 +1,22 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://src/world/world.gd" id="1_wd"]
+[ext_resource type="Script" path="res://src/world/street_builder.gd" id="2_sb"]
+[ext_resource type="Environment" path="res://src/world/environment/tarde.tres" id="3_env"]
+
+[node name="World" type="Node3D"]
+script = ExtResource("1_wd")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = ExtResource("3_env")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+light_color = Color(1, 0.86, 0.7, 1)
+light_energy = 1.25
+shadow_enabled = true
+shadow_blur = 1.5
+directional_shadow_mode = 1
+directional_shadow_max_distance = 60.0
+
+[node name="StreetBuilder" type="Node3D" parent="."]
+script = ExtResource("2_sb")

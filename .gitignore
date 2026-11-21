@@ -1,0 +1,14 @@
+# Godot
+.godot/
+.import/
+*.translation
+export_credentials.cfg
+# Builds
+build/
+*.apk
+*.aab
+*.keystore
+*.jks
+# SO
+.DS_Store
+Thumbs.db
