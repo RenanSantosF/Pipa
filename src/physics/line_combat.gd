@@ -18,6 +18,7 @@ const CONTACT_GAP := 0.003
 const BIN := 0.1
 const DAMAGE_SCALE := 0.54
 const GROUP := 4
+const HOOK_GAP := 0.03
 
 
 class Contact:
@@ -36,6 +37,8 @@ class Contact:
 	var slide: float = 0.0
 	var position := Vector3.ZERO
 	var age: float = 0.0
+	## A linha de um chegou na pipa do outro e laçou no cabresto.
+	var hooked: bool = false
 
 
 var contacts: Array[Contact] = []
@@ -182,39 +185,60 @@ func solve(_h: float) -> void:
 		_refresh(c)
 		var ra := c.a.rope
 		var rb := c.b.rope
-		var na := ra.pos.size()
-		var nb := rb.pos.size()
-		var a0 := ra.pos[c.ia]
-		var a1 := ra.pos[c.ia + 1] if c.ia + 1 < na else ra.end_point()
-		var b0 := rb.pos[c.ib]
-		var b1 := rb.pos[c.ib + 1] if c.ib + 1 < nb else rb.end_point()
-		var pa := a0.lerp(a1, c.ta)
-		var pb := b0.lerp(b1, c.tb)
+		var pa_pts := ra.segment_points(c.ia)
+		var pb_pts := rb.segment_points(c.ib)
+		var pa := pa_pts[0].lerp(pa_pts[1], c.ta)
+		var pb := pb_pts[0].lerp(pb_pts[1], c.tb)
 		var d := pb - pa
-		var sep := d.dot(c.normal)
-		if sep >= CONTACT_GAP:
+		var nrm := c.normal
+		var violation := 0.0
+		if c.hooked:
 			var dl := d.length()
-			if dl > 0.00001:
-				c.normal = d / dl
-			continue
-		var wa0 := ra.inv_mass[c.ia]
-		var wa1 := ra.inv_mass[c.ia + 1] if c.ia + 1 < na else 0.0
-		var wb0 := rb.inv_mass[c.ib]
-		var wb1 := rb.inv_mass[c.ib + 1] if c.ib + 1 < nb else 0.0
+			if dl <= HOOK_GAP or dl < 0.00001:
+				continue
+			nrm = -d / dl          # puxa os dois pontos um para o outro
+			violation = dl - HOOK_GAP
+		else:
+			var sep := d.dot(nrm)
+			if sep >= CONTACT_GAP:
+				var dl2 := d.length()
+				if dl2 > 0.00001:
+					c.normal = d / dl2
+				continue
+			violation = CONTACT_GAP - sep
+		# Pesos generalizados (nós da linha ou corpo rígido da pipa na ponta).
 		var ua := 1.0 - c.ta
 		var ub := 1.0 - c.tb
-		var wsum := wa0 * ua * ua + wa1 * c.ta * c.ta + wb0 * ub * ub + wb1 * c.tb * c.tb
+		var wa0 := _weight(ra, c.ia, -nrm) * ua * ua
+		var wa1 := _weight(ra, c.ia + 1, -nrm) * c.ta * c.ta
+		var wb0 := _weight(rb, c.ib, nrm) * ub * ub
+		var wb1 := _weight(rb, c.ib + 1, nrm) * c.tb * c.tb
+		var wsum := wa0 + wa1 + wb0 + wb1
 		if wsum <= 0.0:
 			continue
-		var lam := (CONTACT_GAP - sep) / wsum
-		var nv := c.normal * lam
-		ra.pos[c.ia] -= nv * (ua * wa0)
-		if c.ia + 1 < na:
-			ra.pos[c.ia + 1] -= nv * (c.ta * wa1)
-		rb.pos[c.ib] += nv * (ub * wb0)
-		if c.ib + 1 < nb:
-			rb.pos[c.ib + 1] += nv * (c.tb * wb1)
+		var lam := violation / wsum
+		var nv := nrm * lam
+		_push(ra, c.ia, -nv * ua)
+		_push(ra, c.ia + 1, -nv * c.ta)
+		_push(rb, c.ib, nv * ub)
+		_push(rb, c.ib + 1, nv * c.tb)
 		c.impulse += lam
+
+
+## Massa inversa do ponto `idx` da linha (o índice depois do último nó é o cabresto).
+static func _weight(r: Rope, idx: int, dir: Vector3) -> float:
+	if idx < r.pos.size():
+		return r.inv_mass[idx]
+	if r.end_body != null:
+		return r.end_body.inverse_mass_at(r.end_body.q * r.end_local, dir)
+	return 0.0
+
+
+static func _push(r: Rope, idx: int, corr: Vector3) -> void:
+	if idx < r.pos.size():
+		r.pos[idx] += corr * r.inv_mass[idx]
+	elif r.end_body != null:
+		r.end_body.apply_correction(r.end_body.q * r.end_local, corr)
 
 
 ## Recalcula os parâmetros do contato, deslizando para segmentos vizinhos.
@@ -244,6 +268,12 @@ func _refresh(c: Contact) -> void:
 			moved = true
 		if not moved:
 			break
+	# Chegou na pipa (ponta com corpo) → laça no cabresto.
+	if not c.hooked:
+		if c.a.rope.end_body != null and c.ia == seg_a - 1 and c.ta >= 0.999:
+			c.hooked = true
+		elif c.b.rope.end_body != null and c.ib == seg_b - 1 and c.tb >= 0.999:
+			c.hooked = true
 
 
 # --- Desgaste (por tick) -------------------------------------------------------
@@ -258,7 +288,7 @@ func post_frame(dt: float, h: float, substeps: int) -> void:
 		var pb_pts := rb.segment_points(c.ib)
 		var pa := pa_pts[0].lerp(pa_pts[1], c.ta)
 		var pb := pb_pts[0].lerp(pb_pts[1], c.tb)
-		if pa.distance_to(pb) > RELEASE_DISTANCE:
+		if not c.hooked and pa.distance_to(pb) > RELEASE_DISTANCE:
 			contacts.remove_at(i)
 			continue
 		c.age += dt
