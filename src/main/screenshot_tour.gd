@@ -66,13 +66,15 @@ func _aim(mode: String) -> void:
 			_cam.look_at(bot.global_position + Vector3(0, 1.2, 0))
 			_cam.current = true
 		"overview":
-			var k := rig.body.x if rig.body else Vector3(0, 20, 30)
+			var k: Vector3 = rig.body.x if rig.body else Vector3(0, 20, 30)
+			var pp: Vector3 = player.global_position
 			_cam.global_position = Vector3(38, 18, 62)
-			_cam.look_at((k + main.player.global_position) * 0.5)
+			_cam.look_at((k + pp) * 0.5)
 			_cam.current = true
 		"side":
-			var k2 := rig.body.x if rig.body else Vector3(0, 20, 30)
-			var mid := (k2 + main.player.global_position) * 0.5
+			var k2: Vector3 = rig.body.x if rig.body else Vector3(0, 20, 30)
+			var pp2: Vector3 = player.global_position
+			var mid: Vector3 = (k2 + pp2) * 0.5
 			_cam.global_position = mid + Vector3(25, 2, 0)
 			_cam.look_at(mid)
 			_cam.current = true

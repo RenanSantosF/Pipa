@@ -121,6 +121,10 @@ jobs:
               --rendering-driver opengl3 --rendering-method gl_compatibility --resolution 1280x720 -- --screenshots 2>&1 | tee -a shots.log || true
           fi
           ls -la build/shots || true
+          if grep -nE "SCRIPT ERROR|Parse Error" shots.log; then
+            echo "::error::Erros de script no jogo normal (veja shots.log)"
+            exit 1
+          fi
 
       - name: Exportar APK
         run: |
