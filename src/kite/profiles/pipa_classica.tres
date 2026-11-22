@@ -5,24 +5,3 @@
 [resource]
 script = ExtResource("1_kp")
 display_name = "Pipa clássica"
-mass = 0.045
-area = 0.15
-cd0 = 0.06
-bridle_angle_deg = 20.0
-cn_attached = 4.0
-cn_separated = 1.25
-stall_start_deg = 15.0
-stall_end_deg = 30.0
-tail_length = 2.6
-tail_area = 0.012
-tail_cd = 1.0
-tail_stability = 4.5
-heading_damping = 5.5
-turbulence_sensitivity = 2.0
-orient_rate_taut = 18.0
-orient_rate_slack = 3.0
-size = Vector2(0.5, 0.62)
-color_a = Color(0.95, 0.78, 0.15, 1)
-color_b = Color(0.88, 0.2, 0.18, 1)
-tail_color_a = Color(0.95, 0.95, 0.95, 1)
-tail_color_b = Color(0.2, 0.45, 0.9, 1)

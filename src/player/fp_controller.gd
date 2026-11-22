@@ -1,86 +1,112 @@
 class_name FPController
 extends CharacterBody3D
-## Controlador em primeira pessoa: andar, olhar (yaw no corpo, pitch na cabeça),
-## gravidade e assistência de mira opcional para acompanhar a pipa.
+## Jogador em primeira pessoa empinando pipa.
+##
+## Câmera: SEMPRE focada na pipa. O jogador pode virar a câmera (gesto/mouse),
+## mas ao soltar ela volta para a pipa como uma mola (amortecimento crítico).
+## Também escreve as entradas da sua KiteRig (mão da linha, braçada, pegada, lata).
 
-@export var walk_speed: float = 3.0
-@export var acceleration: float = 10.0
-@export var air_control: float = 0.3
-@export var pitch_min_deg: float = -75.0
+@export var walk_speed: float = 2.6
+@export var acceleration: float = 9.0
+@export var pitch_min_deg: float = -70.0
 @export var pitch_max_deg: float = 86.0
-## Velocidade da assistência de mira (1/s).
-@export var aim_assist_rate: float = 1.4
-## Ângulo (graus) dentro do qual a assistência não age (a pipa já está no quadro).
-@export var aim_assist_dead_angle: float = 10.0
+## Rigidez da mola que traz a câmera de volta para a pipa.
+@export var look_spring: float = 10.0
+## Quão rápido a câmera acompanha o movimento da pipa (1/s).
+@export var follow_rate: float = 5.0
+## Mão da linha em repouso, no referencial do corpo (x direita, y altura, -z frente).
+@export var hand_rest_local: Vector3 = Vector3(0.2, 1.18, -0.36)
+@export var stroke_dir_local: Vector3 = Vector3(0.05, -0.4, 1.0)
 
 var input_router: InputRouter
-## Alvo da assistência de mira (a pipa).
-var aim_target: Node3D
+var rig: KiteRig
+## Pipa voada a seguir com o olhar por alguns segundos depois de um corte.
+var watch_target: KiteRig
+var watch_time: float = 0.0
 
 @onready var head: Node3D = $Head
 @onready var camera: Camera3D = $Head/Bob/Camera3D
-@onready var viewmodel: Viewmodel = $Head/Bob/Camera3D/Viewmodel
+@onready var character: TeenCharacter = $Character
 
 var _yaw: float = 0.0
 var _pitch: float = 0.0
+var _base_yaw: float = 0.0
+var _base_pitch: float = 0.0
+var _off := Vector2.ZERO
+var _off_vel := Vector2.ZERO
 var _gravity: float = 9.8
+var _stroke_smooth: float = 0.0
+var _body_yaw: float = 0.0
 
 
 func _ready() -> void:
+	process_physics_priority = -50  # escreve as entradas da pipa antes da simulação
 	_gravity = float(ProjectSettings.get_setting("physics/3d/default_gravity", 9.8))
 	_yaw = rotation.y
-	_pitch = head.rotation.x
+	_base_yaw = _yaw
+	_body_yaw = _yaw
+	if character:
+		character.first_person = true
+		head.position.y = character.eye_height
 
 
-## Ponto onde a linha sai da mão (usado por KiteLine e LineRenderer).
-func get_hand_anchor() -> Node3D:
-	return viewmodel.hand_anchor
-
-
-## Vira a câmera instantaneamente para um ponto do mundo.
 func look_at_point(world_point: Vector3) -> void:
 	var to := world_point - head.global_position
 	if to.length() < 0.01:
 		return
 	to = to.normalized()
-	_yaw = atan2(-to.x, -to.z)
-	_pitch = clampf(asin(clampf(to.y, -1.0, 1.0)), deg_to_rad(pitch_min_deg), deg_to_rad(pitch_max_deg))
+	_base_yaw = atan2(-to.x, -to.z)
+	_base_pitch = asin(clampf(to.y, -1.0, 1.0))
+	_off = Vector2.ZERO
+	_off_vel = Vector2.ZERO
 	_apply_rotation()
+
+
+func focus_point() -> Vector3:
+	if watch_target and is_instance_valid(watch_target) and watch_target.body and watch_time > 0.0:
+		return watch_target.body.x
+	if rig and rig.body:
+		return rig.body.x
+	if rig and rig.rope:
+		return rig.rope.end_point()
+	return head.global_position + Basis(Vector3.UP, _yaw) * Vector3(0, 0.5, -10)
 
 
 func _process(delta: float) -> void:
-	if input_router == null:
-		return
-	var intent := input_router.intent
-	var look := intent.consume_look()
-	var inv := -1.0 if GameConfig.invert_y else 1.0
-	_yaw -= deg_to_rad(look.x)
-	_pitch -= deg_to_rad(look.y) * inv
-	if GameConfig.aim_assist and aim_target and intent.is_handling_line() and look.length_squared() < 0.0001:
-		_apply_aim_assist(delta)
-	_pitch = clampf(_pitch, deg_to_rad(pitch_min_deg), deg_to_rad(pitch_max_deg))
+	watch_time = maxf(watch_time - delta, 0.0)
+	var to := focus_point() - head.global_position
+	if to.length() > 0.5:
+		to = to.normalized()
+		var k := 1.0 - exp(-follow_rate * delta)
+		_base_yaw = lerp_angle(_base_yaw, atan2(-to.x, -to.z), k)
+		_base_pitch = lerpf(_base_pitch, asin(clampf(to.y, -1.0, 1.0)), k)
+	if input_router:
+		var intent := input_router.intent
+		var look := intent.consume_look()
+		var inv := -1.0 if GameConfig.invert_y else 1.0
+		_off.x -= deg_to_rad(look.x)
+		_off.y -= deg_to_rad(look.y) * inv
+		_off.x = clampf(_off.x, -PI * 0.9, PI * 0.9)
+		_off.y = clampf(_off.y, -1.4, 1.4)
+		if not intent.look_active and look.length_squared() < 0.0001:
+			# Mola criticamente amortecida de volta para a pipa.
+			var acc := -look_spring * _off - 2.0 * sqrt(look_spring) * _off_vel
+			_off_vel += acc * delta
+			_off += _off_vel * delta
+		else:
+			_off_vel = Vector2.ZERO
 	_apply_rotation()
+	# O corpo acompanha a câmera com atraso (o personagem vira o tronco).
+	_body_yaw = lerp_angle(_body_yaw, _yaw, 1.0 - exp(-4.0 * delta))
+	if character:
+		character.rotation.y = _body_yaw - rotation.y
 
 
 func _apply_rotation() -> void:
-	_yaw = wrapf(_yaw, -PI, PI)
+	_yaw = wrapf(_base_yaw + _off.x, -PI, PI)
+	_pitch = clampf(_base_pitch + _off.y, deg_to_rad(pitch_min_deg), deg_to_rad(pitch_max_deg))
 	rotation.y = _yaw
 	head.rotation.x = _pitch
-
-
-func _apply_aim_assist(delta: float) -> void:
-	var to := aim_target.global_position - camera.global_position
-	if to.length() < 1.0:
-		return
-	to = to.normalized()
-	var desired_yaw := atan2(-to.x, -to.z)
-	var desired_pitch := asin(clampf(to.y, -1.0, 1.0))
-	var off := absf(angle_difference(_yaw, desired_yaw)) + absf(desired_pitch - _pitch)
-	if off < deg_to_rad(aim_assist_dead_angle):
-		return
-	var k := 1.0 - exp(-aim_assist_rate * delta)
-	_yaw = lerp_angle(_yaw, desired_yaw, k)
-	_pitch = lerpf(_pitch, desired_pitch, k)
 
 
 func _physics_process(delta: float) -> void:
@@ -88,13 +114,35 @@ func _physics_process(delta: float) -> void:
 	if input_router:
 		move = input_router.intent.move
 	var wish := Basis(Vector3.UP, _yaw) * Vector3(move.x, 0.0, -move.y)
-	var target := wish * walk_speed
-	var accel := acceleration if is_on_floor() else acceleration * air_control
-	var k := 1.0 - exp(-accel * delta)
-	velocity.x = lerpf(velocity.x, target.x, k)
-	velocity.z = lerpf(velocity.z, target.z, k)
+	var k := 1.0 - exp(-acceleration * delta)
+	velocity.x = lerpf(velocity.x, wish.x * walk_speed, k)
+	velocity.z = lerpf(velocity.z, wish.z * walk_speed, k)
 	if is_on_floor():
 		velocity.y = maxf(velocity.y, 0.0)
 	else:
 		velocity.y -= _gravity * delta
 	move_and_slide()
+	_drive_rig(delta)
+	if character:
+		character.set_locomotion(Vector2(velocity.x, velocity.z).length())
+
+
+## Escreve as entradas da pipa a partir do intent.
+func _drive_rig(delta: float) -> void:
+	if rig == null or input_router == null:
+		return
+	var intent := input_router.intent
+	var body_basis := Basis(Vector3.UP, _body_yaw)
+	var t_norm := clampf(rig.tension / 15.0, 0.0, 1.0)
+	var to_kite := (focus_point() - global_position).normalized()
+	rig.hand_rest = global_position + body_basis * hand_rest_local + to_kite * (0.12 * t_norm)
+	rig.stroke_dir = (body_basis * stroke_dir_local).normalized()
+	# A mão não teleporta: limita a velocidade da braçada (≈ 6 m/s, braço humano).
+	_stroke_smooth = move_toward(_stroke_smooth, intent.stroke, 6.0 * delta)
+	rig.stroke = _stroke_smooth
+	rig.grip = intent.grip
+	rig.reel_rate = intent.reel_rate
+	if character:
+		character.right_hand_target = rig.hand_position()
+		character.line_tension = rig.tension
+		character.reel_speed = rig.reel_rate - rig.feed_speed

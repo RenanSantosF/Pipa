@@ -17,6 +17,7 @@ config/icon="res://icon.svg"
 GameConfig="*res://src/autoload/game_config.gd"
 EventBus="*res://src/autoload/event_bus.gd"
 Wind="*res://src/autoload/wind_field.gd"
+Sfx="*res://src/audio/sfx_bank.gd"
 
 [display]
 

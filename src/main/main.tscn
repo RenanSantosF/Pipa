@@ -2,35 +2,58 @@
 
 [ext_resource type="Script" path="res://src/main/main.gd" id="1_main"]
 [ext_resource type="PackedScene" path="res://src/world/world.tscn" id="2_world"]
-[ext_resource type="Script" path="res://src/input/input_router.gd" id="3_ir"]
-[ext_resource type="PackedScene" path="res://src/player/player.tscn" id="4_player"]
-[ext_resource type="Script" path="res://src/line/kite_line.gd" id="5_line"]
-[ext_resource type="PackedScene" path="res://src/kite/kite.tscn" id="6_kite"]
-[ext_resource type="Script" path="res://src/line/line_renderer.gd" id="7_lr"]
-[ext_resource type="PackedScene" path="res://src/ui/hud.tscn" id="8_hud"]
-[ext_resource type="PackedScene" path="res://src/input/touch_controls.tscn" id="9_tc"]
+[ext_resource type="Script" path="res://src/physics/kite_physics_world.gd" id="3_pw"]
+[ext_resource type="Script" path="res://src/input/input_router.gd" id="4_ir"]
+[ext_resource type="PackedScene" path="res://src/player/player.tscn" id="5_player"]
+[ext_resource type="Script" path="res://src/physics/kite_rig.gd" id="6_rig"]
+[ext_resource type="Resource" path="res://src/kite/profiles/pipa_classica.tres" id="7_prof"]
+[ext_resource type="Resource" path="res://src/physics/lines/cerol.tres" id="8_cerol"]
+[ext_resource type="Script" path="res://src/bot/bot_flyer.gd" id="9_bot"]
+[ext_resource type="Script" path="res://src/character/teen_character.gd" id="10_tc"]
+[ext_resource type="Resource" path="res://src/kite/profiles/pipa_adversario.tres" id="11_prof2"]
+[ext_resource type="Resource" path="res://src/physics/lines/cerol_fino.tres" id="12_line2"]
+[ext_resource type="Script" path="res://src/audio/audio_director.gd" id="13_ad"]
+[ext_resource type="PackedScene" path="res://src/ui/hud.tscn" id="14_hud"]
+[ext_resource type="PackedScene" path="res://src/input/gesture_controls.tscn" id="15_gc"]
 
 [node name="Main" type="Node3D"]
 script = ExtResource("1_main")
 
 [node name="World" parent="." instance=ExtResource("2_world")]
 
-[node name="InputRouter" type="Node" parent="."]
-script = ExtResource("3_ir")
+[node name="KitePhysicsWorld" type="Node" parent="."]
+script = ExtResource("3_pw")
 
-[node name="Player" parent="." instance=ExtResource("4_player")]
+[node name="InputRouter" type="Node" parent="."]
+script = ExtResource("4_ir")
+
+[node name="Player" parent="." instance=ExtResource("5_player")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.5, 0.1, 55)
 
-[node name="KiteLine" type="Node" parent="."]
-script = ExtResource("5_line")
+[node name="PlayerRig" type="Node3D" parent="."]
+script = ExtResource("6_rig")
+profile = ExtResource("7_prof")
+line_type = ExtResource("8_cerol")
 
-[node name="Kite" parent="." instance=ExtResource("6_kite")]
+[node name="Bot" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -14, 0.05, 26)
+script = ExtResource("9_bot")
+line_type = ExtResource("12_line2")
 
-[node name="LineRenderer" type="MeshInstance3D" parent="."]
-script = ExtResource("7_lr")
+[node name="Character" type="Node3D" parent="Bot"]
+script = ExtResource("10_tc")
+
+[node name="BotRig" type="Node3D" parent="."]
+script = ExtResource("6_rig")
+profile = ExtResource("11_prof2")
+line_type = ExtResource("12_line2")
+display_name = "Vizinho"
+
+[node name="AudioDirector" type="Node" parent="."]
+script = ExtResource("13_ad")
 
 [node name="UI" type="CanvasLayer" parent="."]
 
-[node name="HUD" parent="UI" instance=ExtResource("8_hud")]
+[node name="HUD" parent="UI" instance=ExtResource("14_hud")]
 
-[node name="TouchControls" parent="UI" instance=ExtResource("9_tc")]
+[node name="GestureControls" parent="UI" instance=ExtResource("15_gc")]

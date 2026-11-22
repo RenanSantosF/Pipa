@@ -1,15 +1,15 @@
 class_name DebugOverlay
 extends Label
-## Informações de depuração (FPS, física da pipa). F1 alterna no PC.
+## Depuração (F1 no PC): FPS, custo da física e estado da pipa.
 
-var kite: KiteBody
-var line: KiteLine
+var rig: KiteRig
+var world: KitePhysicsWorld
 var _accum: float = 0.0
 
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_theme_font_size_override("font_size", 14)
+	add_theme_font_size_override("font_size", 13)
 	add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
 	add_theme_constant_override("outline_size", 4)
 	GameConfig.settings_changed.connect(_refresh_visibility)
@@ -25,8 +25,10 @@ func _process(delta: float) -> void:
 	if _accum < 0.25 or not visible:
 		return
 	_accum = 0.0
-	var t := "FPS %d  |  GFX %s" % [Engine.get_frames_per_second(), GameConfig.quality_name()]
-	if kite and line:
-		t += "\nAltura %.1f m  |  Vel. ar %.1f m/s  |  AoA %.0f°" % [kite.get_altitude(), kite.airspeed, rad_to_deg(kite.angle_of_attack)]
-		t += "\nTensão %.1f N  |  Esticada %.0f%%  |  Rumo %.0f°" % [line.tension, line.tautness * 100.0, rad_to_deg(kite.heading)]
+	var t := "FPS %d  ·  física %.2f ms  ·  GFX %s" % [Engine.get_frames_per_second(), world.frame_ms if world else 0.0, GameConfig.quality_name()]
+	if rig and rig.is_flying():
+		var b := rig.body
+		t += "\nAlt %.1f m · ar %.1f m/s · AoA %.0f° · tensão %.1f N · nós %d" % [b.x.y, b.airspeed, rad_to_deg(b.angle_of_attack), rig.tension, rig.rope.node_count()]
+	if world:
+		t += "\nContatos %d" % world.combat.contacts.size()
 	text = t

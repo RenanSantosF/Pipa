@@ -1,26 +1,16 @@
 class_name LineRenderer
 extends MeshInstance3D
-## Linha visual entre a mão e a pipa (separada da física).
-##
-## A forma alvo é uma parábola cuja flecha vem da física real da linha:
-##  - esticada: flecha ≈ peso_por_metro · distância² / (8 · tensão)
-##  - frouxa:   flecha a partir do excesso de comprimento (comprimento de arco)
-## A flecha segue o alvo com uma mola amortecida (ondula quando a tensão muda)
-## e cada ponto persegue sua posição com atraso maior no meio da linha.
-## Desenhada como uma fita voltada para a câmera, com largura mínima em pixels.
+## Desenha uma linha simulada (Rope) como fita voltada para a câmera, com
+## largura mínima em pixels e curva suavizada (Catmull-Rom entre os nós).
+## A forma é 100% a da simulação: barriga, ondas da braçada, linha caindo.
 
-@export var color: Color = Color(0.97, 0.95, 0.9)
-@export var sag_stiffness: float = 30.0
-@export var sag_damping: float = 6.0
+@export var subdivisions: int = 3
 
-var line: KiteLine
-var kite: Node3D
-
-var _points: PackedVector3Array = PackedVector3Array()
+var rope: Rope
 var _im := ImmediateMesh.new()
 var _mat := StandardMaterial3D.new()
-var _sag: float = 0.0
-var _sag_velocity: float = 0.0
+var _pts: PackedVector3Array = PackedVector3Array()
+var _smooth: PackedVector3Array = PackedVector3Array()
 
 
 func _ready() -> void:
@@ -28,80 +18,59 @@ func _ready() -> void:
 	global_transform = Transform3D.IDENTITY
 	mesh = _im
 	cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	extra_cull_margin = 50.0
+	extra_cull_margin = 200.0
 	_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	_mat.albedo_color = color
 	_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 
 
-func setup(p_line: KiteLine, p_kite: Node3D) -> void:
-	line = p_line
-	kite = p_kite
-	_points.clear()
+func bind(p_rope, line_type: LineType) -> void:
+	rope = p_rope
+	_mat.albedo_color = line_type.color if line_type else Color(0.96, 0.95, 0.9)
 
 
-func _process(delta: float) -> void:
+func _process(_delta: float) -> void:
 	_im.clear_surfaces()
-	if line == null or kite == null or line.hand == null or line.is_broken:
+	if rope == null or rope.pos.size() < 2:
 		return
 	var cam := get_viewport().get_camera_3d()
 	if cam == null:
 		return
-	var a := line.hand.global_position
-	var b := kite.global_position
-	var chord := b - a
-	var dist := chord.length()
-	if dist < 0.05:
-		return
-	var chord_dir := chord / dist
+	_pts.resize(0)
+	_pts.append_array(rope.pos)
+	if rope.end_body != null:
+		_pts.append(rope.end_point())
+	var n := _pts.size()
+	var sub := maxi(1, subdivisions if GameConfig.quality > 0 else 1)
+	_smooth.resize(0)
+	for i in n - 1:
+		var p0 := _pts[maxi(i - 1, 0)]
+		var p1 := _pts[i]
+		var p2 := _pts[i + 1]
+		var p3 := _pts[mini(i + 2, n - 1)]
+		for k in sub:
+			var t := float(k) / float(sub)
+			_smooth.append(_catmull(p0, p1, p2, p3, t))
+	_smooth.append(_pts[n - 1])
 
-	# Flecha alvo.
-	var weight_per_m := line.mass_per_meter * 9.8
-	var sag_taut := weight_per_m * dist * dist / (8.0 * maxf(line.tension, 0.15))
-	var slack := maxf(line.effective_length() - dist, 0.0)
-	var sag_slack := sqrt(3.0 * dist * slack / 8.0)
-	var target_sag := clampf(maxf(sag_taut, sag_slack), 0.0, dist * 0.45)
-	_sag_velocity += (target_sag - _sag) * sag_stiffness * delta
-	_sag_velocity *= exp(-sag_damping * delta)
-	_sag = maxf(_sag + _sag_velocity * delta, 0.0)
-
-	# Direção da flecha: gravidade perpendicular à corda + um pouco de vento lateral.
-	var sag_dir := Vector3.DOWN - chord_dir * Vector3.DOWN.dot(chord_dir)
-	var wind := Wind.sample((a + b) * 0.5)
-	var wind_perp := wind - chord_dir * wind.dot(chord_dir)
-	sag_dir += wind_perp * 0.05
-	if sag_dir.length() < 0.001:
-		sag_dir = cam.global_basis.x
-	sag_dir = sag_dir.normalized()
-
-	var count := GameConfig.line_points()
-	var reset := _points.size() != count
-	if reset:
-		_points.resize(count)
-	for i in count:
-		var t := float(i) / float(count - 1)
-		var bulge := 4.0 * t * (1.0 - t)
-		var target := a + chord * t + sag_dir * (_sag * bulge)
-		if reset or i == 0 or i == count - 1:
-			_points[i] = target
-		else:
-			var rate := lerpf(40.0, 9.0, bulge)
-			_points[i] = _points[i].lerp(target, 1.0 - exp(-rate * delta))
-
-	# Fita voltada para a câmera.
 	var cam_pos := cam.global_position
-	var px_angle := deg_to_rad(cam.fov) / maxf(get_viewport().get_visible_rect().size.y, 1.0)
+	var px := deg_to_rad(cam.fov) / maxf(get_viewport().get_visible_rect().size.y, 1.0)
+	var m := _smooth.size()
 	_im.surface_begin(Mesh.PRIMITIVE_TRIANGLE_STRIP, _mat)
-	for i in count:
-		var p := _points[i]
-		var tangent := _points[mini(i + 1, count - 1)] - _points[maxi(i - 1, 0)]
+	for i in m:
+		var p := _smooth[i]
+		var tangent := _smooth[mini(i + 1, m - 1)] - _smooth[maxi(i - 1, 0)]
 		var to_cam := cam_pos - p
-		var dcam := to_cam.length()
 		var side := tangent.cross(to_cam)
 		if side.length_squared() < 1e-12:
 			side = cam.global_basis.x
-		var half_width := maxf(0.0006, dcam * px_angle * 0.6)
-		side = side.normalized() * half_width
+		var half := maxf(0.0005, to_cam.length() * px * 0.6)
+		side = side.normalized() * half
 		_im.surface_add_vertex(p - side)
 		_im.surface_add_vertex(p + side)
 	_im.surface_end()
+
+
+static func _catmull(p0: Vector3, p1: Vector3, p2: Vector3, p3: Vector3, t: float) -> Vector3:
+	var t2 := t * t
+	var t3 := t2 * t
+	return 0.5 * ((2.0 * p1) + (-p0 + p2) * t + (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * t2 + (-p0 + 3.0 * p1 - 3.0 * p2 + p3) * t3)

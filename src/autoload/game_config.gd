@@ -69,6 +69,11 @@ func tail_points() -> int:
 	return _TAIL_POINTS[quality]
 
 
+## Subpassos XPBD por tick de física (mais = linha mais firme, mais CPU).
+func physics_substeps() -> int:
+	return [6, 8, 10][quality]
+
+
 func shadows_enabled() -> bool:
 	return quality != Quality.LOW
 

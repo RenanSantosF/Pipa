@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="LineType" format=3]
+
+[ext_resource type="Script" path="res://src/physics/line_type.gd" id="1_lt"]
+
+[resource]
+script = ExtResource("1_lt")
+display_name = "Cerol"
+abrasion = 0.75
+toughness = 1.0
+break_tension = 34.0
+mass_per_meter = 0.0005
+diameter = 0.0007
+axial_stiffness = 800.0
+friction = 0.38
+color = Color(0.66, 0.70, 0.62, 1)
+coated = true

@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="LineType" format=3]
+
+[ext_resource type="Script" path="res://src/physics/line_type.gd" id="1_lt"]
+
+[resource]
+script = ExtResource("1_lt")
+display_name = "Chilena"
+abrasion = 1.4
+toughness = 1.45
+break_tension = 30.0
+mass_per_meter = 0.00055
+diameter = 0.00065
+axial_stiffness = 950.0
+friction = 0.42
+color = Color(0.42, 0.42, 0.46, 1)
+coated = true
