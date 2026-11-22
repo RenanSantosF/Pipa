@@ -172,7 +172,9 @@ func _process(delta: float) -> void:
 		_update_short_line(lata_pos + axis * 0.06, right_hand_target)
 	if _ik:
 		var shoulder_h := Vector3.UP * 1.35
-		_ik.right_target = right_hand_target
+		# O alvo da IK é o punho: recua ~8 cm para a PALMA ficar sobre a linha.
+		var shoulder := gt.origin + shoulder_h + right * 0.18
+		_ik.right_target = right_hand_target - (right_hand_target - shoulder).normalized() * 0.08
 		_ik.left_target = lata_pos - right * 0.02 - fwd * 0.03
 		_ik.right_pole = gt.origin + shoulder_h + right * 0.6 - Vector3.UP * 0.5 + gt.basis.z * 0.3
 		_ik.left_pole = gt.origin + shoulder_h - right * 0.6 - Vector3.UP * 0.5 + gt.basis.z * 0.3
