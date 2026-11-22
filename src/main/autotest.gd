@@ -122,15 +122,17 @@ func _start_combat() -> void:
 	var hand_b := center - side * 6.0 + Vector3.UP * 1.4
 	rig.launch(hand_a, 30.0, 45.0, (wd - side * 0.7).normalized())
 	bot_rig.launch(hand_b, 30.0, 45.0, (wd + side * 0.7).normalized())
+	main.player.rig = null  # mãos paradas, controladas pelo teste
 	rig.hand_rest = hand_a
 	bot_rig.hand_rest = hand_b
+	rig.stroke = 0.0
+	bot_rig.stroke = 0.0
 	print("AUTOTEST combate: %s × %s" % [rig.line_type.display_name, bot_rig.line_type.display_name])
 
 
 func _phase_combat(_delta: float) -> void:
 	# Mãos paradas; o bot "dá linha" de vez em quando (como no relo de verdade).
-	_input_set(0.0, 1.0, 0.0)
-	rig.hand_rest = rig.hand_rest
+	rig.grip = 1.0
 	bot_rig.grip = 0.3 if fmod(_t, 2.0) < 0.8 else 1.0
 	if fmod(_t, 1.0) < 1.0 / 60.0:
 		var w := main.physics_world as KitePhysicsWorld
