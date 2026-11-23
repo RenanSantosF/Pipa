@@ -17,6 +17,10 @@ var acc: PackedVector3Array = PackedVector3Array()
 var seg_len: float = 0.26
 var inv_m: float = 500.0
 var node_area: float = 0.003
+## Rabiola enganchada (fio/galho): índice do nó preso, -1 = solta.
+var pinned_index: int = -1
+var pin_pos := Vector3.ZERO
+var pin_time: float = 0.0
 
 
 func _init(p_body: KiteRigidBody, p_profile: KiteProfile) -> void:
@@ -88,9 +92,36 @@ func solve(_h: float) -> void:
 		pos[i - 1] += corr
 	for i in n:
 		var p := pos[i]
-		if p.y < 0.01:
-			p.y = 0.01
+		var gy := Ground.height_at(p.x, p.z) + 0.01
+		if p.y < gy:
+			p.y = gy
 			pos[i] = p
+	if pinned_index >= 0 and pinned_index < n:
+		pos[pinned_index] = pin_pos
+
+
+## Rabiola engancha em fio ou galho; solta com tranco forte ou com o tempo (balançando).
+func try_snag(obstacles: WorldObstacles, pull: float, dt: float) -> void:
+	if pinned_index >= 0:
+		pin_time -= dt
+		if pin_time <= 0.0 or pull > 11.0:
+			pinned_index = -1
+		return
+	for i in range(pos.size() - 1, maxi(pos.size() - 5, 0) - 1, -1):
+		var p := pos[i]
+		for idx in obstacles.query(p):
+			var e: Array = obstacles.entries[idx]
+			var hit := false
+			if e[0] == WorldObstacles.Kind.WIRE:
+				var res := LineCombat.closest_segments(p, p, e[1], e[2])
+				hit = float(res[2]) < 0.05
+			elif e[0] == WorldObstacles.Kind.CANOPY:
+				hit = p.distance_to(e[1]) < float(e[2]) * 0.6
+			if hit:
+				pinned_index = i
+				pin_pos = p
+				pin_time = randf_range(1.5, 7.0)
+				return
 
 
 func finalize(h: float) -> void:

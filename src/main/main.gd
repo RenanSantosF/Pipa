@@ -26,6 +26,9 @@ var _line_index: int = 2
 
 
 func _ready() -> void:
+	var street: StreetBuilder = $World/StreetBuilder
+	player.global_position = street.spawn_point
+	bot.global_position = street.bot_point
 	input_router.set_gesture_controls(gestures)
 	input_router.line_cycle_requested.connect(_cycle_line)
 	input_router.sound_toggle_requested.connect(_toggle_sound)
@@ -45,6 +48,12 @@ func _ready() -> void:
 	EventBus.line_cut.connect(_on_line_cut)
 
 	var args := OS.get_cmdline_user_args()
+	if args.has("--desbicoprobe") or args.has("--wrapprobe"):
+		var probe: Node = load("res://src/main/desbico_probe.gd").new()
+		probe.set("wrap_mode", args.has("--wrapprobe"))
+		add_child(probe)
+		probe.call("start", self)
+		return
 	if args.has("--autotest"):
 		_attach("res://src/main/autotest.gd")
 		return

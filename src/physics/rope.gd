@@ -27,6 +27,15 @@ var rest: PackedFloat32Array = PackedFloat32Array()
 var lam: PackedFloat32Array = PackedFloat32Array()
 ## Coordenada de material de cada nó (m a partir da ponta da pipa).
 var mat_s: PackedFloat32Array = PackedFloat32Array()
+## Nós presos em obstáculos (galho, poste, fio): a linha desvia ali e desliza com atrito.
+var pinned: PackedByteArray = PackedByteArray()
+var pin_pos: PackedVector3Array = PackedVector3Array()
+var pin_mu: PackedFloat32Array = PackedFloat32Array()
+var pin_break: PackedFloat32Array = PackedFloat32Array()
+var pin_obstacle: PackedInt32Array = PackedInt32Array()
+## Tensão de cada segmento no último tick (N).
+var seg_tension: PackedFloat32Array = PackedFloat32Array()
+var _lam_sum: PackedFloat32Array = PackedFloat32Array()
 
 ## Corpo preso na ponta (pipa) ou null.
 var end_body: KiteRigidBody = null
@@ -86,6 +95,75 @@ func setup(a: Vector3, body: KiteRigidBody, local_anchor: Vector3, total_length:
 	prev = pos.duplicate()
 	vel.resize(n)
 	vel.fill(Vector3.ZERO)
+	_reset_pins(n)
+	_rebuild_masses()
+
+
+func _reset_pins(n: int) -> void:
+	pinned.resize(n)
+	pinned.fill(0)
+	pin_pos.resize(n)
+	pin_mu.resize(n)
+	pin_break.resize(n)
+	pin_obstacle.resize(n)
+	pin_obstacle.fill(-1)
+
+
+func pin_count() -> int:
+	var c := 0
+	for v in pinned:
+		c += v
+	return c
+
+
+## Insere um nó no índice i (entre i-1 e o antigo i). Mantém todos os arrays.
+func insert_node(i: int, p: Vector3, v: Vector3, rest_before: float, rest_after: float) -> void:
+	pos.insert(i, p)
+	prev.insert(i, p - v / 600.0)
+	vel.insert(i, v)
+	pinned.insert(i, 0)
+	pin_pos.insert(i, p)
+	pin_mu.insert(i, 0.0)
+	pin_break.insert(i, 0.0)
+	pin_obstacle.insert(i, -1)
+	rest[i - 1] = rest_before
+	rest.insert(i, rest_after)
+	_rebuild_masses()
+
+
+## Remove o nó i juntando os dois segmentos vizinhos.
+func remove_node(i: int) -> void:
+	if i <= 0 or i >= pos.size():
+		return
+	rest[i - 1] += rest[i] if i < rest.size() else 0.0
+	if i < rest.size():
+		rest.remove_at(i)
+	pos.remove_at(i)
+	prev.remove_at(i)
+	vel.remove_at(i)
+	pinned.remove_at(i)
+	pin_pos.remove_at(i)
+	pin_mu.remove_at(i)
+	pin_break.remove_at(i)
+	pin_obstacle.remove_at(i)
+	_rebuild_masses()
+
+
+func pin_node(i: int, where: Vector3, mu: float, break_force: float, obstacle: int) -> void:
+	pinned[i] = 1
+	pin_pos[i] = where
+	pin_mu[i] = mu
+	pin_break[i] = break_force
+	pin_obstacle[i] = obstacle
+	pos[i] = where
+	prev[i] = where
+	vel[i] = Vector3.ZERO
+	_rebuild_masses()
+
+
+func unpin_node(i: int) -> void:
+	pinned[i] = 0
+	pin_obstacle[i] = -1
 	_rebuild_masses()
 
 
@@ -105,6 +183,10 @@ func _rebuild_masses() -> void:
 		inv_mass[i] = 1.0 / m
 	if hand_fixed and n > 0:
 		inv_mass[0] = 0.0
+	if pinned.size() == n:
+		for i in n:
+			if pinned[i] == 1:
+				inv_mass[i] = 0.0
 	_update_material_coords()
 
 
@@ -138,20 +220,10 @@ func feed(delta_len: float) -> void:
 		var dl := dir.length()
 		dir = dir / dl if dl > 0.0001 else Vector3.UP
 		var new_pos := pos[1] + dir * minf(segment_target, dl)
-		pos.insert(1, new_pos)
-		prev.insert(1, new_pos - (vel[1] / 600.0))
-		vel.insert(1, vel[1])
-		rest.insert(1, segment_target)
-		rest[0] -= segment_target
-		_rebuild_masses()
+		insert_node(1, new_pos, vel[1], rest[0] - segment_target, segment_target)
 	# Remove nós quando o primeiro segmento fica curto.
-	while rest[0] < segment_target * 0.4 and pos.size() > min_nodes:
-		rest[0] += rest[1]
-		pos.remove_at(1)
-		prev.remove_at(1)
-		vel.remove_at(1)
-		rest.remove_at(1)
-		_rebuild_masses()
+	while rest[0] < segment_target * 0.4 and pos.size() > min_nodes and pinned[1] == 0:
+		remove_node(1)
 	_update_material_coords()
 
 
@@ -159,11 +231,8 @@ func feed(delta_len: float) -> void:
 func _coarsen() -> void:
 	var i := 2
 	while i < pos.size() - 1:
-		rest[i - 1] += rest[i]
-		pos.remove_at(i)
-		prev.remove_at(i)
-		vel.remove_at(i)
-		rest.remove_at(i)
+		if pinned[i] == 0:
+			remove_node(i)
 		i += 1
 	segment_target *= 2.0
 	_rebuild_masses()
@@ -199,6 +268,8 @@ func compute_forces() -> void:
 			acc[i] = acc[i] / al * 300.0
 	_lam_hand_sum = 0.0
 	_lam_end_sum = 0.0
+	_lam_sum.resize(segment_count())
+	_lam_sum.fill(0.0)
 	_substeps_done = 0
 
 
@@ -211,6 +282,9 @@ func predict(h: float) -> void:
 			pos[i] += vel[i] * h
 	if hand_fixed and n > 0:
 		pos[0] = hand_position
+	for i in n:
+		if pinned[i] == 1:
+			pos[i] = pin_pos[i]
 	lam.fill(0.0)
 
 
@@ -252,14 +326,20 @@ func solve(h: float) -> void:
 	# Chão.
 	for i in n:
 		var p := pos[i]
-		if p.y < 0.02:
-			p.y = 0.02
+		var gy := Ground.height_at(p.x, p.z) + 0.02
+		if p.y < gy:
+			p.y = gy
 			pos[i] = p
 			var pv := prev[i]
 			prev[i] = Vector3(lerpf(pv.x, p.x, 0.3), pv.y, lerpf(pv.z, p.z, 0.3))
 	if seg_n > 0:
 		_lam_hand_sum += lam[0]
 		_lam_end_sum += lam[seg_n - 1]
+	if _lam_sum.size() != seg_n:
+		_lam_sum.resize(seg_n)
+		_lam_sum.fill(0.0)
+	for i in seg_n:
+		_lam_sum[i] += lam[i]
 	_substeps_done += 1
 
 
@@ -277,6 +357,9 @@ func finish_tick(h: float) -> void:
 	var k := -1.0 / (h * h * float(_substeps_done))
 	tension_hand = maxf(_lam_hand_sum * k, 0.0)
 	tension_end = maxf(_lam_end_sum * k, 0.0)
+	seg_tension.resize(_lam_sum.size())
+	for i in _lam_sum.size():
+		seg_tension[i] = maxf(_lam_sum[i] * k, 0.0)
 
 
 ## Posição e velocidade do material da linha no parâmetro t do segmento i.
@@ -336,6 +419,7 @@ func split_at(s_cut: float) -> Rope:
 		if i < seg_n:
 			kite_side.rest.append(rest[i])
 	kite_side.prev = kite_side.pos.duplicate()
+	kite_side._reset_pins(kite_side.pos.size())
 	kite_side._rebuild_masses()
 
 	# Este lado: nós 0..k + ponto do corte, ponta solta.
@@ -350,5 +434,17 @@ func split_at(s_cut: float) -> Rope:
 	rest = new_rest
 	end_body = null
 	prev = pos.duplicate()
+	var old_pinned := pinned.duplicate()
+	var old_pp := pin_pos.duplicate()
+	var old_mu := pin_mu.duplicate()
+	var old_br := pin_break.duplicate()
+	var old_ob := pin_obstacle.duplicate()
+	_reset_pins(pos.size())
+	for i in mini(k + 1, old_pinned.size()):
+		pinned[i] = old_pinned[i]
+		pin_pos[i] = old_pp[i]
+		pin_mu[i] = old_mu[i]
+		pin_break[i] = old_br[i]
+		pin_obstacle[i] = old_ob[i]
 	_rebuild_masses()
 	return kite_side

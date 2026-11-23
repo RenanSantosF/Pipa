@@ -4,8 +4,8 @@ extends Node3D
 ## (Etapa 2: o ciclo tarde → pôr do sol entra aqui, num DayCycle separado.)
 
 ## Posição do sol dentro do HDRI (medida na imagem: u horizontal, elevação em graus).
-const HDRI_SUN_U := 0.6003
-const HDRI_SUN_ELEVATION := 19.07
+const HDRI_SUN_U := 0.5950
+const HDRI_SUN_ELEVATION := 47.9
 ## Giro do céu (graus) para o sol ficar ao lado/atrás do jogador, que olha a favor do vento.
 @export var sky_yaw_deg: float = 0.0
 
@@ -42,9 +42,7 @@ func _on_quality_changed(_q: int) -> void:
 
 
 func _process(_delta: float) -> void:
-	var mat := street.tree_material
-	if mat == null:
-		return
-	mat.set_shader_parameter("wind_direction", Wind.get_direction())
-	mat.set_shader_parameter("wind_strength", Wind.get_reference_speed() * 0.045)
-	mat.set_shader_parameter("gust", Wind.get_gust_factor())
+	for mat in street.foliage_materials:
+		mat.set_shader_parameter("wind_direction", Wind.get_direction())
+		mat.set_shader_parameter("wind_strength", Wind.get_reference_speed() * 0.045)
+		mat.set_shader_parameter("gust", Wind.get_gust_factor())

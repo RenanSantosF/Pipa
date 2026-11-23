@@ -16,7 +16,7 @@ const DETECT_RADIUS := 0.15
 const RELEASE_DISTANCE := 0.6
 const CONTACT_GAP := 0.003
 const BIN := 0.1
-const DAMAGE_SCALE := 0.54
+const DAMAGE_SCALE := 0.22
 const GROUP := 4
 const HOOK_GAP := 0.03
 
@@ -301,9 +301,13 @@ func post_frame(dt: float, h: float, substeps: int) -> void:
 		c.slide = (rel - c.normal * rel.dot(c.normal)).length()
 		if c.force > 0.01:
 			var mu := (c.a.line_type.friction + c.b.line_type.friction) * 0.5
-			var energy := mu * c.force * c.slide * dt
-			_wear(c.a, c.sa_prev, sa, energy * c.b.line_type.abrasion)
-			_wear(c.b, c.sb_prev, sb, energy * c.a.line_type.abrasion)
+			# Cruzamento em X fechado (perpendicular) corta bem mais que linhas quase paralelas.
+			var ta := (pa_pts[1] - pa_pts[0]).normalized()
+			var tb := (pb_pts[1] - pb_pts[0]).normalized()
+			var angle_f := 0.3 + 0.7 * ta.cross(tb).length()
+			var energy := mu * c.force * c.slide * dt * angle_f
+			_wear(c.a, c.sa_prev, sa, energy * c.b.line_type.abrasion * c.b.spool_quality)
+			_wear(c.b, c.sb_prev, sb, energy * c.a.line_type.abrasion * c.a.spool_quality)
 		c.sa_prev = sa
 		c.sb_prev = sb
 
@@ -312,7 +316,7 @@ func _wear(rig: KiteRig, s0: float, s1: float, energy: float) -> void:
 	if energy <= 0.0:
 		return
 	var lt := rig.line_type
-	var dmg := energy * DAMAGE_SCALE / lt.toughness
+	var dmg := energy * DAMAGE_SCALE / (lt.toughness * rig.spool_quality)
 	var lo := minf(s0, s1)
 	var hi := maxf(s0, s1)
 	var span := hi - lo
@@ -323,7 +327,7 @@ func _wear(rig: KiteRig, s0: float, s1: float, energy: float) -> void:
 		var portion := 1.0
 		if span > 0.0001:
 			portion = (minf(hi, (b + 1) * BIN) - maxf(lo, b * BIN)) / span
-		var total: float = rig.wear.get(b, 0.0) + dmg * maxf(portion, 0.0)
+		var total: float = rig.wear.get(b, 0.0) + dmg * maxf(portion, 0.0) / rig.bin_strength(b)
 		rig.wear[b] = total
 		if total >= threshold:
 			cut_requests.append([rig, (float(b) + 0.5) * BIN])

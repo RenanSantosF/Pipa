@@ -8,7 +8,7 @@ Jogo de pipa em primeira pessoa num bairro brasileiro, para Android (Godot 4.7 /
 
 ## Como baixar o APK pelo celular
 
-> Todos os APKs a partir de agora usam a mesma chave (`android/debug.keystore`), então cada versão instala por cima da anterior.
+> O app agora se chama `br.pipa.nostalgia` e usa sempre a mesma chave (`android/debug.keystore`): instala ao lado de qualquer versão antiga e cada atualização instala por cima da anterior.
 
 Cada push gera um APK automaticamente (GitHub Actions):
 
@@ -22,7 +22,9 @@ Também ficam disponíveis: o *artifact* `pipa-debug-apk` na execução do workf
 
 | Gesto | O que faz |
 |---|---|
-| **Toque rápido** em qualquer lugar | **desbico**: a mão afrouxa (a pipa mergulha) e dá o tranco (ela sobe). Cada toque, um desbico |
+| **Tocar** à esquerda ou à direita da pipa | **desbico para aquele lado**: apertar afrouxa (o bico gira para o lado tocado), soltar dá o tranco (ela dispara para onde o bico aponta) |
+| **Segurar** o toque mais tempo | o bico gira mais → desbica mais para o lado (e corre um pouco de linha) |
+| Toques **rápidos e seguidos** | desbica mantendo a direção |
 | Arrastar **para cima** (lado direito) | abrir a mão / **dar linha** |
 | Arrastar **para baixo** (lado direito) | braçada longa (a linha puxada vai para o chão) |
 | **Círculos** (lado direito) | enrolar na lata |
@@ -31,7 +33,7 @@ Também ficam disponíveis: o *artifact* `pipa-debug-apk` na execução do workf
 | Ícones no canto | nova pipa · trocar linha · som |
 
 A pipa **começa na mão**: vá desbicando e dando linha para levantar.
-Ela e a linha **enroscam** em árvores, postes, fios e telhados se você não controlar — trancos fortes soltam.
+A linha **enrosca** de verdade: quando passa por árvore, poste ou fio, ela dobra naquele ponto e só desliza com atrito (desbicar fica difícil). Solta quando você tira a pipa de trás do obstáculo, ou recolhendo/dando tranco até o galho quebrar. A rabiola também engancha.
 
 PC (testes): Espaço = desbico · E = dar linha · F = braçada · Q = enrolar · R = nova pipa · T = trocar linha.
 

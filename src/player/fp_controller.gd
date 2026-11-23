@@ -37,8 +37,9 @@ var _off_vel := Vector2.ZERO
 var _gravity: float = 9.8
 var _stroke_smooth: float = 0.0
 var _body_yaw: float = 0.0
-var _desbico_t: float = -1.0
-var _desbico_queue: int = 0
+var _phase: int = 0
+var _phase_t: float = 0.0
+var _tug_from: float = 0.0
 
 ## Curva da mão num desbico (m; negativo = mão vai para a frente e afrouxa a linha).
 const DESBICO_TIME := 0.46
@@ -152,31 +153,51 @@ func _drive_rig(delta: float) -> void:
 	var to_kite := (focus_point() - global_position).normalized()
 	rig.hand_rest = global_position + body_basis * hand_rest_local + to_kite * (0.12 * t_norm)
 	rig.stroke_dir = (body_basis * stroke_dir_local).normalized()
-	# Desbico: cada toque é um ciclo afrouxa→tranco. Toques rápidos encadeiam.
-	if intent.desbico_taps > 0:
-		_desbico_queue = mini(_desbico_queue + intent.desbico_taps, 3)
-		intent.desbico_taps = 0
+	# Desbico em duas fases, como a mão de verdade:
+	#  FOLGA (dedo apertado): a mão avança e afrouxa; o bico gira para o lado tocado.
+	#        Segurando mais, a linha corre um pouco e o bico gira mais.
+	#  TRANCO (dedo solta): puxada rápida — a pipa dispara para onde o bico aponta.
+	var grip := intent.grip
+	rig.steer = 0.0
+	if intent.slack and _phase != 1:
+		_phase = 1
+		_phase_t = 0.0
 		if rig.held:
 			rig.release_hold()
-	if _desbico_queue > 0 and (_desbico_t < 0.0 or _desbico_t > 0.2):
-		_desbico_queue -= 1
-		_desbico_t = 0.0
-	var grip := intent.grip
-	if _desbico_t >= 0.0:
+	if _phase == 1:
 		rig.shorten_on_return = false
-		_stroke_smooth = desbico_offset(_desbico_t)
-		# No tranco a mão segura menos: se a pipa puxar forte, a linha escorrega e ela sobe.
-		if _desbico_t > 0.08 and _desbico_t < 0.3:
+		_stroke_smooth = move_toward(_stroke_smooth, -0.28, 3.5 * delta)
+		rig.steer = intent.steer
+		if _phase_t > 0.18:
+			grip = minf(grip, 0.35)  # segurou: descarrega um pouco de linha
+		_phase_t += delta
+		if not intent.slack:
+			if intent.desbico_taps > 0:
+				_phase = 2
+				_phase_t = 0.0
+				_tug_from = _stroke_smooth
+			else:
+				_phase = 0
+	elif _phase == 2:
+		rig.shorten_on_return = false
+		if _phase_t < 0.1:
+			_stroke_smooth = lerpf(_tug_from, 0.45, _phase_t / 0.1)
 			grip = minf(grip, 0.42)
-		_desbico_t += delta
-		if _desbico_t > DESBICO_TIME:
-			_desbico_t = -1.0
+		elif _phase_t < 0.42:
+			_stroke_smooth = lerpf(0.45, 0.0, (_phase_t - 0.1) / 0.32)
+		else:
+			_phase = 0
+			_stroke_smooth = 0.0
+		_phase_t += delta
+		if intent.slack and _phase_t > 0.12:
+			_phase = 1  # toques seguidos: emenda a próxima folga
+			_phase_t = 0.0
 	else:
 		rig.shorten_on_return = true
-		# A mão não teleporta: limita a velocidade da braçada (≈ 6 m/s, braço humano).
 		_stroke_smooth = move_toward(_stroke_smooth, intent.stroke, 6.0 * delta)
 		if intent.stroke > 0.05 and rig.held:
 			rig.release_hold()
+	intent.desbico_taps = 0
 	rig.stroke = _stroke_smooth
 	rig.grip = grip
 	rig.reel_rate = intent.reel_rate

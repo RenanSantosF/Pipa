@@ -102,8 +102,8 @@ func get_speed_at_height(h: float) -> float:
 
 ## Vetor de vento (m/s) na posição do mundo.
 func sample(world_pos: Vector3) -> Vector3:
-	var speed := get_speed_at_height(world_pos.y)
-	var h := world_pos.y - GROUND_LEVEL
+	var h := world_pos.y - Ground.height_at(world_pos.x, world_pos.z)
+	var speed := get_speed_at_height(h)
 	var turb_amount := 0.07 + 0.22 * exp(-pow((h - ROOF_HEIGHT) / 4.0, 2.0))
 	var sx := world_pos.x * 0.04
 	var sz := world_pos.z * 0.04

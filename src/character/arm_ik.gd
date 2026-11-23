@@ -12,6 +12,14 @@ var left_pole := Vector3.ZERO
 var right_weight: float = 1.0
 var left_weight: float = 1.0
 var hide_head: bool = false
+## Fechamento dos dedos (0 aberta … 1 fechada na linha/lata).
+var right_curl: float = 1.0
+var left_curl: float = 0.75
+## Sentido da curvatura (ajustado olhando a renderização).
+const CURL_SIGN := -1.0
+const FINGERS := ["Index", "Middle", "Ring", "Little"]
+const JOINTS := [["Proximal", 65.0], ["Intermediate", 80.0], ["Distal", 50.0]]
+var _fingers: Dictionary = {}
 
 var _ru: int = -1
 var _rl: int = -1
@@ -30,6 +38,13 @@ func setup(sk: Skeleton3D) -> void:
 	_ll = sk.find_bone("LeftLowerArm")
 	_lh = sk.find_bone("LeftHand")
 	_head = sk.find_bone("Head")
+	for side in ["Right", "Left"]:
+		var list: Array = []
+		for f in FINGERS:
+			for j in JOINTS:
+				list.append([sk.find_bone(side + f + j[0]), j[1]])
+		_fingers[side] = [list, sk.find_bone(side + "IndexProximal"), sk.find_bone(side + "LittleProximal"),
+			sk.find_bone(side + "ThumbProximal"), sk.find_bone(side + "ThumbDistal")]
 
 
 func _process_modification() -> void:
@@ -41,6 +56,34 @@ func _process_modification() -> void:
 		_solve(sk, _ru, _rl, _rh, inv * right_target, inv * right_pole, right_weight)
 	if _lu >= 0 and _ll >= 0 and _lh >= 0 and left_weight > 0.0:
 		_solve(sk, _lu, _ll, _lh, inv * left_target, inv * left_pole, left_weight)
+	_curl(sk, "Right", right_curl, 1.0)
+	_curl(sk, "Left", left_curl, 1.0)
+
+
+## Dobra os dedos em torno do eixo dos nós dos dedos (indicador → mindinho).
+func _curl(sk: Skeleton3D, side: String, amount: float, mirror: float) -> void:
+	if not _fingers.has(side):
+		return
+	var data: Array = _fingers[side]
+	var i1: int = data[1]
+	var i5: int = data[2]
+	if i1 < 0 or i5 < 0 or amount <= 0.0:
+		return
+	var axis := (sk.get_bone_global_pose(i5).origin - sk.get_bone_global_pose(i1).origin).normalized()
+	if axis.length() < 0.5:
+		return
+	for entry in data[0]:
+		var b: int = entry[0]
+		if b < 0:
+			continue
+		var g := sk.get_bone_global_pose(b)
+		var r := Basis(axis, deg_to_rad(float(entry[1])) * amount * CURL_SIGN * mirror)
+		sk.set_bone_global_pose(b, Transform3D(r * g.basis, g.origin))
+	# Polegar fecha por cima.
+	for tb in [data[3], data[4]]:
+		if tb >= 0:
+			var gt := sk.get_bone_global_pose(tb)
+			sk.set_bone_global_pose(tb, Transform3D(Basis(axis, deg_to_rad(25.0) * amount * CURL_SIGN * mirror) * gt.basis, gt.origin))
 
 
 func _solve(sk: Skeleton3D, upper: int, lower: int, hand: int, target: Vector3, pole: Vector3, weight: float) -> void:

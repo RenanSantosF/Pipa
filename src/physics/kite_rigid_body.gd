@@ -146,6 +146,10 @@ func compute_forces() -> void:
 	_torque -= w * (profile.rotational_damping * 0.5 * RHO * maxf(airspeed, 1.0) * span)
 
 
+func add_torque(t: Vector3) -> void:
+	_torque += t
+
+
 ## Coeficiente de força normal de placa plana com perda de sustentação suave.
 func normal_coefficient(alpha: float) -> float:
 	var a := absf(alpha)

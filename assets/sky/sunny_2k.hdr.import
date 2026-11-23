@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://nbkh3mdbhs7e"
-path="res://.godot/imported/late_afternoon_2k.hdr-91d31b29b07d861a21c71f86261b3c43.ctex"
+uid="uid://xuq7srvjb8n4"
+path="res://.godot/imported/sunny_2k.hdr-0efb0f8b9d2dbf6290ff2584b9580923.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sky/late_afternoon_2k.hdr"
-dest_files=["res://.godot/imported/late_afternoon_2k.hdr-91d31b29b07d861a21c71f86261b3c43.ctex"]
+source_file="res://assets/sky/sunny_2k.hdr"
+dest_files=["res://.godot/imported/sunny_2k.hdr-0efb0f8b9d2dbf6290ff2584b9580923.ctex"]
 
 [params]
 

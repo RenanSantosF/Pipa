@@ -74,11 +74,15 @@ func _phase_flight(_delta: float) -> void:
 	it.reel_rate = 0.0
 	if _t < 28.0:
 		# Desbico a cada 0,6 s; entre eles, abre a mão quando a pipa puxa (vai dando linha).
-		if fmod(_t, 0.6) < 1.0 / 60.0:
+		var press := fmod(_t, 0.6) < 0.12
+		if it.slack and not press:
 			it.desbico_taps += 1
+		it.slack = press
+		it.steer = 0.0
 		it.grip = 0.3 if (fmod(_t, 3.0) > 1.8 and rig.tension > 1.0) else 1.0
 	else:
 		it.grip = 1.0
+		it.slack = false
 	if _t > 26.0:
 		_alt_sum += b.x.y
 		_alt_n += 1
@@ -105,8 +109,10 @@ func _start_combat() -> void:
 	var wd := Wind.get_direction()
 	var side := wd.cross(Vector3.UP).normalized()
 	var center := Vector3(0, 0, 40)
-	var hand_a := center + side * 6.0 + Vector3.UP * 1.4
-	var hand_b := center - side * 6.0 + Vector3.UP * 1.4
+	var hand_a := center + side * 6.0
+	var hand_b := center - side * 6.0
+	hand_a.y = Ground.height_at(hand_a.x, hand_a.z) + 1.4
+	hand_b.y = Ground.height_at(hand_b.x, hand_b.z) + 1.4
 	rig.launch(hand_a, 30.0, 45.0, (wd - side * 0.7).normalized())
 	bot_rig.launch(hand_b, 30.0, 45.0, (wd + side * 0.7).normalized())
 	main.player.rig = null  # mãos paradas, controladas pelo teste

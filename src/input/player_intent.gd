@@ -14,8 +14,12 @@ var stroke: float = 0.0
 var grip: float = 1.0
 ## Enrolando na lata (m/s).
 var reel_rate: float = 0.0
-## Toques de desbico pendentes (cada toque = um desbico: afrouxa e dá o tranco).
+## Toques de desbico pendentes: cada SOLTAR do dedo (toque) = um tranco.
 var desbico_taps: int = 0
+## Dedo apertado num toque: a mão afrouxa a linha (a pipa gira o bico).
+var slack: bool = false
+## Para que lado o bico gira durante a folga (−1 esquerda … +1 direita).
+var steer: float = 0.0
 ## Modo do gesto atual (para feedback visual): "", "puxar", "soltar", "enrolar".
 var gesture_mode: String = ""
 

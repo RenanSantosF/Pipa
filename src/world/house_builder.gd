@@ -1,31 +1,31 @@
 class_name HouseBuilder
 extends RefCounted
-## Monta uma casa de bairro brasileiro dentro de um lote: muro com portão e barrado,
-## casa térrea ou sobrado, telhado de telha ou laje com caixa d'água, janelas com grade.
-## Escreve geometria nos MeshBatch do StreetBuilder e registra colisões.
+## Casa de bairro brasileiro (autoconstrução), montada num referencial local:
+## a rua corre em Z, a casa cresce para +X, y = 0 é o nível da calçada.
+## Variações: colada na calçada ou recuada com muro e portão, 1 a 3 andares
+## (andares de cima menores, às vezes em tijolo aparente), laje com caixa d'água
+## ou telhado de barro, porta de enrolar de garagem, janelas com grade e muro de
+## arrimo quando o terreno desce atrás.
 
 const WALL_COLORS := [
-	Color(0.93, 0.85, 0.55), Color(0.62, 0.80, 0.74), Color(0.92, 0.72, 0.70),
-	Color(0.66, 0.76, 0.88), Color(0.92, 0.90, 0.84), Color(0.95, 0.72, 0.48),
-	Color(0.76, 0.85, 0.60), Color(0.86, 0.80, 0.70), Color(0.80, 0.66, 0.80),
+	Color(0.25, 0.50, 0.85), Color(0.20, 0.68, 0.70), Color(0.98, 0.82, 0.22), Color(0.95, 0.55, 0.22),
+	Color(0.95, 0.52, 0.62), Color(0.42, 0.75, 0.36), Color(0.62, 0.46, 0.80), Color(0.95, 0.95, 0.92),
+	Color(0.82, 0.28, 0.22), Color(0.76, 0.86, 0.32), Color(0.98, 0.70, 0.45), Color(0.55, 0.80, 0.95),
 ]
-const MURO_COLORS := [
-	Color(0.92, 0.91, 0.87), Color(0.63, 0.63, 0.61), Color(0.88, 0.82, 0.62), Color(0.75, 0.72, 0.68),
-]
-const GATE_COLORS := [
-	Color(0.16, 0.32, 0.22), Color(0.36, 0.36, 0.38), Color(0.16, 0.22, 0.38), Color(0.40, 0.26, 0.16),
-]
-const ROOF_COLORS := [
-	Color(0.68, 0.33, 0.21), Color(0.60, 0.29, 0.19), Color(0.72, 0.40, 0.26), Color(0.62, 0.62, 0.60),
-]
-const BRICK := Color(0.70, 0.38, 0.25)
+const MURO_COLORS := [Color(0.92, 0.91, 0.87), Color(0.63, 0.63, 0.61), Color(0.88, 0.82, 0.62), Color(0.75, 0.72, 0.68)]
+const GATE_COLORS := [Color(0.16, 0.32, 0.22), Color(0.36, 0.36, 0.38), Color(0.16, 0.22, 0.45), Color(0.45, 0.26, 0.16), Color(0.55, 0.12, 0.1)]
+const ROOF_COLORS := [Color(0.68, 0.33, 0.21), Color(0.60, 0.29, 0.19), Color(0.72, 0.40, 0.26), Color(0.62, 0.62, 0.60)]
+const BRICK := Color(0.72, 0.40, 0.26)
 const WATER_TANK := Color(0.22, 0.42, 0.72)
 const GLASS := Color(0.12, 0.15, 0.18)
 const FRAME := Color(0.93, 0.93, 0.9)
 const BARS := Color(0.2, 0.2, 0.22)
+const STORY_H := 2.8
 
 var _sb: StreetBuilder
 var _rng: RandomNumberGenerator
+var frame := Transform3D.IDENTITY
+var _z: float = 0.0  # z do mundo (fatia de malha)
 
 
 func _init(street_builder: StreetBuilder, rng: RandomNumberGenerator) -> void:
@@ -38,141 +38,150 @@ func _pick(arr: Array) -> Color:
 	return c.darkened(_rng.randf_range(0.0, 0.12))
 
 
-## side: +1 = lado direito (x > 0), -1 = esquerdo. front: distância do eixo da rua até o muro.
-func build(side: float, z0: float, width: float, front: float, depth: float) -> void:
-	var s := side
-	var zc := z0 + width * 0.5
-	var b := _sb.batch_for(zc)
-	var bw := _sb.batch_for(zc, "plaster")
-	var bm := _sb.batch_for(zc, "muro")
-	var bg := _sb.batch_for(zc, "metal")
-	var muro_color := _pick(MURO_COLORS)
-	var wall_color := _pick(WALL_COLORS)
+func _b(surface: String) -> MeshBatch:
+	return _sb.batch_for(_z, surface)
 
-	# Piso do lote (cimento ou terra/grama).
-	var cement := _rng.randf() < 0.5
-	var yard := Color(0.55, 0.54, 0.5) if cement else Color(0.48, 0.47, 0.30)
-	_sb.batch_for(zc, "laje" if cement else "ground").add_box(_xf(Vector3(s * (front + depth * 0.5), 0.01, zc)), Vector3(depth, 0.02, width), yard.darkened(_rng.randf() * 0.1))
 
-	# Muro da frente com portão.
-	var muro_h := _rng.randf_range(1.5, 2.0)
-	var gate_w := 2.6
-	var gate_z := _rng.randf_range(z0 + 0.4 + gate_w * 0.5, z0 + width - 0.4 - gate_w * 0.5)
-	var mx := s * (front + 0.08)
-	_wall_z(bm, mx, z0, gate_z - gate_w * 0.5, muro_h, 0.15, muro_color, true)
-	_wall_z(bm, mx, gate_z + gate_w * 0.5, z0 + width, muro_h, 0.15, muro_color, true)
-	bg.add_box(_xf(Vector3(mx, (muro_h - 0.1) * 0.5, gate_z)), Vector3(0.06, muro_h - 0.1, gate_w), _pick(GATE_COLORS))
-	_sb.add_collider(_xf(Vector3(mx, muro_h * 0.5, gate_z)), Vector3(0.1, muro_h, gate_w))
+func _box(surface: String, c: Vector3, size: Vector3, color: Color, collide: bool = false) -> void:
+	var xf := frame * Transform3D(Basis.IDENTITY, c)
+	_sb.batch_for(_z, surface).add_box(xf, size, color)
+	if collide:
+		_sb.add_collider(xf, size)
 
-	# Muros laterais e de fundo.
-	var side_h := 1.8
-	bm.add_box(_xf(Vector3(s * (front + depth * 0.5), side_h * 0.5, z0)), Vector3(depth, side_h, 0.12), muro_color)
-	_sb.add_collider(_xf(Vector3(s * (front + depth * 0.5), side_h * 0.5, z0)), Vector3(depth, side_h, 0.12))
-	bm.add_box(_xf(Vector3(s * (front + depth), side_h * 0.5, zc)), Vector3(0.12, side_h, width), muro_color)
-	_sb.add_collider(_xf(Vector3(s * (front + depth), side_h * 0.5, zc)), Vector3(0.12, side_h, width))
 
-	# Casa.
-	var setback := _rng.randf_range(2.5, 4.5)
-	var hd := minf(_rng.randf_range(6.5, 9.0), depth - setback - 1.0)
-	var hw := width - _rng.randf_range(1.2, 2.6)
-	var house_z := z0 + 0.3 + hw * 0.5 if _rng.randf() < 0.5 else z0 + width - 0.3 - hw * 0.5
-	var stories := 2 if _rng.randf() < 0.25 else 1
-	var h := 2.9 * stories
-	var cx := s * (front + setback + hd * 0.5)
-	bw.add_box(_xf(Vector3(cx, h * 0.5, house_z)), Vector3(hd, h, hw), wall_color)
-	_sb.add_collider(_xf(Vector3(cx, h * 0.5, house_z)), Vector3(hd, h, hw))
-	# Barrado (faixa escura embaixo da fachada).
-	var fx := s * (front + setback)
-	bw.add_box(_xf(Vector3(fx - s * 0.01, 0.3, house_z)), Vector3(0.04, 0.6, hw + 0.02), wall_color.darkened(0.35))
+## Casa num lote: width ao longo da rua (z de -width/2 a +width/2), depth para +X,
+## front = distância do eixo da rua até o alinhamento, drop = quanto o terreno
+## desce (+) ou sobe (−) no fundo do lote em relação à calçada.
+func build(lot_frame: Transform3D, width: float, front: float, depth: float, drop: float, detail: bool = true) -> void:
+	frame = lot_frame
+	_z = lot_frame.origin.z
+	var z0 := -width * 0.5
+	var setback := 0.0 if _rng.randf() < 0.4 else _rng.randf_range(1.5, 4.0)
+	var hd := clampf(_rng.randf_range(6.0, 10.0), 4.0, depth - setback - 0.5)
+	var hw := width - _rng.randf_range(0.0, 1.2)
+	var house_z := z0 + 0.1 + hw * 0.5 if _rng.randf() < 0.5 else z0 + width - 0.1 - hw * 0.5
+	var r := _rng.randf()
+	var stories := 1 if r < 0.45 else (2 if r < 0.87 else 3)
+	var fx := front + setback
+	var cx := fx + hd * 0.5
+	var color := _pick(WALL_COLORS)
 
-	# Porta e janelas na fachada.
-	var door_z := house_z + _rng.randf_range(-hw * 0.3, hw * 0.3)
-	bg.add_box(_xf(Vector3(fx - s * 0.03, 1.05, door_z)), Vector3(0.08, 2.1, 0.9), _pick(GATE_COLORS).lightened(0.1))
-	for story in stories:
-		var wy := 1.55 + 2.9 * story
-		var slots := [house_z - hw * 0.28, house_z + hw * 0.28]
-		for wz in slots:
-			if story == 0 and absf(float(wz) - door_z) < 1.3:
-				continue
-			_window(b, fx, s, wy, float(wz))
+	# Muro de arrimo / embasamento quando o terreno desce.
+	if drop > 0.3:
+		_box("muro", Vector3(front + depth * 0.5, -drop * 0.5, 0.0), Vector3(depth, drop, width), Color(0.7, 0.7, 0.68), true)
+	# Quintal/garagem.
+	_box("laje" if _rng.randf() < 0.6 else "ground", Vector3(front + depth * 0.5, 0.01, 0.0), Vector3(depth, 0.02, width), Color(0.6, 0.6, 0.58))
 
-	# Telhado.
-	if _rng.randf() < 0.5:
-		_gable_roof(b, cx, s, h, hd, hw, house_z, wall_color)
+	# Muro da frente com portão (só se recuada).
+	if setback > 1.0:
+		var muro_h := _rng.randf_range(1.4, 2.0)
+		var gate_w := 2.6
+		var gz := _rng.randf_range(z0 + 0.4 + gate_w * 0.5, z0 + width - 0.4 - gate_w * 0.5)
+		var mc := _pick(MURO_COLORS)
+		_wall_z(front + 0.08, z0, gz - gate_w * 0.5, muro_h, mc)
+		_wall_z(front + 0.08, gz + gate_w * 0.5, z0 + width, muro_h, mc)
+		_box("metal", Vector3(front + 0.08, (muro_h - 0.1) * 0.5, gz), Vector3(0.06, muro_h - 0.1, gate_w), _pick(GATE_COLORS), true)
+
+	# Andares (os de cima podem ser menores e em tijolo aparente).
+	var y := 0.0
+	var w_cur := hw
+	var d_cur := hd
+	var top_brick := false
+	for s in stories:
+		var brick := s > 0 and _rng.randf() < 0.3
+		var surface := "brick" if brick else "plaster"
+		var col := BRICK if brick else (color if s == 0 or _rng.randf() < 0.6 else _pick(WALL_COLORS))
+		_box(surface, Vector3(fx + d_cur * 0.5, y + STORY_H * 0.5, house_z), Vector3(d_cur, STORY_H, w_cur), col, true)
+		if not brick:
+			_box(surface, Vector3(fx - 0.01, y + 0.3, house_z), Vector3(0.04, 0.6, w_cur + 0.02), col.darkened(0.3))
+		# Laje entre andares (beiral).
+		_box("laje", Vector3(fx + d_cur * 0.5 - 0.1, y + STORY_H + 0.06, house_z), Vector3(d_cur + 0.3, 0.12, w_cur + 0.3), Color(0.75, 0.74, 0.72))
+		if detail:
+			_facade(fx, y, house_z, w_cur, s == 0)
+		y += STORY_H + 0.12
+		top_brick = brick
+		if s < stories - 1:
+			w_cur = maxf(w_cur - _rng.randf_range(0.0, 2.0), 3.5)
+			d_cur = maxf(d_cur - _rng.randf_range(0.0, 2.5), 3.5)
+
+	# Cobertura.
+	if not top_brick and _rng.randf() < 0.4:
+		_gable_roof(fx + d_cur * 0.5, y, d_cur, w_cur, house_z, color)
 	else:
-		_slab_roof(b, cx, s, h, hd, hw, house_z, wall_color)
+		_slab_roof(fx + d_cur * 0.5, y, d_cur, w_cur, house_z, color)
 
-	# Árvore no quintal (mangueira/goiabeira).
-	if _rng.randf() < 0.45:
-		var tx := s * (front + depth - 2.2)
-		var tz := z0 + _rng.randf_range(2.0, width - 2.0)
-		_sb.add_tree(Vector3(tx, 0, tz), _rng.randf_range(1.6, 2.4), _rng.randf_range(3.0, 4.2))
+	# Árvore no quintal.
+	if detail and _rng.randf() < 0.35 and depth - setback - hd > 2.5:
+		var tp := frame * Vector3(front + depth - 1.8, 0.0, _rng.randf_range(z0 + 1.5, z0 + width - 1.5))
+		_sb.add_tree(Vector3(tp.x, Ground.height_at(tp.x, tp.z), tp.z), "")
 
 
-func _wall_z(b: MeshBatch, x: float, za: float, zb: float, h: float, t: float, color: Color, stripe: bool) -> void:
+func _wall_z(x: float, za: float, zb: float, h: float, color: Color) -> void:
 	var length := zb - za
 	if length < 0.05:
 		return
-	var c := Vector3(x, h * 0.5, (za + zb) * 0.5)
-	b.add_box(_xf(c), Vector3(t, h, length), color)
-	if stripe:
-		b.add_box(_xf(Vector3(x, 0.2, c.z)), Vector3(t + 0.02, 0.4, length), color.darkened(0.3))
-	b.add_box(_xf(Vector3(x, h + 0.03, c.z)), Vector3(t + 0.06, 0.06, length), color.lightened(0.15))
-	_sb.add_collider(_xf(c), Vector3(t, h, length))
+	var zc := (za + zb) * 0.5
+	_box("muro", Vector3(x, h * 0.5, zc), Vector3(0.15, h, length), color, true)
+	_box("muro", Vector3(x, 0.2, zc), Vector3(0.17, 0.4, length), color.darkened(0.3))
 
 
-func _window(b: MeshBatch, fx: float, s: float, y: float, z: float) -> void:
-	b.add_box(_xf(Vector3(fx - s * 0.02, y, z)), Vector3(0.05, 1.2, 1.3), FRAME)
-	b.add_box(_xf(Vector3(fx - s * 0.04, y, z)), Vector3(0.04, 1.0, 1.1), GLASS)
+func _facade(fx: float, y: float, z: float, w: float, ground_floor: bool) -> void:
+	var slots := 1 if w < 5.0 else (2 if w < 8.0 else 3)
+	var garage := ground_floor and w > 5.5 and _rng.randf() < 0.35
+	var used_z := -999.0
+	if ground_floor:
+		if garage:
+			used_z = z - w * 0.5 + 1.6
+			_box("metal", Vector3(fx - 0.04, 1.2, used_z), Vector3(0.08, 2.4, 2.8), _pick(GATE_COLORS))
+		else:
+			used_z = z + _rng.randf_range(-w * 0.3, w * 0.3)
+			_box("metal", Vector3(fx - 0.03, 1.05, used_z), Vector3(0.08, 2.1, 0.9), _pick(GATE_COLORS).lightened(0.1))
+	for i in slots:
+		var wz := z - w * 0.5 + w * (float(i) + 0.5) / float(slots)
+		if absf(wz - used_z) < 1.6:
+			continue
+		_window(fx, y + 1.55, wz)
+
+
+func _window(fx: float, y: float, z: float) -> void:
+	_box("plain", Vector3(fx - 0.02, y, z), Vector3(0.05, 1.2, 1.3), FRAME)
+	_box("plain", Vector3(fx - 0.04, y, z), Vector3(0.04, 1.0, 1.1), GLASS)
 	for i in 4:
-		var bz := z - 0.45 + 0.3 * i
-		b.add_box(_xf(Vector3(fx - s * 0.09, y, bz)), Vector3(0.025, 1.0, 0.025), BARS)
+		_box("plain", Vector3(fx - 0.09, y, z - 0.45 + 0.3 * i), Vector3(0.025, 1.0, 0.025), BARS)
 
 
-func _gable_roof(b: MeshBatch, cx: float, s: float, h: float, hd: float, hw: float, z: float, wall_color: Color) -> void:
+func _gable_roof(cx: float, h: float, hd: float, hw: float, z: float, wall_color: Color) -> void:
 	var angle := deg_to_rad(_rng.randf_range(18.0, 26.0))
 	var a := hd * 0.5 + 0.45
 	var slab_len := a / cos(angle)
 	var rise := a * tan(angle)
 	var color := _pick(ROOF_COLORS)
 	var size := Vector3(slab_len, 0.08, hw + 0.6)
-	var br := _sb.batch_for(z, "roof")
-	var bw := _sb.batch_for(z, "plaster")
 	for dir in [-1.0, 1.0]:
-		var center := Vector3(cx + s * dir * a * 0.5, h + rise * 0.5 - 0.05, z)
-		var xf := Transform3D(Basis(Vector3(0, 0, 1), -angle * s * dir), center)
-		br.add_box(xf, size, color.darkened(0.08 if dir > 0.0 else 0.0), Vector2.ZERO, false)
+		var center := Vector3(cx + dir * a * 0.5, h + rise * 0.5 - 0.05, z)
+		var xf := frame * Transform3D(Basis(Vector3(0, 0, 1), -angle * dir), center)
+		_b("roof").add_box(xf, size, color.darkened(0.08 if dir > 0.0 else 0.0), Vector2.ZERO, false)
 		_sb.add_collider(xf, size)
-	# Oitões (triângulos das pontas).
 	var peak := h + (hd * 0.5) * tan(angle)
 	for zend in [z - hw * 0.5, z + hw * 0.5]:
 		var ze := float(zend)
-		var n := Vector3(0, 0, signf(ze - z))
-		bw.add_triangle(Vector3(cx - hd * 0.5, h, ze), Vector3(cx + hd * 0.5, h, ze), Vector3(cx, peak, ze), n, wall_color)
+		var n := frame.basis * Vector3(0, 0, signf(ze - z))
+		_b("plaster").add_triangle(frame * Vector3(cx - hd * 0.5, h, ze), frame * Vector3(cx + hd * 0.5, h, ze), frame * Vector3(cx, peak, ze), n, wall_color)
 
 
-func _slab_roof(b: MeshBatch, cx: float, s: float, h: float, hd: float, hw: float, z: float, wall_color: Color) -> void:
+func _slab_roof(cx: float, h: float, hd: float, hw: float, z: float, wall_color: Color) -> void:
 	var ph := 0.45
 	var t := 0.12
 	var pc := wall_color.lightened(0.05)
-	var bw := _sb.batch_for(z, "plaster")
-	bw.add_box(_xf(Vector3(cx, h + ph * 0.5, z - hw * 0.5 + t * 0.5)), Vector3(hd, ph, t), pc)
-	bw.add_box(_xf(Vector3(cx, h + ph * 0.5, z + hw * 0.5 - t * 0.5)), Vector3(hd, ph, t), pc)
-	bw.add_box(_xf(Vector3(cx - hd * 0.5 + t * 0.5, h + ph * 0.5, z)), Vector3(t, ph, hw), pc)
-	bw.add_box(_xf(Vector3(cx + hd * 0.5 - t * 0.5, h + ph * 0.5, z)), Vector3(t, ph, hw), pc)
-	_sb.batch_for(z, "laje").add_box(_xf(Vector3(cx, h + 0.005, z)), Vector3(hd - 0.2, 0.01, hw - 0.2), Color(0.55, 0.54, 0.52))
-	# Caixa d'água azul.
-	var tank := Vector3(cx + s * hd * 0.25, h + 0.45, z + _rng.randf_range(-hw * 0.3, hw * 0.3))
-	b.add_cylinder(_xf(tank), 0.55, 0.9, 12, WATER_TANK)
-	b.add_cylinder(_xf(tank + Vector3(0, 0.5, 0)), 0.58, 0.1, 12, WATER_TANK.darkened(0.2))
-	_sb.add_collider(_xf(tank), Vector3(1.1, 0.9, 1.1))
-	# Às vezes, um "puxadinho" de tijolo em construção na laje.
+	_box("plaster", Vector3(cx, h + ph * 0.5, z - hw * 0.5 + t * 0.5), Vector3(hd, ph, t), pc)
+	_box("plaster", Vector3(cx, h + ph * 0.5, z + hw * 0.5 - t * 0.5), Vector3(hd, ph, t), pc)
+	_box("plaster", Vector3(cx - hd * 0.5 + t * 0.5, h + ph * 0.5, z), Vector3(t, ph, hw), pc)
+	_box("plaster", Vector3(cx + hd * 0.5 - t * 0.5, h + ph * 0.5, z), Vector3(t, ph, hw), pc)
+	var tank := Vector3(cx + hd * 0.25, h + 0.45, z + _rng.randf_range(-hw * 0.3, hw * 0.3))
+	var txf := frame * Transform3D(Basis.IDENTITY, tank)
+	_b("plain").add_cylinder(txf, 0.55, 0.9, 12, WATER_TANK)
+	_b("plain").add_cylinder(frame * Transform3D(Basis.IDENTITY, tank + Vector3(0, 0.5, 0)), 0.58, 0.1, 12, WATER_TANK.darkened(0.2))
+	_sb.add_collider(txf, Vector3(1.1, 0.9, 1.1))
 	if _rng.randf() < 0.3:
 		var bh := _rng.randf_range(0.8, 1.6)
-		var bc := Vector3(cx - s * hd * 0.2, h + bh * 0.5, z)
-		_sb.batch_for(z, "brick").add_box(_xf(bc), Vector3(hd * 0.4, bh, hw * 0.5), BRICK.darkened(_rng.randf() * 0.15))
-		_sb.add_collider(_xf(bc), Vector3(hd * 0.4, bh, hw * 0.5))
-
-
-static func _xf(origin: Vector3) -> Transform3D:
-	return Transform3D(Basis.IDENTITY, origin)
+		_box("brick", Vector3(cx - hd * 0.2, h + bh * 0.5, z), Vector3(hd * 0.4, bh, hw * 0.5), BRICK.darkened(_rng.randf() * 0.15), true)

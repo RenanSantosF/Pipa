@@ -100,6 +100,23 @@ func _draw() -> void:
 	# Linha no chão (pequeno, só quando existe).
 	if rig.pile > 0.5:
 		_text_center(font, Vector2(cx, cap.end.y + 16), "↓%dm" % roundi(rig.pile), 13, Color(1, 1, 1, 0.6))
+	# --- Cabo de guerra do cruzamento (desgaste: você × rival) ---
+	if world:
+		var c := world.strongest_contact_for(rig)
+		if c != null:
+			var rival: KiteRig = c.b if c.a == rig else c.a
+			var mine := clampf(LineCombat.max_wear(rig), 0.0, 1.0)
+			var theirs := clampf(LineCombat.max_wear(rival), 0.0, 1.0)
+			var dy := cap.end.y + 10.0
+			var bar := Rect2(cx - 120, dy, 240, 26)
+			draw_style_box(_capsule_style(), bar)
+			Icons.scissors(self, Vector2(cx, dy + 13), 7.0, Icons.ACCENT)
+			draw_rect(Rect2(cx - 108, dy + 10, 90, 6), Color(1, 1, 1, 0.15))
+			draw_rect(Rect2(cx - 18 - 90 * mine, dy + 10, 90 * mine, 6), Color(1.0, 0.35, 0.3))
+			draw_rect(Rect2(cx + 18, dy + 10, 90, 6), Color(1, 1, 1, 0.15))
+			draw_rect(Rect2(cx + 18, dy + 10, 90 * theirs, 6), Color(0.45, 1.0, 0.55))
+			draw_circle(Vector2(cx - 112, dy + 13), 3.0, rig.line_type.color)
+			draw_circle(Vector2(cx + 112, dy + 13), 3.0, rival.line_type.color)
 	# --- Aviso ---
 	if _toast_time > 0.0:
 		var a := clampf(_toast_time / 0.4, 0.0, 1.0)

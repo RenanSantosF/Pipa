@@ -42,6 +42,10 @@ var stroke_dir := Vector3.BACK
 var stroke: float = 0.0
 var grip: float = 1.0
 var reel_rate: float = 0.0
+## Giro do bico durante a folga do desbico (−1..1): o "punho" do pipeiro.
+var steer: float = 0.0
+## Torque máximo do giro (N·m) com vento de referência.
+const STEER_TORQUE := 0.06
 ## A mão voltando da braçada joga a linha no chão? (falso no desbico: a linha escorrega)
 var shorten_on_return: bool = true
 ## Pipa ainda segura na mão (antes do primeiro desbico).
@@ -65,6 +69,9 @@ var tension: float = 0.0
 var age: float = 0.0
 ## Desgaste acumulado por trecho de material (bin de 10 cm → 0..1).
 var wear: Dictionary = {}
+## Qualidade deste carretel (cerol nunca sai igual): multiplica abrasão e resistência.
+var spool_quality: float = 1.0
+var _strength_seed: int = 0
 
 var kite_visual: KiteVisual
 var tail_renderer: TailRenderer
@@ -124,6 +131,8 @@ func launch(hand: Vector3, length: float, elevation_deg: float, direction: Vecto
 	snag_cooldown = 0.0
 	age = 0.0
 	wear.clear()
+	spool_quality = randf_range(0.75, 1.3)
+	_strength_seed = randi()
 	hand_rest = hand
 	visible = true
 	kite_visual.bind(self)
@@ -163,6 +172,13 @@ func try_snag(obstacles: WorldObstacles) -> void:
 
 func release_hold() -> void:
 	held = false
+
+
+## Resistência relativa de um trecho de 10 cm da linha (revestimento irregular).
+func bin_strength(b: int) -> float:
+	var hsh := hash(Vector2i(b, _strength_seed))
+	var r := float(hsh % 1000) / 1000.0
+	return 0.6 + 0.9 * r * r
 
 
 func hand_position() -> Vector3:
@@ -243,6 +259,11 @@ func _update_spool(dt: float) -> void:
 func predict(h: float) -> void:
 	if body != null:
 		body.compute_forces()
+		if absf(steer) > 0.01 and rope != null:
+			# Gira o bico em torno da linha (vista do jogador: + = para a direita).
+			var axis := (body.world_point(body.tow_local) - rope.hand_position).normalized()
+			var air := clampf(body.airspeed / 6.0, 0.35, 1.6)
+			body.add_torque(axis * (steer * STEER_TORQUE * air))
 		body.predict(h)
 		tail.predict(h)
 	if rope != null:
@@ -258,8 +279,9 @@ func solve(h: float) -> void:
 			body.x = body.x.lerp(snag_point, 0.6)
 			body.v *= 0.3
 			body.w *= 0.9
-		if body.x.y < 0.12:
-			body.x.y = 0.12
+		var gy := Ground.height_at(body.x.x, body.x.z) + 0.12
+		if body.x.y < gy:
+			body.x.y = gy
 
 
 func finalize(h: float) -> void:
@@ -306,7 +328,7 @@ func post_frame(dt: float, h: float) -> void:
 
 func _collide_world() -> void:
 	var motion := body.x - _x_frame_start
-	body.resting = body.x.y <= 0.13
+	body.resting = body.x.y <= Ground.height_at(body.x.x, body.x.z) + 0.13
 	if motion.length_squared() < 1e-8:
 		return
 	_ray.from = _x_frame_start

@@ -117,6 +117,21 @@ func add_card(center: Vector3, right: Vector3, up: Vector3, size: float, n: Vect
 		_vertex_count += 1
 
 
+## Cartão retangular (folha de coqueiro/bananeira): largura × comprimento.
+func add_card_rect(center: Vector3, right: Vector3, up: Vector3, width: float, length: float, n: Vector3, color: Color, sway: Vector2) -> void:
+	var r := right * (width * 0.5)
+	var u := up * (length * 0.5)
+	var p := [center - r - u, center + r - u, center + r + u, center - r + u]
+	var uvs := [Vector2(0, 1), Vector2(1, 1), Vector2(1, 0), Vector2(0, 0)]
+	for idx in [0, 1, 2, 0, 2, 3]:
+		_st.set_color(color)
+		_st.set_normal(n)
+		_st.set_uv(uvs[idx])
+		_st.set_uv2(sway)
+		_st.add_vertex(p[idx])
+		_vertex_count += 1
+
+
 func _sph(theta: float, phi: float) -> Vector3:
 	return Vector3(sin(theta) * cos(phi), cos(theta), sin(theta) * sin(phi))
 

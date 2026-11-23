@@ -65,6 +65,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 			intent.look_delta += (event as InputEventMouseMotion).relative * GameConfig.mouse_sensitivity
 	elif event.is_action_pressed("kite_desbico"):
+		intent.slack = true
+		intent.steer = Input.get_axis("move_left", "move_right")
+	elif event.is_action_released("kite_desbico"):
+		intent.slack = false
 		intent.desbico_taps += 1
 	elif event.is_action_pressed("kite_reset"):
 		EventBus.reset_requested.emit()

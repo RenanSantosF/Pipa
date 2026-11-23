@@ -20,7 +20,7 @@ const RELEASE_PX := 130.0
 const LOOK_ZONE := 0.3
 const MOVE_ZONE_X := 0.35
 const MOVE_ZONE_Y := 0.45
-const TAP_TIME := 0.25
+const TAP_TIME := 1.2
 const TAP_MOVE := 26.0
 const SPOOL_RADIUS := 0.06
 const REEL_GAIN := 1.6
@@ -51,6 +51,7 @@ var _reel_angle: float = 0.0
 var _reel_omega: float = 0.0
 var _time: float = 0.0
 var _taps_fx: Array = []       # [posição, idade]
+var _slack_index: int = -1
 
 
 func _ready() -> void:
@@ -86,6 +87,9 @@ func _input(event: InputEvent) -> void:
 		if _starts.has(sd.index):
 			var info: Array = _starts[sd.index]
 			info[2] = maxf(info[2], (sd.position - (info[1] as Vector2)).length())
+			if sd.index == _slack_index and float(info[2]) >= TAP_MOVE:
+				intent.slack = false  # virou arrasto: cancela o desbico
+				_slack_index = -1
 		if sd.index == _joy_index:
 			joystick.move(sd.position)
 		elif sd.index == _look_index:
@@ -102,7 +106,13 @@ func _down(index: int, pos: Vector2) -> void:
 		queue_redraw()
 		return
 	_starts[index] = [_time, pos, 0.0]
-	if pos.x < size.x * MOVE_ZONE_X and pos.y > size.y * MOVE_ZONE_Y:
+	var is_joy := pos.x < size.x * MOVE_ZONE_X and pos.y > size.y * MOVE_ZONE_Y
+	if not is_joy:
+		# Começo de um possível desbico: afrouxa já, gira o bico para o lado tocado.
+		intent.slack = true
+		intent.steer = clampf((pos.x - size.x * 0.5) / (size.x * 0.22), -1.0, 1.0)
+		_slack_index = index
+	if is_joy:
 		if _joy_index == -1:
 			_joy_index = index
 			joystick.begin(pos)
@@ -139,10 +149,13 @@ func _up(index: int, pos: Vector2) -> void:
 	if _starts.has(index):
 		var info: Array = _starts[index]
 		var quick: bool = _time - float(info[0]) < TAP_TIME and float(info[2]) < TAP_MOVE
-		if quick and index != _joy_index:
+		if quick and index != _joy_index and index == _slack_index:
 			intent.desbico_taps += 1
 			_taps_fx.append([pos, 0.0])
 		_starts.erase(index)
+	if index == _slack_index:
+		intent.slack = false
+		_slack_index = -1
 	if index == _joy_index:
 		_joy_index = -1
 		joystick.end()

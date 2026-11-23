@@ -174,6 +174,9 @@ func _process(delta: float) -> void:
 		# O alvo da IK é o punho: recua ~8 cm para a PALMA ficar sobre a linha.
 		var shoulder := gt.origin + shoulder_h + right * 0.18
 		_ik.right_target = right_hand_target - (right_hand_target - shoulder).normalized() * 0.08
+		# Mão fecha na linha; abre quando a linha corre (dar linha).
+		_ik.right_curl = lerpf(_ik.right_curl, clampf(1.0 - maxf(-reel_speed, 0.0) * 0.4, 0.35, 1.0), 0.2)
+		_ik.left_curl = 0.75
 		_ik.left_target = lata_pos - right * 0.02 - fwd * 0.03
 		_ik.right_pole = gt.origin + shoulder_h + right * 0.6 - Vector3.UP * 0.5 + gt.basis.z * 0.3
 		_ik.left_pole = gt.origin + shoulder_h - right * 0.6 - Vector3.UP * 0.5 + gt.basis.z * 0.3
@@ -208,7 +211,7 @@ static func _arms_mesh(src: ArrayMesh, skin: Skin) -> ArrayMesh:
 		var n := String(skin.get_bind_name(i))
 		is_arm[i] = 0
 		for wd in ARM_WORDS:
-			if n.contains(wd) and not n.contains("Shoulder"):
+			if n.contains(wd) and not n.contains("Shoulder") and not n.contains("Upper"):
 				is_arm[i] = 1
 	for sidx in src.get_surface_count():
 		var arrays := src.surface_get_arrays(sidx)
@@ -234,7 +237,7 @@ static func _arms_mesh(src: ArrayMesh, skin: Skin) -> ArrayMesh:
 				idx[v] = v
 		var keep := PackedInt32Array()
 		for t in range(0, idx.size(), 3):
-			if arm_w[idx[t]] > 0.5 and arm_w[idx[t + 1]] > 0.5 and arm_w[idx[t + 2]] > 0.5:
+			if arm_w[idx[t]] > 0.15 and arm_w[idx[t + 1]] > 0.15 and arm_w[idx[t + 2]] > 0.15:
 				keep.append(idx[t])
 				keep.append(idx[t + 1])
 				keep.append(idx[t + 2])

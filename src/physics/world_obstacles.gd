@@ -98,31 +98,137 @@ func collide_rope(rope: Rope) -> String:
 						touched = true
 						if caught == "":
 							caught = "telhado"
-		# Fios: segmento da linha × fio.
-		if i + 1 < n:
-			var q := rope.pos[i + 1]
-			for idx in query(p):
-				var e2: Array = entries[idx]
-				if e2[0] != Kind.WIRE:
-					continue
-				var res := LineCombat.closest_segments(p, q, e2[1], e2[2])
-				var dist: float = res[2]
-				if dist < 0.04:
-					var t: float = res[0]
-					var cp := p.lerp(q, t)
-					var wp: Vector3 = (e2[1] as Vector3).lerp(e2[2], res[1])
-					var sep := cp - wp
-					var dirv := sep.normalized() if sep.length() > 0.0001 else Vector3.UP
-					var corr := dirv * (0.04 - dist)
-					p += corr * (1.0 - t)
-					rope.pos[i + 1] = q + corr * t
-					v *= 0.3
-					touched = true
-					caught = "fio"
 		if touched:
 			rope.pos[i] = p
 			rope.vel[i] = v
 	return caught
+
+
+const MAX_PINS := 6
+
+## Enroscar de verdade: um trecho da linha que cruza copa/poste/fio ganha um nó
+## preso naquele ponto (a linha desvia: 3 pontos). O nó desliza com atrito de
+## cabrestante (razão de tensões e^(μθ)) e solta quando a linha se endireita ou
+## quando um tranco quebra o galho. Retorna o nome do que prendeu agora ("" se nada).
+func wrap_rope(rope: Rope, dt: float) -> String:
+	_update_pins(rope, dt)
+	if rope.pin_count() >= MAX_PINS:
+		return ""
+	var n := rope.pos.size()
+	var seg_n := rope.segment_count()
+	for i in seg_n:
+		var a := rope.pos[i]
+		var b := rope.pos[i + 1] if i + 1 < n else rope.end_point()
+		var mid := (a + b) * 0.5
+		for idx in query(mid):
+			if rope.pin_obstacle.has(idx):
+				continue  # um nó por obstáculo
+			var hit := _segment_hit(a, b, idx)
+			if hit.is_empty():
+				continue
+			var t: float = hit[0]
+			# Não prende colado na mão nem no cabresto.
+			if (i == 0 and rope.hand_fixed and t < 0.25) or (i == seg_n - 1 and t > 0.85):
+				continue
+			var l := rope.rest[i]
+			rope.insert_node(i + 1, hit[1], rope.vel[i], l * t, l * (1.0 - t))
+			rope.pin_node(i + 1, hit[1], hit[2], hit[3], idx)
+			return hit[4]
+	return ""
+
+
+## [t, ponto, μ, força_de_quebra, nome] ou [].
+func _segment_hit(a: Vector3, b: Vector3, idx: int) -> Array:
+	var e: Array = entries[idx]
+	match e[0]:
+		Kind.CANOPY:
+			var c: Vector3 = e[1]
+			var r: float = e[2]
+			var ab := b - a
+			var t := clampf((c - a).dot(ab) / maxf(ab.length_squared(), 1e-6), 0.0, 1.0)
+			var q := a + ab * t
+			if q.distance_to(c) < r * 0.7:
+				return [t, q, 0.9, randf_range(9.0, 26.0), "árvore"]
+		Kind.CYLINDER:
+			var base: Vector3 = e[1]
+			var top := Vector3(base.x, e[2], base.z)
+			var rad: float = e[3]
+			var res := LineCombat.closest_segments(a, b, base, top)
+			if float(res[2]) < rad:
+				var sp := a.lerp(b, res[0])
+				var ap := base.lerp(top, res[1])
+				var hdir := Vector3(sp.x - ap.x, 0.0, sp.z - ap.z)
+				if hdir.length() < 0.001:
+					hdir = (b - a).cross(Vector3.UP)
+				return [res[0], ap + hdir.normalized() * (rad + 0.012), 0.45, 1000.0, e[4]]
+		Kind.WIRE:
+			var wa: Vector3 = e[1]
+			var wb: Vector3 = e[2]
+			var res2 := LineCombat.closest_segments(a, b, wa, wb)
+			if float(res2[2]) < 0.035:
+				var sp2 := a.lerp(b, res2[0])
+				var wp := wa.lerp(wb, res2[1])
+				var off := sp2 - wp
+				off = off.normalized() if off.length() > 0.0005 else Vector3.UP
+				return [res2[0], wp + off * 0.012, 0.3, 1000.0, "fio"]
+	return []
+
+
+func _update_pins(rope: Rope, dt: float) -> void:
+	var i := rope.pos.size() - 1
+	while i >= 1:
+		if rope.pinned[i] == 0:
+			i -= 1
+			continue
+		var n := rope.pos.size()
+		var p := rope.pos[i]
+		var has_next := i + 1 < n or rope.end_body != null
+		if not has_next:
+			rope.unpin_node(i)
+			i -= 1
+			continue
+		var prev_p := rope.pos[i - 1]
+		var next_p := rope.pos[i + 1] if i + 1 < n else rope.end_point()
+		var u1 := (prev_p - p).normalized()
+		var u2 := (next_p - p).normalized()
+		var dev := PI - acos(clampf(u1.dot(u2), -1.0, 1.0))
+		var t_hand: float = rope.seg_tension[i - 1] if i - 1 < rope.seg_tension.size() else 0.0
+		var t_kite: float = rope.seg_tension[i] if i < rope.seg_tension.size() else 0.0
+		var release := false
+		var oi := rope.pin_obstacle[i]
+		if oi >= 0 and oi < entries.size():
+			var e: Array = entries[oi]
+			match e[0]:
+				Kind.CANOPY:
+					var c: Vector3 = e[1]
+					var ab := next_p - prev_p
+					var t := clampf((c - prev_p).dot(ab) / maxf(ab.length_squared(), 1e-6), 0.0, 1.0)
+					release = (prev_p + ab * t).distance_to(c) > float(e[2]) * 0.85
+				Kind.CYLINDER:
+					var base: Vector3 = e[1]
+					var res := LineCombat.closest_segments(prev_p, next_p, base, Vector3(base.x, e[2], base.z))
+					release = float(res[2]) > float(e[3]) + 0.02
+				Kind.WIRE:
+					release = dev < 0.05
+		if dev < 0.02 or maxf(t_hand, t_kite) > rope.pin_break[i]:
+			release = true
+		if release:
+			rope.unpin_node(i)
+			rope.remove_node(i)
+			i -= 1
+			continue
+		# Cabrestante: a linha só desliza se um lado vencer o outro × e^(μθ).
+		var ratio := exp(rope.pin_mu[i] * dev)
+		var move := 0.0
+		if t_kite > t_hand * ratio + 0.05:
+			move = minf((t_kite - t_hand * ratio) * 0.6, 4.0) * dt          # pipa puxa linha
+		elif t_hand > t_kite * ratio + 0.05:
+			move = -minf((t_hand - t_kite * ratio) * 0.6, 4.0) * dt         # mão puxa linha
+		if move != 0.0 and i < rope.rest.size():
+			move = clampf(move, -(rope.rest[i] - 0.05), rope.rest[i - 1] - 0.05)
+			rope.rest[i - 1] -= move
+			rope.rest[i] += move
+		i -= 1
 
 
 ## A pipa encostou em algo que prende? Retorna [nome, ponto] ou [].

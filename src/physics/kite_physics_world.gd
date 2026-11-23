@@ -79,12 +79,16 @@ func _collide_with_world() -> void:
 	for r in rigs:
 		if r.rope != null:
 			var caught := obstacles.collide_rope(r.rope)
+			var wrapped := obstacles.wrap_rope(r.rope, get_physics_process_delta_time())
+			if wrapped != "":
+				caught = wrapped
 			var was: bool = _line_caught.get(r, false)
 			_line_caught[r] = caught != ""
 			if caught != "" and not was and r.is_flying():
 				EventBus.kite_snagged.emit(r, caught)
 		if r.is_flying():
 			r.try_snag(obstacles)
+			r.tail.try_snag(obstacles, r.rope.tension_end, get_physics_process_delta_time())
 
 
 func _opponent_in_contact(rig: KiteRig) -> KiteRig:
