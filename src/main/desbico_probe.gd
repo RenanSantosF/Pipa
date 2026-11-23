@@ -41,22 +41,21 @@ func _physics_process(delta: float) -> void:
 	var lat := rig.body.x.dot(_side)
 	if absf(_t - 6.0) < delta:
 		_x0 = lat
-	# 6–12 s: toques CURTOS à direita (segura 0,15 s a cada 0,5 s)
-	# 14–22 s: toques LONGOS à esquerda (segura 0,45 s a cada 0,9 s)
+	# 6–12 s: toques ESPAÇADOS (1 s) → deve alternar os lados
+	# 13–16 s: toques SEGUIDOS (0,35 s) → deve continuar para o mesmo lado
+	# 18 s: um toque LONGO (0,7 s)
 	var press := false
-	var steer := 0.0
 	if _t > 6.0 and _t < 12.0:
-		press = fmod(_t - 6.0, 0.5) < 0.15
-		steer = 1.0
-	elif _t > 14.0 and _t < 22.0:
-		press = fmod(_t - 14.0, 0.9) < 0.45
-		steer = -1.0
+		press = fmod(_t - 6.0, 1.0) < 0.12
+	elif _t > 13.0 and _t < 16.0:
+		press = fmod(_t - 13.0, 0.35) < 0.1
+	elif _t > 18.0 and _t < 18.7:
+		press = true
 	if it.slack and not press:
 		it.desbico_taps += 1
 	it.slack = press
-	it.steer = steer
-	if fmod(_t, 0.5) < delta:
-		print("PROBE t=%5.1f rumo=%6.1f lateral=%6.2f alt=%5.1f T=%5.2f linha=%5.1f" % [_t, heading(), lat - _x0, rig.body.x.y, rig.tension, rig.flying_length()])
+	if fmod(_t, 0.25) < delta and _t > 5.5:
+		print("PROBE t=%5.2f rumo=%6.1f lateral=%6.2f alt=%5.1f T=%5.2f linha=%5.1f %s" % [_t, rad_to_deg(rig.heading()), lat - _x0, rig.body.x.y, rig.tension, rig.flying_length(), "■" if press else ""])
 	if _t > 24.0:
 		get_tree().quit(0)
 

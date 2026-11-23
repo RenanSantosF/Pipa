@@ -42,10 +42,13 @@ var stroke_dir := Vector3.BACK
 var stroke: float = 0.0
 var grip: float = 1.0
 var reel_rate: float = 0.0
-## Giro do bico durante a folga do desbico (−1..1): o "punho" do pipeiro.
-var steer: float = 0.0
-## Torque máximo do giro (N·m) com vento de referência.
-const STEER_TORQUE := 0.06
+## Controle do rumo durante o desbico: leva o bico até steer_target (rad, em torno
+## da linha; + = direita vista do pipeiro). Representa o punho + folga da linha.
+var steer_active: bool = false
+var steer_target: float = 0.0
+const STEER_KP := 0.5
+const STEER_KD := 0.05
+const STEER_MAX := 0.35
 ## A mão voltando da braçada joga a linha no chão? (falso no desbico: a linha escorrega)
 var shorten_on_return: bool = true
 ## Pipa ainda segura na mão (antes do primeiro desbico).
@@ -81,6 +84,8 @@ var _stroke_prev: float = 0.0
 var _no_shorten: bool = false
 var _x_frame_start := Vector3.ZERO
 var _ray := PhysicsRayQueryParameters3D.new()
+var _shape_query := PhysicsShapeQueryParameters3D.new()
+var _sphere := SphereShape3D.new()
 
 
 func _ready() -> void:
@@ -88,6 +93,9 @@ func _ready() -> void:
 	top_level = true
 	global_transform = Transform3D.IDENTITY
 	_ray.collision_mask = 1
+	_sphere.radius = 0.3
+	_shape_query.shape = _sphere
+	_shape_query.collision_mask = 1
 	kite_visual = KiteVisual.new()
 	kite_visual.name = "KiteVisual"
 	add_child(kite_visual)
@@ -181,6 +189,23 @@ func bin_strength(b: int) -> float:
 	return 0.6 + 0.9 * r * r
 
 
+## Rumo do bico em torno da linha (rad): 0 = bico para cima, + = inclinado para a direita.
+func heading() -> float:
+	if body == null:
+		return 0.0
+	var d := (body.x - hand_position()).normalized()
+	var up := Vector3.UP - d * d.y
+	if up.length() < 0.01:
+		return 0.0
+	up = up.normalized()
+	var nose := body.q * Vector3.UP
+	nose = nose - d * nose.dot(d)
+	if nose.length() < 0.001:
+		return 0.0
+	nose = nose.normalized()
+	return atan2(up.cross(nose).dot(d), up.dot(nose))
+
+
 func hand_position() -> Vector3:
 	return hand_rest + stroke_dir * stroke
 
@@ -259,11 +284,12 @@ func _update_spool(dt: float) -> void:
 func predict(h: float) -> void:
 	if body != null:
 		body.compute_forces()
-		if absf(steer) > 0.01 and rope != null:
-			# Gira o bico em torno da linha (vista do jogador: + = para a direita).
+		if steer_active and rope != null:
 			var axis := (body.world_point(body.tow_local) - rope.hand_position).normalized()
-			var air := clampf(body.airspeed / 6.0, 0.35, 1.6)
-			body.add_torque(axis * (steer * STEER_TORQUE * air))
+			var err := wrapf(steer_target - heading(), -PI, PI)
+			var air := clampf(body.airspeed / 6.0, 0.4, 1.5)
+			var tq := clampf((STEER_KP * err - STEER_KD * body.w.dot(axis)) * air, -STEER_MAX, STEER_MAX)
+			body.add_torque(axis * tq)
 		body.predict(h)
 		tail.predict(h)
 	if rope != null:
@@ -327,6 +353,26 @@ func post_frame(dt: float, h: float) -> void:
 
 
 func _collide_world() -> void:
+	# Empurra a pipa (esfera do tamanho da vela) para fora de qualquer objeto.
+	var space := get_world_3d().direct_space_state
+	for _it in 3:
+		_shape_query.transform = Transform3D(Basis.IDENTITY, body.x)
+		var info := space.get_rest_info(_shape_query)
+		if info.is_empty():
+			break
+		var n: Vector3 = info["normal"]
+		var p: Vector3 = info["point"]
+		var depth := _sphere.radius - (body.x - p).dot(n)
+		if depth <= 0.0:
+			break
+		body.x += n * (depth + 0.01)
+		var vn := body.v.dot(n)
+		if vn < 0.0:
+			body.v -= n * vn * 1.2
+		body.v *= 0.7
+		if not body.resting:
+			EventBus.kite_crashed.emit(body.x)
+		body.resting = true
 	var motion := body.x - _x_frame_start
 	body.resting = body.x.y <= Ground.height_at(body.x.x, body.x.z) + 0.13
 	if motion.length_squared() < 1e-8:

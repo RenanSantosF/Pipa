@@ -64,7 +64,7 @@ func _process(delta: float) -> void:
 		f.pitch_scale = 0.85 + air * 0.25
 	for k in _flutters.keys():
 		if not is_instance_valid(k) or (k as KiteRig).body == null:
-			var p: Node = _flutters[k]
+			var p = _flutters[k]
 			if is_instance_valid(p):
 				p.queue_free()
 			_flutters.erase(k)

@@ -22,9 +22,10 @@ Também ficam disponíveis: o *artifact* `pipa-debug-apk` na execução do workf
 
 | Gesto | O que faz |
 |---|---|
-| **Tocar** à esquerda ou à direita da pipa | **desbico para aquele lado**: apertar afrouxa (o bico gira para o lado tocado), soltar dá o tranco (ela dispara para onde o bico aponta) |
-| **Segurar** o toque mais tempo | o bico gira mais → desbica mais para o lado (e corre um pouco de linha) |
-| Toques **rápidos e seguidos** | desbica mantendo a direção |
+| **Toque** em qualquer lugar | **desbico**: a pipa vira para o OUTRO lado e sai para lá com o tranco |
+| Toques **seguidos** (< 0,5 s) | continua desbicando para o MESMO lado (vai mais longe) |
+| Toque **mais longo** | vira mais (até ~100°) |
+| Perto do chão | o desbico é quase reto: serve para levantar a pipa |
 | Arrastar **para cima** (lado direito) | abrir a mão / **dar linha** |
 | Arrastar **para baixo** (lado direito) | braçada longa (a linha puxada vai para o chão) |
 | **Círculos** (lado direito) | enrolar na lata |

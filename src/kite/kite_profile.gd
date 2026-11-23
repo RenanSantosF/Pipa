@@ -7,8 +7,13 @@ extends Resource
 
 @export_group("Vela")
 ## Altura (nariz → ponta de baixo) e largura (m).
-@export var height: float = 0.62
-@export var width: float = 0.5
+@export var height: float = 0.66
+@export var width: float = 0.56
+## Alturas das duas varetas horizontais (fração da altura, a partir do centro).
+@export var upper_stick: float = 0.22
+@export var lower_stick: float = -0.14
+## Envergadura das varetas horizontais (m que as pontas vão para trás).
+@export var bow: float = 0.05
 ## Massa (kg): papel de seda + varetas de bambu.
 @export var mass: float = 0.032
 ## Ganho da força normal com fluxo colado / descolado (placa plana).
@@ -18,7 +23,7 @@ extends Resource
 @export var stall_end_deg: float = 30.0
 @export var cd0: float = 0.06
 ## Diedro (graus): a vela "embarrigada" que dá estabilidade lateral.
-@export var dihedral_deg: float = 6.0
+@export var dihedral_deg: float = 10.0
 ## Amortecimento aerodinâmico de rotação.
 @export var rotational_damping: float = 0.08
 

@@ -784,6 +784,20 @@ func _commit() -> void:
 	bot_point = Vector3(bp.x - 4.0, Ground.height_at(bp.x - 4.0, bp.z) + 0.2, bp.z)
 
 
+## Ponto na calçada da rua `ri` perto de z (lado +1/−1), no chão.
+func sidewalk_spot(ri: int, z: float, side: float) -> Vector3:
+	var pts: PackedVector3Array = roads[ri][0]
+	var best := 1
+	for i in range(1, pts.size() - 1):
+		if absf(pts[i].z - z) < absf(pts[best].z - z):
+			best = i
+	var t := pts[best + 1] - pts[best - 1]
+	t.y = 0.0
+	var n := t.normalized().cross(Vector3.UP).normalized() * side
+	var p: Vector3 = pts[best] + n * (float(roads[ri][1]) + float(roads[ri][2]) * 0.5)
+	return Vector3(p.x, Ground.height_at(p.x, p.z) + 0.2, p.z)
+
+
 func _surface_material(surface: String) -> Material:
 	if not SURFACES.has(surface):
 		return _opaque_material

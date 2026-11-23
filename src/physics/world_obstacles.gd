@@ -50,6 +50,18 @@ func _insert(e: Array, mn: Vector3, mx: Vector3) -> void:
 			_grid[key] = arr
 
 
+## Altura do topo do que houver em (x, z): laje/telhado (caixas) ou o chão.
+func top_at(x: float, z: float) -> float:
+	var y := Ground.height_at(x, z)
+	for idx in query(Vector3(x, 0, z)):
+		var e: Array = entries[idx]
+		if e[0] == Kind.BOX:
+			var box: AABB = e[1]
+			if x > box.position.x and x < box.end.x and z > box.position.z and z < box.end.z and box.size.y > 1.0:
+				y = maxf(y, box.end.y)
+	return y
+
+
 func query(p: Vector3) -> PackedInt32Array:
 	var key := Vector2i(floori(p.x / CELL), floori(p.z / CELL))
 	return _grid.get(key, PackedInt32Array())
@@ -161,6 +173,13 @@ func _segment_hit(a: Vector3, b: Vector3, idx: int) -> Array:
 				if hdir.length() < 0.001:
 					hdir = (b - a).cross(Vector3.UP)
 				return [res[0], ap + hdir.normalized() * (rad + 0.012), 0.45, 1000.0, e[4]]
+		Kind.BOX:
+			var box: AABB = e[1]
+			if box.size.y < 0.5:
+				return []
+			var hit := _segment_box(a, b, box.grow(0.02))
+			if not hit.is_empty():
+				return [hit[0], hit[1], 0.7, 1000.0, "telhado"]
 		Kind.WIRE:
 			var wa: Vector3 = e[1]
 			var wb: Vector3 = e[2]
@@ -210,6 +229,8 @@ func _update_pins(rope: Rope, dt: float) -> void:
 					release = float(res[2]) > float(e[3]) + 0.02
 				Kind.WIRE:
 					release = dev < 0.05
+				Kind.BOX:
+					release = _segment_box(prev_p, next_p, (e[1] as AABB).grow(-0.03)).is_empty() and dev < 0.6
 		if dev < 0.02 or maxf(t_hand, t_kite) > rope.pin_break[i]:
 			release = true
 		if release:
@@ -250,6 +271,41 @@ func kite_snag_test(x: Vector3) -> Array:
 				if float(res[2]) < 0.22:
 					return ["fio", x]
 	return []
+
+
+## Segmento × caixa (teste de lajes): [t de entrada, ponto na face] ou [].
+static func _segment_box(a: Vector3, b: Vector3, box: AABB) -> Array:
+	var d := b - a
+	var t0 := 0.0
+	var t1 := 1.0
+	var normal := Vector3.ZERO
+	for axis in 3:
+		var o := a[axis]
+		var dv := d[axis]
+		var mn := box.position[axis]
+		var mx := box.end[axis]
+		if absf(dv) < 1e-6:
+			if o < mn or o > mx:
+				return []
+			continue
+		var ta := (mn - o) / dv
+		var tb := (mx - o) / dv
+		var n := Vector3.ZERO
+		n[axis] = -1.0
+		if ta > tb:
+			var tmp := ta
+			ta = tb
+			tb = tmp
+			n[axis] = 1.0
+		if ta > t0:
+			t0 = ta
+			normal = n
+		t1 = minf(t1, tb)
+		if t0 > t1:
+			return []
+	if normal == Vector3.ZERO:
+		return []  # começa dentro (o empurrão por nó resolve)
+	return [t0, a + d * t0 + normal * 0.02]
 
 
 static func _push_out_of_box(box: AABB, p: Vector3) -> Vector3:

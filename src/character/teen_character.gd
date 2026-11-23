@@ -182,7 +182,7 @@ func _process(delta: float) -> void:
 		_ik.left_pole = gt.origin + shoulder_h - right * 0.6 - Vector3.UP * 0.5 + gt.basis.z * 0.3
 
 
-const ARM_WORDS := ["Arm", "Hand", "Index", "Middle", "Ring", "Little", "Thumb"]
+const ARM_WORDS := ["LowerArm", "Hand", "Index", "Middle", "Ring", "Little", "Thumb"]
 
 func _setup_first_person() -> void:
 	var arms := MeshInstance3D.new()
@@ -211,7 +211,7 @@ static func _arms_mesh(src: ArrayMesh, skin: Skin) -> ArrayMesh:
 		var n := String(skin.get_bind_name(i))
 		is_arm[i] = 0
 		for wd in ARM_WORDS:
-			if n.contains(wd) and not n.contains("Shoulder") and not n.contains("Upper"):
+			if n.contains(wd):
 				is_arm[i] = 1
 	for sidx in src.get_surface_count():
 		var arrays := src.surface_get_arrays(sidx)
@@ -237,7 +237,7 @@ static func _arms_mesh(src: ArrayMesh, skin: Skin) -> ArrayMesh:
 				idx[v] = v
 		var keep := PackedInt32Array()
 		for t in range(0, idx.size(), 3):
-			if arm_w[idx[t]] > 0.15 and arm_w[idx[t + 1]] > 0.15 and arm_w[idx[t + 2]] > 0.15:
+			if arm_w[idx[t]] > 0.5 and arm_w[idx[t + 1]] > 0.5 and arm_w[idx[t + 2]] > 0.5:
 				keep.append(idx[t])
 				keep.append(idx[t + 1])
 				keep.append(idx[t + 2])

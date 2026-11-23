@@ -45,21 +45,29 @@ func _build(body: KiteRigidBody, profile: KiteProfile) -> void:
 	_sail_pivot.name = "SailPivot"
 	add_child(_sail_pivot)
 	var c := body.corners
+	var bow := profile.bow
+	# Envergadura: as pontas das varetas horizontais vão para trás.
 	var top := c[0]
-	var right := c[1]
-	var bottom := c[2]
-	var left := c[3]
-	var center := (top + bottom) * 0.5 + Vector3(0, 0, -0.03)
-	var d := deg_to_rad(profile.dihedral_deg)
-	right.z = -sin(d) * profile.width * 0.5
-	left.z = right.z
-
+	var ur := c[1] + Vector3(0, 0, -bow)
+	var lr := c[2] + Vector3(0, 0, -bow * 0.8)
+	var bottom := c[3]
+	var ll := c[4] + Vector3(0, 0, -bow * 0.8)
+	var ul := c[5] + Vector3(0, 0, -bow)
+	var mu := Vector3(0, ur.y, 0.0)
+	var ml := Vector3(0, lr.y, 0.0)
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	_tri(st, center, top, right, profile.color_a)
-	_tri(st, center, right, bottom, profile.color_b)
-	_tri(st, center, bottom, left, profile.color_a)
-	_tri(st, center, left, top, profile.color_b)
+	var ca := profile.color_a
+	var cb := profile.color_b
+	# Faixas: topo, meio e base em cores alternadas (pipa clássica de duas cores).
+	_tri(st, top, ur, mu, ca)
+	_tri(st, top, mu, ul, cb)
+	_tri(st, mu, ur, lr, cb)
+	_tri(st, mu, lr, ml, cb)
+	_tri(st, mu, ml, ll, ca)
+	_tri(st, mu, ll, ul, ca)
+	_tri(st, ml, lr, bottom, ca)
+	_tri(st, ml, bottom, ll, cb)
 	var sail := MeshInstance3D.new()
 	sail.mesh = st.commit()
 	var mat := StandardMaterial3D.new()
@@ -67,33 +75,39 @@ func _build(body: KiteRigidBody, profile: KiteProfile) -> void:
 	mat.vertex_color_is_srgb = true
 	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	mat.roughness = 0.85
-	# Papel de seda: deixa passar um pouco de luz.
 	mat.backlight_enabled = true
 	mat.backlight = Color(0.35, 0.3, 0.25)
 	sail.material_override = mat
 	_sail_pivot.add_child(sail)
 
 	var stick_mat := StandardMaterial3D.new()
-	stick_mat.albedo_color = Color(0.45, 0.32, 0.18)
+	stick_mat.albedo_color = Color(0.5, 0.36, 0.2)
 	_stick(top, bottom, stick_mat)
-	_stick(left, right, stick_mat)
-
-	# Cabresto: do nó até dois pontos da vareta central.
+	# Varetas horizontais envergadas (duas metades cada).
+	_stick(ul, mu, stick_mat)
+	_stick(mu, ur, stick_mat)
+	_stick(ll, ml, stick_mat)
+	_stick(ml, lr, stick_mat)
+	# Linha do contorno (bainha).
 	var im := ImmediateMesh.new()
 	var bm := StandardMaterial3D.new()
 	bm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	bm.albedo_color = Color(0.95, 0.93, 0.86)
 	im.surface_begin(Mesh.PRIMITIVE_LINES, bm)
+	var outline := [top, ur, lr, bottom, ll, ul, top]
+	for i in outline.size() - 1:
+		im.surface_add_vertex(outline[i])
+		im.surface_add_vertex(outline[i + 1])
+	# Cabresto: do nó até a vareta vertical (em cima) e às duas pontas de baixo.
 	var tow := body.tow_local
-	im.surface_add_vertex(tow)
-	im.surface_add_vertex(top.lerp(bottom, 0.1))
-	im.surface_add_vertex(tow)
-	im.surface_add_vertex(top.lerp(bottom, 0.65))
+	for pnt in [top.lerp(bottom, 0.08), ll, lr]:
+		im.surface_add_vertex(tow)
+		im.surface_add_vertex(pnt)
 	im.surface_end()
-	var bridle := MeshInstance3D.new()
-	bridle.mesh = im
-	bridle.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(bridle)
+	var lines := MeshInstance3D.new()
+	lines.mesh = im
+	lines.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_sail_pivot.add_child(lines)
 
 
 func _tri(st: SurfaceTool, a: Vector3, b: Vector3, cc: Vector3, color: Color) -> void:

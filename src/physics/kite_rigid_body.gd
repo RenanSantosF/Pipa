@@ -25,8 +25,8 @@ var v := Vector3.ZERO
 var q := Quaternion.IDENTITY
 var w := Vector3.ZERO           ## velocidade angular (mundo)
 
-## Pontos locais.
-var corners: PackedVector3Array = PackedVector3Array()  # nariz, direita, baixo, esquerda
+## Pontos locais (contorno sextavado: nariz, sup. dir., inf. dir., baixo, inf. esq., sup. esq.).
+var corners: PackedVector3Array = PackedVector3Array()
 var tow_local := Vector3.ZERO
 var tail_local := Vector3.ZERO
 
@@ -54,20 +54,44 @@ func _init(p: KiteProfile) -> void:
 	var wd := p.width
 	inertia = Vector3(mass * h * h / 24.0 + 0.0002, mass * wd * wd / 24.0 + 0.0002, mass * (h * h + wd * wd) / 24.0 + 0.0003)
 	inv_inertia = Vector3(1.0 / inertia.x, 1.0 / inertia.y, 1.0 / inertia.z)
-	var yc := -0.08 * h  # centroide do losango
-	corners = PackedVector3Array([
-		Vector3(0, 0.38 * h - yc, 0), Vector3(wd * 0.5, -yc, 0),
-		Vector3(0, -0.62 * h - yc, 0), Vector3(-wd * 0.5, -yc, 0)])
+	# Pipa de 3 varetas: 1 vertical + 2 horizontais envergadas → vela sextavada.
+	var raw := [
+		Vector2(0, 0.5 * h), Vector2(wd * 0.5, p.upper_stick * h), Vector2(wd * 0.44, p.lower_stick * h),
+		Vector2(0, -0.5 * h), Vector2(-wd * 0.44, p.lower_stick * h), Vector2(-wd * 0.5, p.upper_stick * h)]
+	var cen := _poly_centroid(raw)
+	corners = PackedVector3Array()
+	for v in raw:
+		corners.append(Vector3(v.x - cen.x, v.y - cen.y, 0.0))
 	tow_local = Vector3(0, corners[0].y - p.tow_fraction * h, p.bridle_length)
-	tail_local = corners[2]
+	tail_local = corners[3]
 	var d := deg_to_rad(p.dihedral_deg)
 	for side in [-1.0, 1.0]:
-		var idx := [0, 3, 2] if side < 0.0 else [0, 1, 2]
-		var pts := PackedVector3Array([corners[idx[0]], corners[idx[1]], corners[idx[2]]])
+		var idx := [0, 5, 4, 3] if side < 0.0 else [0, 1, 2, 3]
+		var pts := PackedVector3Array()
+		for k in idx:
+			pts.append(corners[k])
 		_half_pts.append(pts)
-		_half_center.append((pts[0] + pts[1] + pts[2]) / 3.0)
+		var area := 0.0
+		var c := Vector3.ZERO
+		for k in range(1, pts.size() - 1):
+			var ta := 0.5 * (pts[k] - pts[0]).cross(pts[k + 1] - pts[0]).length()
+			area += ta
+			c += (pts[0] + pts[k] + pts[k + 1]) / 3.0 * ta
+		_half_center.append(c / maxf(area, 1e-6))
 		_half_normal.append(Vector3(side * sin(d), 0.0, cos(d)))
-		_half_area.append(0.5 * (pts[1] - pts[0]).cross(pts[2] - pts[0]).length())
+		_half_area.append(area)
+
+
+static func _poly_centroid(pts: Array) -> Vector2:
+	var a := 0.0
+	var c := Vector2.ZERO
+	for i in pts.size():
+		var p0: Vector2 = pts[i]
+		var p1: Vector2 = pts[(i + 1) % pts.size()]
+		var cr := p0.cross(p1)
+		a += cr
+		c += (p0 + p1) * cr
+	return c / (3.0 * a) if absf(a) > 1e-6 else Vector2.ZERO
 
 
 func basis() -> Basis:
@@ -130,11 +154,13 @@ func compute_forces() -> void:
 		if fl > 0.001:
 			var fdir := flow / fl
 			var pts: PackedVector3Array = _half_pts[i]
-			var p0 := (q * pts[0]).dot(fdir)
-			var p1 := (q * pts[1]).dot(fdir)
-			var p2 := (q * pts[2]).dot(fdir)
-			var lead := minf(p0, minf(p1, p2))
-			var chord := maxf(p0, maxf(p1, p2)) - lead
+			var lead := INF
+			var far := -INF
+			for pt in pts:
+				var pr := (q * pt).dot(fdir)
+				lead = minf(lead, pr)
+				far = maxf(far, pr)
+			var chord := far - lead
 			cop = cw + fdir * ((lead - cw.dot(fdir)) + chord * (0.25 + 0.25 * sin(absf(al))))
 		var area: float = _half_area[i]
 		var f := -n * (qd * area * cn) + vd * (qd * area * profile.cd0)

@@ -23,12 +23,61 @@ const LINE_TYPES := [
 @onready var audio: AudioDirector = $AudioDirector
 
 var _line_index: int = 2
+var bots: Array[BotFlyer] = []
+
+const BOT_LINES := ["rapinha", "cerol", "cerol_fino", "chilena"]
+const BOT_COLORS := [
+	[Color(0.15, 0.4, 0.85), Color(0.95, 0.95, 0.92)], [Color(0.1, 0.6, 0.3), Color(0.98, 0.85, 0.1)],
+	[Color(0.85, 0.2, 0.55), Color(0.2, 0.2, 0.25)], [Color(0.95, 0.5, 0.1), Color(0.3, 0.7, 0.95)],
+]
+
+
+func _bot_spots(street: StreetBuilder, center: Vector3, n: int) -> Array:
+	var back := -Wind.get_direction()
+	var out := []
+	var angles := [-70.0, 35.0, -25.0, 75.0]
+	var radii := [22.0, 18.0, 30.0, 26.0]
+	for i in n:
+		var d := back.rotated(Vector3.UP, deg_to_rad(angles[i % angles.size()]))
+		var p: Vector3 = center + d * float(radii[i % radii.size()])
+		p.y = street.obstacles.top_at(p.x, p.z) + 0.05
+		out.append(p)
+	return out
+
+
+func _spawn_bot(pos: Vector3, i: int) -> void:
+	var r := KiteRig.new()
+	r.name = "BotRig%d" % (i + 2)
+	var prof: KiteProfile = (load("res://src/kite/profiles/pipa_classica.tres") as KiteProfile).duplicate()
+	prof.color_a = BOT_COLORS[i % BOT_COLORS.size()][0]
+	prof.color_b = BOT_COLORS[i % BOT_COLORS.size()][1]
+	r.profile = prof
+	r.line_type = load("res://src/physics/lines/%s.tres" % BOT_LINES[randi() % BOT_LINES.size()])
+	r.display_name = "Vizinho %d" % (i + 2)
+	add_child(r)
+	physics_world.register(r)
+	var b := BotFlyer.new()
+	b.name = "Bot%d" % (i + 2)
+	var ch := TeenCharacter.new()
+	ch.name = "Character"
+	b.add_child(ch)
+	add_child(b)
+	b.global_position = pos
+	b.rig = r
+	b.target = player_rig
+	b.world = physics_world
+	b.aggression = randf_range(0.6, 1.0)
+	b.skill = randf_range(0.4, 0.9)
+	bots.append(b)
 
 
 func _ready() -> void:
 	var street: StreetBuilder = $World/StreetBuilder
 	player.global_position = street.spawn_point
-	bot.global_position = street.bot_point
+	var z0 := street.spawn_point.z
+	# Vizinhos em leque contra o vento, dos dois lados, em cima das lajes quando houver.
+	var spots := _bot_spots(street, street.spawn_point, 4)
+	bot.global_position = spots[0]
 	input_router.set_gesture_controls(gestures)
 	input_router.line_cycle_requested.connect(_cycle_line)
 	input_router.sound_toggle_requested.connect(_toggle_sound)
@@ -41,6 +90,10 @@ func _ready() -> void:
 	bot.rig = bot_rig
 	bot.target = player_rig
 	bot.world = physics_world
+	bots.append(bot)
+	# Mais vizinhos, um em cada canto do bairro.
+	for i in range(1, spots.size()):
+		_spawn_bot(spots[i], i - 1)
 	hud.setup(player_rig, physics_world)
 	audio.world = physics_world
 	audio.player_rig = player_rig
@@ -54,11 +107,14 @@ func _ready() -> void:
 		add_child(probe)
 		probe.call("start", self)
 		return
+	if args.has("--botprobe"):
+		reset_kite()
+		_attach("res://src/main/bot_probe.gd")
+		return
 	if args.has("--autotest"):
 		_attach("res://src/main/autotest.gd")
 		return
 	reset_kite()
-	bot.launch()
 	if args.has("--screenshots"):
 		_attach("res://src/main/screenshot_tour.gd")
 

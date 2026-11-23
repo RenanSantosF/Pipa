@@ -42,6 +42,9 @@ class Contact:
 
 
 var contacts: Array[Contact] = []
+## Posições do quadro anterior (para pegar linhas que se atravessam entre quadros).
+var _prev_pts: Dictionary = {}
+const CROSS_RADIUS := 2.0
 ## Pedidos de corte do último tick: [rig, s_material].
 var cut_requests: Array = []
 
@@ -68,6 +71,13 @@ func detect(rigs: Array[KiteRig]) -> void:
 			if not rb.is_flying():
 				continue
 			_detect_pair(ra, rb)
+	_prev_pts.clear()
+	for r in rigs:
+		if r.is_flying():
+			var sv := r.rope.mat_s.duplicate()
+			if r.rope.end_body != null:
+				sv.append(0.0)
+			_prev_pts[r] = [_rope_points(r.rope), sv]
 
 
 func _rope_points(r: Rope) -> PackedVector3Array:
@@ -82,14 +92,16 @@ func _detect_pair(ra: KiteRig, rb: KiteRig) -> void:
 	var pb := _rope_points(rb.rope)
 	var box_a := _aabb(pa, 0, pa.size() - 1)
 	var box_b := _aabb(pb, 0, pb.size() - 1)
-	if not box_a.grow(DETECT_RADIUS).intersects(box_b):
+	if not box_a.grow(CROSS_RADIUS).intersects(box_b):
 		return
+	var prev_a: Array = _prev_pts.get(ra, [])
+	var prev_b: Array = _prev_pts.get(rb, [])
 	var na := pa.size() - 1
 	var nb := pb.size() - 1
 	var ga := 0
 	while ga < na:
 		var ga_end := mini(ga + GROUP, na)
-		var gbox_a := _aabb(pa, ga, ga_end).grow(DETECT_RADIUS)
+		var gbox_a := _aabb(pa, ga, ga_end).grow(CROSS_RADIUS)
 		if gbox_a.intersects(box_b):
 			var gb := 0
 			while gb < nb:
@@ -97,18 +109,28 @@ func _detect_pair(ra: KiteRig, rb: KiteRig) -> void:
 				if gbox_a.intersects(_aabb(pb, gb, gb_end)):
 					for ia in range(ga, ga_end):
 						for ib in range(gb, gb_end):
-							_test_segments(ra, rb, pa, pb, ia, ib)
+							_test_segments(ra, rb, pa, pb, ia, ib, prev_a, prev_b)
 				gb = gb_end
 		ga = ga_end
 
 
-func _test_segments(ra: KiteRig, rb: KiteRig, pa: PackedVector3Array, pb: PackedVector3Array, ia: int, ib: int) -> void:
+func _test_segments(ra: KiteRig, rb: KiteRig, pa: PackedVector3Array, pb: PackedVector3Array, ia: int, ib: int,
+		prev_a: Array, prev_b: Array) -> void:
 	var res := closest_segments(pa[ia], pa[ia + 1], pb[ib], pb[ib + 1])
 	var dist: float = res[2]
-	if dist > DETECT_RADIUS:
-		return
 	var ta: float = res[0]
 	var tb: float = res[1]
+	var crossed_normal := Vector3.ZERO
+	if dist > DETECT_RADIUS:
+		# Atravessou entre quadros? (o lado de uma linha em relação à outra trocou)
+		if dist > CROSS_RADIUS or prev_a.is_empty() or prev_b.is_empty() or ta <= 0.0 or ta >= 1.0 or tb <= 0.0 or tb >= 1.0:
+			return
+		var now_d := pb[ib].lerp(pb[ib + 1], tb) - pa[ia].lerp(pa[ia + 1], ta)
+		# Mesmo ponto do MATERIAL no quadro anterior (funciona mesmo dando linha).
+		var old_d := _point_at_s(prev_b, rb.rope.material_at(ib, tb)) - _point_at_s(prev_a, ra.rope.material_at(ia, ta))
+		if old_d.dot(now_d) >= 0.0 or old_d.length() > CROSS_RADIUS:
+			return
+		crossed_normal = old_d.normalized()
 	var sa := ra.rope.material_at(ia, ta)
 	var sb := rb.rope.material_at(ib, tb)
 	for ex in contacts:
@@ -124,7 +146,9 @@ func _test_segments(ra: KiteRig, rb: KiteRig, pa: PackedVector3Array, pb: Packed
 	var p_a := pa[ia].lerp(pa[ia + 1], ta)
 	var p_b := pb[ib].lerp(pb[ib + 1], tb)
 	var d := p_b - p_a
-	if d.length() > 0.00001:
+	if crossed_normal != Vector3.ZERO:
+		c.normal = crossed_normal  # volta cada linha para o lado de onde veio
+	elif d.length() > 0.00001:
 		c.normal = d.normalized()
 	else:
 		c.normal = (pa[ia + 1] - pa[ia]).cross(pb[ib + 1] - pb[ib]).normalized()
@@ -132,6 +156,22 @@ func _test_segments(ra: KiteRig, rb: KiteRig, pa: PackedVector3Array, pb: Packed
 	c.sb_prev = sb
 	c.position = (p_a + p_b) * 0.5
 	contacts.append(c)
+
+
+## Posição de um ponto do material da linha (s) nas posições guardadas [pontos, s].
+static func _point_at_s(stored: Array, s: float) -> Vector3:
+	var pts: PackedVector3Array = stored[0]
+	var sv: PackedFloat32Array = stored[1]
+	var n := mini(pts.size(), sv.size())
+	if n == 0:
+		return Vector3.ZERO
+	if s >= sv[0]:
+		return pts[0]
+	for i in n - 1:
+		if sv[i] >= s and sv[i + 1] <= s:
+			var t := (sv[i] - s) / maxf(sv[i] - sv[i + 1], 0.0001)
+			return pts[i].lerp(pts[i + 1], t)
+	return pts[n - 1]
 
 
 static func _aabb(pts: PackedVector3Array, from: int, to: int) -> AABB:
