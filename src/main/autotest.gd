@@ -94,9 +94,17 @@ func _phase_flight(_delta: float) -> void:
 		_alt_sum += b.x.y
 		_alt_n += 1
 	if fmod(_t, 2.0) < 1.0 / 60.0:
-		print("AUTOTEST voo t=%5.1f alt=%6.2f ar=%5.2f aoa=%5.1f T=%5.2f linha=%5.1f presa=%s enrosc=%s física=%.2fms" % [
-			_t, b.x.y, b.airspeed, rad_to_deg(b.angle_of_attack), rig.tension, rig.flying_length(), str(rig.held), str(rig.snagged),
+		print("AUTOTEST voo t=%5.1f alt=%6.2f ar=%5.2f aoa=%5.1f T=%5.2f linha=%5.1f presa=%s enrosc=%s contatos=%d física=%.2fms" % [
+			_t, b.x.y, b.airspeed, rad_to_deg(b.angle_of_attack), rig.tension, rig.flying_length(), str(rig.held), str(rig.snagged), rig.rope.contact_count(),
 			main.physics_world.frame_ms])
+	if fmod(_t, 4.0) < 1.0 / 60.0 and rig.rope.contact_count() > 0:
+		var obs: WorldObstacles = main.physics_world.obstacles
+		var names := []
+		for i in rig.rope.pos.size():
+			var oi := rig.rope.pin_obstacle[i]
+			if oi >= 0:
+				names.append("%s%s@%.1f" % [obs.entry_name(oi), "*" if rig.rope.pinned[i] == 1 else "", rig.rope.pos[i].y])
+		print("AUTOTEST   contatos: ", names, " T_seg=", rig.rope.seg_tension)
 	if _t >= 34.0:
 		var mean_alt := _alt_sum / maxf(float(_alt_n), 1.0)
 		print("AUTOTEST voo: subiu da mão até %.1f m de altura média, linha %.1f m, tensão máx %.1f N" % [mean_alt, rig.flying_length(), _max_tension])

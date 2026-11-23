@@ -51,11 +51,21 @@ O desbico é uma **sequência de entradas físicas** que a mão realmente produz
 
 | Fase (s)        | Mão / linha                         | Efeito físico na pipa |
 |-----------------|-------------------------------------|-----------------------|
-| 0 – 0,07 folga  | mão avança 20–25 cm → tensão cai    | cabresto deixa de segurar o ângulo: o bico "cai" (ângulo de ataque diminui) |
-| 0 – 0,25 lado   | puxão lateral carrega UMA perna do cabresto | ponto de tração desloca para o lado → torque T·sen(b)·Δx em torno da normal: o bico gira para esse lado |
-| 0 – 0,25 vela   | a vareta envergada daquele lado flexiona | meia-vela do lado fecha (diedro ↑), a outra abre: o **centro de sustentação** desloca lateralmente e surge força lateral |
-| 0,07 – 0,20 tranco | mão puxa 45 cm rápido → pico de tensão | ângulo de ataque sobe, a sustentação (que agora aponta para o lado do bico) acelera a pipa: a "braçada" |
-| 0,20 – 0,55 retorno | tudo volta ao neutro            | diedro (envergadura) + rabiola restauram o rumo: a pipa **oscila de volta** à trajetória |
+| 0 – 0,07 folga  | mão avança 22 cm → tensão cai       | cabresto deixa de segurar o ângulo: o bico "cai" (ponto de tração vai para o nariz, α diminui) |
+| 0 – 0,40 lado   | puxão lateral carrega UMA perna do cabresto | ponto de tração desloca para o lado (25% da largura) → torque T·sen(b)·Δx: o bico gira para esse lado |
+| 0 – 0,40 vela   | a vareta do OUTRO lado flexiona     | aquela meia-vela fecha (diedro ↑), a do lado puxado firma: o **centro de sustentação** desloca e a pipa guina para o lado |
+| 0,07 – 0,20 tranco | mão puxa 42 cm rápido → pico de tensão | ponto de tração vai para a cauda, α sobe: a sustentação (inclinada para o lado do bico) acelera a pipa |
+| 0,20 – 0,55 retorno | mão devolve 14 cm de linha e volta ao neutro | sem tração a pipa perde impulso; rabiola (pêndulo) + diedro trazem o bico de volta: **oscila e retoma a trajetória** |
+
+Medido na sonda (`-- --desbicoprobe`, linha de 25 m, vento 6,5 m/s, pipa M):
+
+| Envergadura | Diedro | Desbico simples (pico lateral / rumo) | Volta |
+|---|---|---|---|
+| pouca | 5,7° | ~5–6 m / ~55–65° (braçada longa) | lenta, pipa arisca |
+| média | 10,6° | ~3–4,5 m / ~40–50° | ~1,5–2 s |
+| muita | 16° | ~1,5–2,8 m / ~20–33° (fina) | rápida |
+
+Zênite: lançada a 86° a pipa perde sustentação (0,4 N), afrouxa e volta sozinha a ~50° em ~3 s.
 
 * **Toque à esquerda** (metade esquerda da tela / botão esquerdo / A) → desbico para a esquerda.
 * **Toque à direita** (metade direita / botão direito / D) → desbico para a direita.

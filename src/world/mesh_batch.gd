@@ -86,6 +86,49 @@ func add_cylinder(xf: Transform3D, radius: float, height: float, segments: int, 
 		add_triangle(top, p3, p2, (xf.basis * Vector3.UP).normalized(), color, uv)
 
 
+## Tronco de cone de a até b (raios r0 → r1), normais suaves, sem tampas.
+## Usado em troncos e galhos (afunilam da base para a ponta).
+func add_frustum(a: Vector3, b: Vector3, r0: float, r1: float, segments: int, color: Color, color_top: Color = Color(0, 0, 0, 0)) -> void:
+	var axis := b - a
+	var l := axis.length()
+	if l < 1e-5:
+		return
+	var ct := color if color_top.a == 0.0 else color_top
+	var y := axis / l
+	var ref := Vector3.UP if absf(y.y) < 0.95 else Vector3.RIGHT
+	var x := y.cross(ref).normalized()
+	var z := x.cross(y)
+	var slope := (r0 - r1) / l
+	for i in segments:
+		var a0 := TAU * float(i) / float(segments)
+		var a1 := TAU * float(i + 1) / float(segments)
+		var d0 := x * cos(a0) + z * sin(a0)
+		var d1 := x * cos(a1) + z * sin(a1)
+		var n0 := (d0 + y * slope).normalized()
+		var n1 := (d1 + y * slope).normalized()
+		var p0 := a + d0 * r0
+		var p1 := a + d1 * r0
+		var p2 := b + d1 * r1
+		var p3 := b + d0 * r1
+		_smooth_quad([p0, p1, p2, p3], [n0, n1, n1, n0], [color, color, ct, ct], (d0 + d1).normalized())
+
+
+func _smooth_quad(p: Array, n: Array, c: Array, out: Vector3) -> void:
+	for tri in [[0, 1, 2], [0, 2, 3]]:
+		var ia: int = tri[0]
+		var ib: int = tri[1]
+		var ic: int = tri[2]
+		var pa: Vector3 = p[ia]
+		var pb: Vector3 = p[ib]
+		var pc: Vector3 = p[ic]
+		if (pb - pa).cross(pc - pa).dot(out) > 0.0:
+			var t := ib
+			ib = ic
+			ic = t
+		for k in [ia, ib, ic]:
+			_vertex(p[k], n[k], c[k], Vector2.ZERO)
+
+
 ## Esfera de baixa resolução com normais suaves (copas de árvore, arbustos).
 func add_sphere(center: Vector3, radius: Vector3, segments: int, rings: int, color: Color, uv: Vector2 = Vector2.ZERO) -> void:
 	for r in rings:

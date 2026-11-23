@@ -8,6 +8,9 @@ uniform sampler2D leaves : source_color, filter_linear_mipmap, repeat_disable;
 uniform vec3 wind_direction = vec3(0.0, 0.0, -1.0);
 uniform float wind_strength = 0.25;
 uniform float gust = 1.0;
+// Ipê florido: mistura a folhagem com a cor da flor (pela luminância da folha).
+uniform vec3 flower_color : source_color = vec3(1.0);
+uniform float flower_mix = 0.0;
 
 void vertex() {
 	float w = UV2.x;
@@ -25,7 +28,9 @@ void fragment() {
 	if (tex.a < 0.45) {
 		discard;
 	}
-	ALBEDO = tex.rgb * pow(COLOR.rgb, vec3(2.2));
+	vec3 leaf = tex.rgb * pow(COLOR.rgb, vec3(2.2));
+	float lum = dot(tex.rgb, vec3(0.3, 0.59, 0.11));
+	ALBEDO = mix(leaf, flower_color * (0.45 + 1.1 * lum) * pow(COLOR.rgb, vec3(1.2)), flower_mix);
 	ROUGHNESS = 0.75;
 	SPECULAR = 0.25;
 	BACKLIGHT = vec3(0.35, 0.4, 0.15);

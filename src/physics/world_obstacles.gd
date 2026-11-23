@@ -47,6 +47,8 @@ var entries: Array = []
 var _grid: Dictionary = {}
 ## Nome do último enrosco (para avisos/HUD).
 var last_snag: String = ""
+## A pipa consultada por último em kite_contact está dentro de uma copa?
+var kite_in_canopy: bool = false
 
 
 func add_canopy(center: Vector3, radius: float) -> void:
@@ -520,6 +522,7 @@ func _capstan(rope: Rope, i: int, dev: float, t_hand: float, t_kite: float, mu: 
 ##  - o fio/galho passou entre o cabresto e a vela (o cabresto enganchou);
 ##  - entrou fundo na copa, devagar (presa na folhagem).
 func kite_contact(body: KiteRigidBody, knot: Vector3, anchors: PackedVector3Array, dt: float) -> Array:
+	kite_in_canopy = false
 	var x := body.x
 	var rad := body.profile.height * 0.45
 	for idx in query(x):
@@ -530,6 +533,7 @@ func kite_contact(body: KiteRigidBody, knot: Vector3, anchors: PackedVector3Arra
 				var r: float = e[2]
 				var depth := r - x.distance_to(c)
 				if depth > 0.0:
+					kite_in_canopy = true
 					# Folhagem freia a pipa; fundo e devagar = presa.
 					body.v *= exp(-4.0 * dt)
 					body.w *= exp(-3.0 * dt)

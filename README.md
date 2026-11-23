@@ -22,25 +22,28 @@ Também ficam disponíveis: o *artifact* `pipa-debug-apk` na execução do workf
 
 | Gesto | O que faz |
 |---|---|
-| **Toque** em qualquer lugar | **desbico**: a pipa vira para o OUTRO lado e sai para lá com o tranco |
-| Toques **seguidos** (< 0,5 s) | continua desbicando para o MESMO lado (vai mais longe) |
-| Toque **mais longo** | vira mais (até ~100°) |
-| Perto do chão | o desbico é quase reto: serve para levantar a pipa |
+| **Toque na metade esquerda** | **desbico para a esquerda**: braçada rápida e a pipa volta sozinha |
+| **Toque na metade direita** | **desbico para a direita** |
+| **Dois toques rápidos** | **desbicada dupla**: lado do 1º toque → lado oposto |
+| Toques seguidos para o mesmo lado | cada um empurra antes do retorno: a pipa vai mais longe |
+| Perto do chão | o desbico sai quase reto: serve para levantar a pipa |
 | Arrastar **para cima** (lado direito) | abrir a mão / **dar linha** |
 | Arrastar **para baixo** (lado direito) | braçada longa (a linha puxada vai para o chão) |
 | **Círculos** (lado direito) | enrolar na lata |
 | Arrastar na faixa de cima | olhar em volta (a câmera volta para a pipa como mola) |
 | Joystick (canto inferior esquerdo) | andar |
-| Ícones no canto | nova pipa · trocar linha · som |
+| Ícones no canto | nova pipa · trocar linha · som · **tamanho P/M/G** · **envergadura** |
 
 A pipa **começa na mão**: vá desbicando e dando linha para levantar.
-A linha **enrosca** de verdade: quando passa por árvore, poste ou fio, ela dobra naquele ponto e só desliza com atrito (desbicar fica difícil). Solta quando você tira a pipa de trás do obstáculo, ou recolhendo/dando tranco até o galho quebrar. A rabiola também engancha.
+**Envergadura** (quanto a travessa é arqueada) muda tudo: muita envergadura = pipa estável, desbico **fino e curto**; pouca = desbico **longo**, pipa arisca.
 
-PC (testes): Espaço = desbico · E = dar linha · F = braçada · Q = enrolar · R = nova pipa · T = trocar linha.
+**Encostar não é enroscar**: a linha que encosta em fio, telhado, poste ou galho **desliza** com atrito (barrida). Ela só **enrosca** quando dá volta, cai por cima de um galho ou aperta forte contra a casca. Solta quando endireita, ou com tranco até o galho quebrar. No fio ela nunca trava: fica pendurada e escorrega ao longo dele. A pipa só prende se o fio/galho entrar no cabresto (ou se cair fundo na copa).
+
+PC (testes): clique esquerdo/← = desbico esquerda · clique direito/→ = desbico direita · Espaço = dupla · Tab = olhar com o mouse · E = dar linha · F = braçada · Q = enrolar · R = nova pipa · T = trocar linha · Y = tamanho · U = envergadura.
 
 ## Como é a física (resumo)
 
-- A pipa é um **corpo rígido** com aerodinâmica de placa plana: **embica** (mergulha para onde o bico aponta com a linha esticada), **desbica** (dando linha, a rabiola endireita a pipa), anda para onde aponta e sobe com braçadas.
+- A pipa é um **corpo rígido** com aerodinâmica de asa de baixo alongamento (sustentação e arrasto explícitos, estol tardio); cada meia-vela tem o diedro da envergadura. O **desbico** não gira a pipa: a mão afrouxa, carrega uma perna do cabresto e dá o tranco — a tensão da linha e a sustentação deslocada fazem a pipa disparar para o lado, e a rabiola (pêndulo) traz o bico de volta. Detalhes em `docs/REVISAO_V5.md`.
 - A **linha** é simulada nó a nó: faz **barriga** com o vento, estica, afrouxa, ondula com a braçada.
 - **Combate**: quando as linhas cruzam, o cerol desgasta a outra linha. Quem **dá linha** ou **puxa rápido** espalha o próprio desgaste; quem fica parado é cortado. Chilena > cerol fino > cerol > rapinha >> pura. Uma linha que chega na outra pipa **laça no cabresto**.
 - Sons em 3D: papel da pipa, linha "cantando" (tom sobe com a tensão), chiado do cerol relando, estalo do corte, catraca da lata.

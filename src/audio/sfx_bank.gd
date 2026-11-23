@@ -9,6 +9,10 @@ var wind: AudioStreamWAV
 var flutter: AudioStreamWAV
 var grind: AudioStreamWAV
 var snap: AudioStreamWAV
+## Pipa batendo: no chão (papel + bambu, baque surdo), na telha (estalo), na folhagem.
+var impact_ground: AudioStreamWAV
+var impact_roof: AudioStreamWAV
+var impact_leaves: AudioStreamWAV
 
 var _rng := RandomNumberGenerator.new()
 
@@ -19,6 +23,9 @@ func _ready() -> void:
 	flutter = _make(_gen_flutter(2.0), true)
 	grind = _make(_gen_grind(1.5), true)
 	snap = _make(_gen_snap(0.35), false)
+	impact_ground = _make(_gen_impact(0.35, 95.0, 620.0, 1.0, 0.0), false)
+	impact_roof = _make(_gen_impact(0.4, 160.0, 1150.0, 0.7, 0.5), false)
+	impact_leaves = _make(_gen_rustle(0.45), false)
 
 
 func _make(samples: PackedFloat32Array, loop: bool) -> AudioStreamWAV:
@@ -142,4 +149,42 @@ func _gen_snap(secs: float) -> PackedFloat32Array:
 		var click := exp(-t / 0.004)
 		var tail := exp(-t / 0.08)
 		out[i] = (_white() * (click + 0.35 * tail) + sin(TAU * 1800.0 * t) * click * 0.5) * 0.9
+	return out
+
+
+## Pipa batendo: baque grave (corpo), toque seco da vareta de bambu, papel de seda
+## amassando (ruído agudo curto) e, na telha, um chocalho curto.
+func _gen_impact(secs: float, body_hz: float, knock_hz: float, paper: float, rattle: float) -> PackedFloat32Array:
+	var n := int(secs * RATE)
+	var out := PackedFloat32Array()
+	out.resize(n)
+	var prev := 0.0
+	var peak := 0.001
+	for i in n:
+		var t := float(i) / RATE
+		var thump := sin(TAU * body_hz * t * (1.0 - 0.35 * t / secs)) * exp(-t / 0.045)
+		var knock := sin(TAU * knock_hz * t) * exp(-t / 0.01) * 0.55
+		var w := _white()
+		var hp := w - prev   # ruído "agudo" (papel)
+		prev = w
+		var crack := hp * exp(-t / 0.028) * paper * (0.6 + 0.4 * sin(TAU * 37.0 * t))
+		var rat := w * exp(-t / 0.11) * rattle * absf(sin(TAU * 23.0 * t))
+		out[i] = thump * 0.9 + knock + crack * 0.5 + rat * 0.35
+		peak = maxf(peak, absf(out[i]))
+	for i in n:
+		out[i] = out[i] / peak * 0.85
+	return out
+
+
+## Folhagem: farfalhar (ruído filtrado com rajadas curtas).
+func _gen_rustle(secs: float) -> PackedFloat32Array:
+	var n := int(secs * RATE)
+	var out := PackedFloat32Array()
+	out.resize(n)
+	var lp := 0.0
+	for i in n:
+		var t := float(i) / RATE
+		lp += (_white() - lp) * 0.35
+		var bursts := 0.5 + 0.5 * absf(sin(TAU * 17.0 * t + sin(TAU * 5.0 * t)))
+		out[i] = lp * bursts * exp(-t / 0.16) * 0.9
 	return out

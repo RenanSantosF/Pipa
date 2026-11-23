@@ -30,6 +30,7 @@ func _ready() -> void:
 		_grinds.append(g)
 	EventBus.line_cut.connect(_on_line_cut)
 	EventBus.line_snapped.connect(_on_snapped)
+	EventBus.kite_crashed.connect(_on_kite_impact)
 
 
 func _player2d(stream: AudioStream, db: float) -> AudioStreamPlayer:
@@ -117,6 +118,33 @@ func _on_line_cut(winner: Node, loser: Node) -> void:
 		_snap_at(lr.rope.end_point())
 	if player_rig and (winner == player_rig or loser == player_rig):
 		_vibrate(180, 1.0)
+
+
+## Pipa batendo no chão/telha/folhas: 3D (alto perto, some longe), intensidade
+## pela velocidade do impacto.
+func _on_kite_impact(pos: Vector3, speed: float, surface: String) -> void:
+	if not GameConfig.sound_enabled:
+		return
+	var p := AudioStreamPlayer3D.new()
+	match surface:
+		"telhado":
+			p.stream = Sfx.impact_roof
+		"folhas":
+			p.stream = Sfx.impact_leaves
+		_:
+			p.stream = Sfx.impact_ground
+	var k := clampf(speed / 8.0, 0.0, 1.0)
+	p.volume_db = lerpf(-16.0, 2.0, k)
+	p.pitch_scale = randf_range(0.9, 1.12) * lerpf(1.1, 0.92, k)
+	p.unit_size = 3.0
+	p.max_distance = 90.0
+	p.attenuation_model = AudioStreamPlayer3D.ATTENUATION_INVERSE_DISTANCE
+	add_child(p)
+	p.global_position = pos
+	p.play()
+	p.finished.connect(p.queue_free)
+	if player_rig and player_rig.body and player_rig.body.x.distance_to(pos) < 1.0 and k > 0.3:
+		_vibrate(40, 0.4 * k)
 
 
 func _on_snapped(pos: Vector3) -> void:

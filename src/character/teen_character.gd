@@ -13,7 +13,7 @@ const ANIM_PATHS := {
 	&"walk": "res://assets/animations/mixamo/Walking.fbx",
 	&"back": "res://assets/animations/mixamo/Run Backward.fbx",
 }
-const TARGET_HEIGHT := 1.64
+const TARGET_HEIGHT := 1.70
 const HIPS_TRACK := "%GeneralSkeleton:Hips"
 const WALK_ANIM_SPEED := 1.25
 

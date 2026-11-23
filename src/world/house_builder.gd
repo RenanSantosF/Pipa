@@ -20,7 +20,7 @@ const WATER_TANK := Color(0.22, 0.42, 0.72)
 const GLASS := Color(0.12, 0.15, 0.18)
 const FRAME := Color(0.93, 0.93, 0.9)
 const BARS := Color(0.2, 0.2, 0.22)
-const STORY_H := 2.8
+const STORY_H := 2.7
 
 var _sb: StreetBuilder
 var _rng: RandomNumberGenerator
@@ -151,7 +151,7 @@ func _window(fx: float, y: float, z: float) -> void:
 
 
 func _gable_roof(cx: float, h: float, hd: float, hw: float, z: float, wall_color: Color) -> void:
-	var angle := deg_to_rad(_rng.randf_range(18.0, 26.0))
+	var angle := deg_to_rad(_rng.randf_range(14.0, 18.0))
 	var a := hd * 0.5 + 0.45
 	var slab_len := a / cos(angle)
 	var rise := a * tan(angle)

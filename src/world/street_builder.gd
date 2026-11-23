@@ -17,12 +17,20 @@ const SURFACES := {
 	"dirt": [0.1, 0.18], "grass": [0.15, 0.2], "bark": [0.0, 0.9], "metal": [0.75, 0.6],
 }
 const POLES_PATH := "res://assets/models/poles/modular_electricity_poles_1k.gltf"
-const POLE_SCALE := 1.5
+## Escala 1:1: poste urbano de ~10,5 m (cruzeta a 9,6 m), fios em 9,6 / 7,3 m.
+const POLE_SCALE := 1.7
+const POLE_TOP := 10.4
+const WIRE_HIGH := 9.6
+const WIRE_LOW := 7.25
 const FOLIAGE := {
 	"mango": "res://assets/textures/foliage_cluster.png",
 	"palm": "res://assets/textures/palm_frond.png",
 	"banana": "res://assets/textures/banana_leaf.png",
+	"ipe_amarelo": "res://assets/textures/foliage_cluster.png",
+	"ipe_rosa": "res://assets/textures/foliage_cluster.png",
 }
+## Ipês floridos: a folhagem vira flor (amarela / rosa).
+const FLOWERS := {"ipe_amarelo": Color(1.0, 0.8, 0.1), "ipe_rosa": Color(0.96, 0.46, 0.7)}
 const TRUNK := Color(0.85, 0.8, 0.75)
 const CHUNK := 45.0
 
@@ -40,6 +48,10 @@ var tree_material: ShaderMaterial
 var obstacles := WorldObstacles.new()
 ## Onde o jogador e o vizinho começam (calculado pelo gerador).
 var spawn_point := Vector3(0, 0, 55)
+## Uma árvore grande perto do início (para as capturas de tela).
+var showcase_tree := Vector3.ZERO
+var _trees: TreeBuilder
+var _spawn_guess := Vector3(0, 0, 55)
 var bot_point := Vector3(40, 4, 25)
 
 ## Ruas: [pontos (Vector3 com altura), meia-largura, calçada, superfície]
@@ -69,6 +81,7 @@ func build() -> void:
 	_noise.seed = seed_value
 	_noise.frequency = 0.02
 	_houses = HouseBuilder.new(self, _rng)
+	_trees = TreeBuilder.new(self, _rng)
 	_body = StaticBody3D.new()
 	_body.name = "WorldCollision"
 	_body.collision_layer = 1
@@ -82,11 +95,16 @@ func build() -> void:
 		var m := ShaderMaterial.new()
 		m.shader = load("res://src/world/tree_sway.gdshader")
 		m.set_shader_parameter("leaves", load(FOLIAGE[sp]))
+		if FLOWERS.has(sp):
+			m.set_shader_parameter("flower_color", FLOWERS[sp])
+			m.set_shader_parameter("flower_mix", 0.85)
 		foliage_materials.append(m)
 		if sp == "mango":
 			tree_material = m
 
 	_define_roads()
+	var sp0 := _road_point_near(roads[0][0], 55.0)
+	_spawn_guess = Vector3(sp0.x, 0.0, sp0.z)
 	_build_terrain()
 	_build_roads()
 	_build_campinho()
@@ -506,53 +524,47 @@ func _build_campinho() -> void:
 
 # --- Árvores -------------------------------------------------------------------
 
-## Árvore de uma espécie ("" = sorteia). base.y = chão.
-func add_tree(base: Vector3, species: String = "") -> void:
+## Árvore de uma espécie ("" = sorteia). base.y = chão. street = na calçada
+## (pé caiado e canteiro).
+func add_tree(base: Vector3, species: String = "", street: bool = false) -> void:
+	# Corredor livre a favor do vento a partir de onde o jogador começa (para a
+	# pipa subir da mão sem cair direto numa copa).
+	var rel := Vector3(base.x - _spawn_guess.x, 0.0, base.z - _spawn_guess.z)
+	var wd := Wind.get_direction()
+	var along := rel.dot(wd)
+	var across := absf(rel.dot(wd.cross(Vector3.UP)))
+	if rel.length() < 6.0 or (along > -4.0 and along < 45.0 and across < 9.0 + along * 0.15):
+		return
 	if species == "":
 		var r := _rng.randf()
-		species = "mango" if r < 0.4 else ("palm" if r < 0.62 else ("eucalyptus" if r < 0.8 else "banana"))
+		if r < 0.22:
+			species = "mangueira"
+		elif r < 0.4:
+			species = "sibipiruna"
+		elif r < 0.55:
+			species = "oiti"
+		elif r < 0.65:
+			species = "ipe_amarelo"
+		elif r < 0.72:
+			species = "ipe_rosa"
+		elif r < 0.87 or street:
+			species = "palm"
+		else:
+			species = "banana"
 	match species:
 		"mango":
-			_tree_mango(base, _rng.randf_range(0.85, 1.25))
+			species = "mangueira"
+		"eucalyptus":
+			species = "sibipiruna"
+	match species:
 		"palm":
 			_tree_palm(base, _rng.randf_range(7.0, 11.0))
-		"eucalyptus":
-			_tree_eucalyptus(base, _rng.randf_range(9.0, 14.0))
-		_:
+		"banana":
 			_tree_banana(base)
-
-
-func _tree_mango(base: Vector3, s: float) -> void:
-	var b := batch_for(base.z, "bark")
-	var trunk_h := 2.4 * s
-	b.add_cylinder(Transform3D(Basis.IDENTITY, base + Vector3(0, trunk_h * 0.5, 0)), 0.16 * s, trunk_h, 7, TRUNK)
-	add_collider(Transform3D(Basis.IDENTITY, base + Vector3(0, trunk_h * 0.5, 0)), Vector3(0.3, trunk_h, 0.3))
-	obstacles.add_cylinder(base, trunk_h, 0.16, "árvore")
-	var fb := foliage_batch(base.z, "mango")
-	var phase := _rng.randf() * TAU
-	var top := base + Vector3(0, trunk_h + 1.6 * s, 0)
-	for _i in 3 + _rng.randi() % 2:
-		var off := Vector3(_rng.randf_range(-1.2, 1.2), _rng.randf_range(-0.6, 0.6), _rng.randf_range(-1.2, 1.2)) * s
-		var r := _rng.randf_range(1.6, 2.4) * s
-		_canopy_cards(fb, top + off, r, Color(1, 1, 1).darkened(_rng.randf() * 0.15), Vector2(0.18, phase))
-		obstacles.add_canopy(top + off, r * 0.9)
-		var tb := base + Vector3(0, trunk_h, 0)
-		var dir := (top + off - tb)
-		b.add_cylinder(Transform3D(Basis(_arc(Vector3.UP, dir.normalized())), (tb + top + off) * 0.5), 0.08 * s, dir.length(), 5, TRUNK)
-
-
-func _tree_eucalyptus(base: Vector3, h: float) -> void:
-	var b := batch_for(base.z, "bark")
-	b.add_cylinder(Transform3D(Basis.IDENTITY, base + Vector3(0, h * 0.5, 0)), 0.14, h, 7, Color(1.0, 0.96, 0.9))
-	add_collider(Transform3D(Basis.IDENTITY, base + Vector3(0, h * 0.5, 0)), Vector3(0.28, h, 0.28))
-	obstacles.add_cylinder(base, h, 0.14, "árvore")
-	var fb := foliage_batch(base.z, "mango")
-	var phase := _rng.randf() * TAU
-	for i in 4:
-		var c := base + Vector3(_rng.randf_range(-1.0, 1.0), h * (0.6 + 0.12 * i), _rng.randf_range(-1.0, 1.0))
-		var r := _rng.randf_range(1.0, 1.5)
-		_canopy_cards(fb, c, r, Color(0.85, 0.95, 0.85), Vector2(0.3, phase))
-		obstacles.add_canopy(c, r * 0.85)
+		_:
+			var h := _trees.build(base, species, -1, street)
+			if h > 9.0 and showcase_tree == Vector3.ZERO and base.distance_to(spawn_point) < 90.0:
+				showcase_tree = base
 
 
 func _tree_palm(base: Vector3, h: float) -> void:
@@ -638,7 +650,7 @@ func _build_street_trees() -> void:
 				var n := t.normalized().cross(Vector3.UP).normalized() * float(side)
 				var p := pts[i] + n * off
 				if not _pad.has_point(Vector2(p.x, p.z)):
-					add_tree(Vector3(p.x, Ground.height_at(p.x, p.z) + 0.17, p.z), "")
+					add_tree(Vector3(p.x, Ground.height_at(p.x, p.z) + 0.17, p.z), "", true)
 
 
 # --- Postes e fios -------------------------------------------------------------
@@ -663,8 +675,9 @@ func _build_poles() -> void:
 			var n := t.cross(Vector3.UP).normalized()
 			var p := pts[i] + n * off
 			var base := Vector3(p.x, Ground.height_at(p.x, p.z), p.z)
-			add_collider(Transform3D(Basis.IDENTITY, base + Vector3(0, 4.5, 0)), Vector3(0.26, 9.0, 0.26))
-			obstacles.add_cylinder(base, 9.0, 0.15, "poste")
+			add_collider(Transform3D(Basis.IDENTITY, base + Vector3(0, POLE_TOP * 0.5, 0)), Vector3(0.3, POLE_TOP, 0.3))
+			obstacles.add_cylinder(base, POLE_TOP, 0.14, "poste")
+			obstacles.add_capsule(base - n * 1.0 + Vector3.UP * (WIRE_HIGH - 0.08), base + n * 1.0 + Vector3.UP * (WIRE_HIGH - 0.08), 0.05, "cruzeta")
 			if templates.size() > 0:
 				var pole: Node3D = templates[k % templates.size()].duplicate()
 				pole.position = base
@@ -676,15 +689,15 @@ func _build_poles() -> void:
 			k += 1
 			if _rng.randf() < 0.5:
 				var hp := pts[i] - n * (off + _rng.randf_range(4.0, 7.0))
-				_add_wire(base + n * -0.8 + Vector3.UP * 8.47, Vector3(hp.x, Ground.height_at(hp.x, hp.z) + 3.2, hp.z), 0.5)
+				_add_wire(base + n * -0.9 + Vector3.UP * WIRE_HIGH, Vector3(hp.x, Ground.height_at(hp.x, hp.z) + 3.2, hp.z), 0.5)
 		for i in range(tops.size() - 1):
 			var a := tops[i]
 			var c := tops[i + 1]
 			var na := _pole_cross(pts, a)
 			var nc := _pole_cross(pts, c)
-			for dx in [-0.8, 0.0, 0.8]:
-				_add_wire(a + na * float(dx) + Vector3.UP * 8.47, c + nc * float(dx) + Vector3.UP * 8.47, 0.45)
-			_add_wire(a + Vector3.UP * 6.4, c + Vector3.UP * 6.4, 0.6)
+			for dx in [-0.9, 0.0, 0.9]:
+				_add_wire(a + na * float(dx) + Vector3.UP * WIRE_HIGH, c + nc * float(dx) + Vector3.UP * WIRE_HIGH, 0.45)
+			_add_wire(a + Vector3.UP * WIRE_LOW, c + Vector3.UP * WIRE_LOW, 0.6)
 
 
 func _pole_cross(pts: PackedVector3Array, p: Vector3) -> Vector3:

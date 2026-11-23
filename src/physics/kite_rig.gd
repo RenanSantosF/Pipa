@@ -82,6 +82,9 @@ var tail_renderer: TailRenderer
 var line_renderer: LineRenderer
 
 var _stroke_prev: float = 0.0
+var _was_on_ground: bool = false
+var _in_leaves: bool = false
+var _last_impact: float = -10.0
 var _no_shorten: bool = false
 var _x_frame_start := Vector3.ZERO
 var _ray := PhysicsRayQueryParameters3D.new()
@@ -172,6 +175,9 @@ func try_snag(obstacles: WorldObstacles, dt: float) -> void:
 		body.world_point(Vector3(c[3].x * 0.75, c[0].y - profile.lower_at * h, 0)),
 		body.world_point(Vector3(c[1].x * 0.75, c[0].y - profile.lower_at * h, 0))])
 	var hit := obstacles.kite_contact(body, knot, anchors, dt)
+	if obstacles.kite_in_canopy and not _in_leaves:
+		_impact(body.v.length(), "folhas")
+	_in_leaves = obstacles.kite_in_canopy
 	if snagged or snag_cooldown > 0.0 or hit.is_empty():
 		return
 	snagged = true
@@ -380,10 +386,15 @@ func _collide_world() -> void:
 			body.v -= n * vn * 1.2
 		body.v *= 0.7
 		if not body.resting:
-			EventBus.kite_crashed.emit(body.x)
+			_impact(-vn, "telhado" if p.y > Ground.height_at(p.x, p.z) + 1.5 else "chão")
 		body.resting = true
 	var motion := body.x - _x_frame_start
-	body.resting = body.x.y <= Ground.height_at(body.x.x, body.x.z) + 0.13
+	var on_ground := body.x.y <= Ground.height_at(body.x.x, body.x.z) + 0.13
+	if on_ground and not _was_on_ground:
+		# Bateu no chão: velocidade de descida no quadro.
+		_impact(maxf(-motion.y / maxf(get_physics_process_delta_time(), 0.001), body.v.length() * 0.5), "chão")
+	_was_on_ground = on_ground
+	body.resting = on_ground
 	if motion.length_squared() < 1e-8:
 		return
 	_ray.from = _x_frame_start
@@ -400,8 +411,16 @@ func _collide_world() -> void:
 	body.v *= 0.5
 	body.w *= 0.5
 	if not body.resting:
-		EventBus.kite_crashed.emit(body.x)
+		_impact(-vn, "telhado" if p.y > Ground.height_at(p.x, p.z) + 1.5 else "chão")
 	body.resting = true
+
+
+## Som/efeito de impacto (com intervalo mínimo para não metralhar).
+func _impact(speed: float, surface: String) -> void:
+	if speed < 0.8 or age - _last_impact < 0.25:
+		return
+	_last_impact = age
+	EventBus.kite_crashed.emit(body.x, speed, surface)
 
 
 ## Corta a linha na coordenada de material s. A pipa, a rabiola e o trecho do lado
