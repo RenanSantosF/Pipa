@@ -37,6 +37,19 @@ var _off_vel := Vector2.ZERO
 var _gravity: float = 9.8
 var _stroke_smooth: float = 0.0
 var _body_yaw: float = 0.0
+var _desbico_t: float = -1.0
+var _desbico_queue: int = 0
+
+## Curva da mão num desbico (m; negativo = mão vai para a frente e afrouxa a linha).
+const DESBICO_TIME := 0.46
+static func desbico_offset(t: float) -> float:
+	if t < 0.08:
+		return -0.25 * t / 0.08
+	if t < 0.18:
+		return -0.25 + 0.70 * (t - 0.08) / 0.10
+	if t < DESBICO_TIME:
+		return 0.45 * (1.0 - (t - 0.18) / (DESBICO_TIME - 0.18))
+	return 0.0
 
 
 func _ready() -> void:
@@ -66,10 +79,12 @@ func focus_point() -> Vector3:
 	if watch_target and is_instance_valid(watch_target) and watch_target.body and watch_time > 0.0:
 		return watch_target.body.x
 	if rig and rig.body:
-		return rig.body.x
-	if rig and rig.rope:
-		return rig.rope.end_point()
-	return head.global_position + Basis(Vector3.UP, _yaw) * Vector3(0, 0.5, -10)
+		# Pipa no chão/perto dos pés: olha para a frente, não para o pé.
+		var k := rig.body.x
+		if k.y < head.global_position.y + 0.5 and k.distance_to(global_position) < 6.0:
+			return head.global_position + (Vector3(k.x, head.global_position.y, k.z) - head.global_position).normalized() * 10.0 + Vector3.UP * 1.5
+		return k
+	return head.global_position + Basis(Vector3.UP, _yaw) * Vector3(0, 1.5, -10)
 
 
 func _process(delta: float) -> void:
@@ -79,7 +94,7 @@ func _process(delta: float) -> void:
 		to = to.normalized()
 		var k := 1.0 - exp(-follow_rate * delta)
 		_base_yaw = lerp_angle(_base_yaw, atan2(-to.x, -to.z), k)
-		_base_pitch = lerpf(_base_pitch, asin(clampf(to.y, -1.0, 1.0)), k)
+		_base_pitch = lerpf(_base_pitch, maxf(asin(clampf(to.y, -1.0, 1.0)), deg_to_rad(-15.0)), k)
 	if input_router:
 		var intent := input_router.intent
 		var look := intent.consume_look()
@@ -137,10 +152,33 @@ func _drive_rig(delta: float) -> void:
 	var to_kite := (focus_point() - global_position).normalized()
 	rig.hand_rest = global_position + body_basis * hand_rest_local + to_kite * (0.12 * t_norm)
 	rig.stroke_dir = (body_basis * stroke_dir_local).normalized()
-	# A mão não teleporta: limita a velocidade da braçada (≈ 6 m/s, braço humano).
-	_stroke_smooth = move_toward(_stroke_smooth, intent.stroke, 6.0 * delta)
+	# Desbico: cada toque é um ciclo afrouxa→tranco. Toques rápidos encadeiam.
+	if intent.desbico_taps > 0:
+		_desbico_queue = mini(_desbico_queue + intent.desbico_taps, 3)
+		intent.desbico_taps = 0
+		if rig.held:
+			rig.release_hold()
+	if _desbico_queue > 0 and (_desbico_t < 0.0 or _desbico_t > 0.2):
+		_desbico_queue -= 1
+		_desbico_t = 0.0
+	var grip := intent.grip
+	if _desbico_t >= 0.0:
+		rig.shorten_on_return = false
+		_stroke_smooth = desbico_offset(_desbico_t)
+		# No tranco a mão segura menos: se a pipa puxar forte, a linha escorrega e ela sobe.
+		if _desbico_t > 0.08 and _desbico_t < 0.3:
+			grip = minf(grip, 0.42)
+		_desbico_t += delta
+		if _desbico_t > DESBICO_TIME:
+			_desbico_t = -1.0
+	else:
+		rig.shorten_on_return = true
+		# A mão não teleporta: limita a velocidade da braçada (≈ 6 m/s, braço humano).
+		_stroke_smooth = move_toward(_stroke_smooth, intent.stroke, 6.0 * delta)
+		if intent.stroke > 0.05 and rig.held:
+			rig.release_hold()
 	rig.stroke = _stroke_smooth
-	rig.grip = intent.grip
+	rig.grip = grip
 	rig.reel_rate = intent.reel_rate
 	if character:
 		character.right_hand_target = rig.hand_position()

@@ -96,7 +96,7 @@ func get_gust_factor() -> float:
 func get_speed_at_height(h: float) -> float:
 	var hh := maxf(h - GROUND_LEVEL, 0.5)
 	var shear := pow(hh / REF_HEIGHT, SHEAR_EXPONENT)
-	var ground_block := clampf(hh / 4.0, 0.35, 1.0)
+	var ground_block := clampf(hh / 3.0, 0.6, 1.0)
 	return base_speed * _cached_gust * shear * ground_block
 
 

@@ -15,6 +15,8 @@ const LOOSE_LIFETIME := 45.0
 var rigs: Array[KiteRig] = []
 var combat := LineCombat.new()
 var frame_ms: float = 0.0
+var obstacles: WorldObstacles
+var _line_caught: Dictionary = {}
 
 
 func _ready() -> void:
@@ -44,6 +46,7 @@ func _physics_process(dt: float) -> void:
 		for r in rigs:
 			r.finalize(h)
 	combat.post_frame(dt, h, sub)
+	_collide_with_world()
 	for r in rigs:
 		r.post_frame(dt, h)
 	# Cortes por atrito (quem cortou = dono da outra linha do contato).
@@ -65,6 +68,23 @@ func _physics_process(dt: float) -> void:
 			EventBus.line_snapped.emit(r.hand_rest)
 	_cleanup()
 	frame_ms = float(Time.get_ticks_usec() - t0) / 1000.0
+
+
+func _collide_with_world() -> void:
+	if obstacles == null:
+		var sb := get_tree().get_first_node_in_group(&"street_builder")
+		if sb == null:
+			return
+		obstacles = sb.get("obstacles")
+	for r in rigs:
+		if r.rope != null:
+			var caught := obstacles.collide_rope(r.rope)
+			var was: bool = _line_caught.get(r, false)
+			_line_caught[r] = caught != ""
+			if caught != "" and not was and r.is_flying():
+				EventBus.kite_snagged.emit(r, caught)
+		if r.is_flying():
+			r.try_snag(obstacles)
 
 
 func _opponent_in_contact(rig: KiteRig) -> KiteRig:

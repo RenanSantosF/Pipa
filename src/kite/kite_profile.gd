@@ -10,7 +10,7 @@ extends Resource
 @export var height: float = 0.62
 @export var width: float = 0.5
 ## Massa (kg): papel de seda + varetas de bambu.
-@export var mass: float = 0.045
+@export var mass: float = 0.032
 ## Ganho da força normal com fluxo colado / descolado (placa plana).
 @export var cn_attached: float = 4.0
 @export var cn_separated: float = 1.25
@@ -32,7 +32,7 @@ extends Resource
 @export_group("Rabiola")
 @export var tail_length: float = 2.6
 @export_range(2, 24) var tail_nodes: int = 10
-@export var tail_mass: float = 0.02
+@export var tail_mass: float = 0.014
 @export var tail_area: float = 0.03
 @export var tail_cd: float = 1.2
 ## Rabiola com cerol (poder de corte da rabiola; 0 = sem cerol).

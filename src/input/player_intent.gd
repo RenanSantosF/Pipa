@@ -14,6 +14,8 @@ var stroke: float = 0.0
 var grip: float = 1.0
 ## Enrolando na lata (m/s).
 var reel_rate: float = 0.0
+## Toques de desbico pendentes (cada toque = um desbico: afrouxa e dá o tranco).
+var desbico_taps: int = 0
 ## Modo do gesto atual (para feedback visual): "", "puxar", "soltar", "enrolar".
 var gesture_mode: String = ""
 

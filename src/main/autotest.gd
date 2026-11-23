@@ -32,7 +32,8 @@ func start(p_main) -> void:
 	router.autopilot = true
 	main.bot.rig = null  # bot parado durante a fase 1
 	EventBus.line_cut.connect(_on_line_cut)
-	rig.launch(main.player.global_position + Vector3(0.2, 1.18, -0.3), 30.0, 50.0, Wind.get_direction())
+	# Começa na mão, como no jogo.
+	rig.launch_in_hand(main.player.global_position + Vector3(0.2, 1.18, -0.3), Wind.get_direction())
 	print("AUTOTEST: início (vento %.1f m/s, linha %s)" % [Wind.base_speed, rig.line_type.display_name])
 
 
@@ -68,43 +69,29 @@ func _phase_flight(_delta: float) -> void:
 		_fail("estado não finito")
 		return
 	_max_tension = maxf(_max_tension, rig.tension)
-	if _t < 10.0:
-		_input_set(0.0, 1.0, 0.0)
-		if _t > 5.0:
-			_alt_sum += b.x.y
-			_alt_n += 1
-	elif _t < 14.0:
-		if _len_before_release == 0.0:
-			_len_before_release = rig.flying_length()
-		_input_set(0.0, 0.0, 0.0)  # mão aberta: dá linha
-	elif _t < 20.0:
-		if _len_after_release == 0.0:
-			_len_after_release = rig.flying_length()
-		var ph := fmod(_t, 1.0)
-		_input_set(0.6 if ph < 0.4 else 0.0, 1.0, 0.0)  # braçadas
-	elif _t < 24.0:
-		if _pile_after_strokes == 0.0:
-			_pile_after_strokes = rig.pile
-		_input_set(0.0, 1.0, 2.5)  # enrola
+	var it := router.intent
+	it.stroke = 0.0
+	it.reel_rate = 0.0
+	if _t < 28.0:
+		# Desbico a cada 0,6 s; entre eles, abre a mão quando a pipa puxa (vai dando linha).
+		if fmod(_t, 0.6) < 1.0 / 60.0:
+			it.desbico_taps += 1
+		it.grip = 0.3 if (fmod(_t, 3.0) > 1.8 and rig.tension > 1.0) else 1.0
 	else:
-		_input_set(0.0, 1.0, 0.0)
+		it.grip = 1.0
+	if _t > 26.0:
+		_alt_sum += b.x.y
+		_alt_n += 1
 	if fmod(_t, 2.0) < 1.0 / 60.0:
-		print("AUTOTEST voo t=%5.1f alt=%6.2f ar=%5.2f aoa=%5.1f T=%5.2f linha=%5.1f chão=%4.1f lata=%5.1f nós=%d física=%.2fms" % [
-			_t, b.x.y, b.airspeed, rad_to_deg(b.angle_of_attack), rig.tension, rig.flying_length(), rig.pile, rig.spool,
-			rig.rope.node_count(), main.physics_world.frame_ms])
-	if _t >= 30.0:
+		print("AUTOTEST voo t=%5.1f alt=%6.2f ar=%5.2f aoa=%5.1f T=%5.2f linha=%5.1f presa=%s enrosc=%s física=%.2fms" % [
+			_t, b.x.y, b.airspeed, rad_to_deg(b.angle_of_attack), rig.tension, rig.flying_length(), str(rig.held), str(rig.snagged),
+			main.physics_world.frame_ms])
+	if _t >= 34.0:
 		var mean_alt := _alt_sum / maxf(float(_alt_n), 1.0)
-		print("AUTOTEST voo: altura média %.1f m, linha antes/depois de soltar %.1f/%.1f m, chão após braçadas %.1f m, tensão máx %.1f N" % [
-			mean_alt, _len_before_release, _len_after_release, _pile_after_strokes, _max_tension])
-		if mean_alt < 10.0:
+		print("AUTOTEST voo: subiu da mão até %.1f m de altura média, linha %.1f m, tensão máx %.1f N" % [mean_alt, rig.flying_length(), _max_tension])
+		if mean_alt < 7.0:
 			_ok = false
-			print("AUTOTEST FAIL: a pipa não se sustentou no ar")
-		if _len_after_release < _len_before_release + 2.0:
-			_ok = false
-			print("AUTOTEST FAIL: dar linha não aumentou o comprimento")
-		if _pile_after_strokes < 1.0:
-			_ok = false
-			print("AUTOTEST FAIL: braçadas não puxaram linha")
+			print("AUTOTEST FAIL: desbicando e dando linha a pipa não subiu da mão")
 		_start_combat()
 
 

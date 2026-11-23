@@ -7,9 +7,7 @@ const RATE := 22050
 
 var wind: AudioStreamWAV
 var flutter: AudioStreamWAV
-var hum: AudioStreamWAV
 var grind: AudioStreamWAV
-var ratchet: AudioStreamWAV
 var snap: AudioStreamWAV
 
 var _rng := RandomNumberGenerator.new()
@@ -17,11 +15,9 @@ var _rng := RandomNumberGenerator.new()
 
 func _ready() -> void:
 	_rng.seed = 77
-	wind = _make(_gen_wind(3.0), true)
+	wind = _make(_gen_wind(4.0), true)
 	flutter = _make(_gen_flutter(2.0), true)
-	hum = _make(_gen_hum(1.0), true)
 	grind = _make(_gen_grind(1.5), true)
-	ratchet = _make(_gen_ratchet(1.0), true)
 	snap = _make(_gen_snap(0.35), false)
 
 
@@ -59,33 +55,35 @@ func _gen_wind(secs: float) -> PackedFloat32Array:
 	var out := PackedFloat32Array()
 	out.resize(n)
 	var b := 0.0
+	var c := 0.0
 	var peak := 0.001
 	for i in n:
 		b = (b + 0.02 * _white()) / 1.02
-		out[i] = b
-		peak = maxf(peak, absf(b))
+		c += (b - c) * 0.05
+		out[i] = c
+		peak = maxf(peak, absf(c))
 	for i in n:
-		out[i] = out[i] / peak * 0.8
+		var t := float(i) / float(n)
+		out[i] = out[i] / peak * 0.6 * (0.75 + 0.25 * sin(TAU * t * 2.0))
 	return out
 
 
-## Papel de seda tremulando: ruído médio/agudo com batidas irregulares (~16 Hz).
+## Papel de seda tremulando: farfalhar suave e grave, sem chiado agudo.
 func _gen_flutter(secs: float) -> PackedFloat32Array:
 	var n := int(secs * RATE)
 	var out := PackedFloat32Array()
 	out.resize(n)
 	var lp := 0.0
-	var phase := 0.0
-	var freq := 16.0
+	var lp2 := 0.0
+	var env := 0.0
+	var target := 0.5
 	for i in n:
-		var w := _white()
-		lp += (w - lp) * 0.25
-		var band := w - lp
-		if i % 400 == 0:
-			freq = 12.0 + _rng.randf() * 10.0
-		phase += freq / RATE
-		var flap := pow(absf(sin(phase * PI)), 6.0)
-		out[i] = band * (0.15 + 0.85 * flap) * 0.6
+		lp += (_white() - lp) * 0.18
+		lp2 += (lp - lp2) * 0.3
+		if i % 700 == 0:
+			target = 0.25 + _rng.randf() * 0.75
+		env += (target - env) * 0.002
+		out[i] = lp2 * env * 1.6
 	return out
 
 
@@ -117,7 +115,7 @@ func _gen_grind(secs: float) -> PackedFloat32Array:
 		if _rng.randf() < 0.02:
 			crackle = 1.0
 		crackle *= 0.9
-		out[i] = (hp * 0.5 + _white() * crackle * 0.8) * (0.7 + 0.3 * sin(TAU * 31.0 * float(i) / RATE))
+		out[i] = (hp * 0.3 + _white() * crackle * 0.35) * (0.8 + 0.2 * sin(TAU * 13.0 * float(i) / RATE))
 	return out
 
 

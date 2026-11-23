@@ -67,10 +67,8 @@ jobs:
       - name: Configurar exportação Android
         run: |
           set -euo pipefail
-          keytool -genkeypair -keyalg RSA -keysize 2048 -validity 9999 \
-            -alias androiddebugkey -keypass android -storepass android \
-            -keystore ~/debug.keystore -deststoretype pkcs12 \
-            -dname "CN=Android Debug,O=Android,C=US"
+          # Chave FIXA do repositório: todo APK novo instala por cima do anterior.
+          cp android/debug.keystore ~/debug.keystore
           SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME}}"
           mkdir -p ~/.config/godot
           for f in editor_settings-4.tres editor_settings-4.7.tres; do

@@ -28,6 +28,8 @@ var _line_index: int = 2
 func _ready() -> void:
 	input_router.set_gesture_controls(gestures)
 	input_router.line_cycle_requested.connect(_cycle_line)
+	input_router.sound_toggle_requested.connect(_toggle_sound)
+	gestures.line_color = player_rig.line_type.color
 	player.input_router = input_router
 	player.rig = player_rig
 	player_rig.is_local_player = true
@@ -61,7 +63,8 @@ func _attach(path: String) -> void:
 
 ## Nova pipa no ar (com a linha atual) e câmera virada para ela.
 func reset_kite() -> void:
-	player_rig.launch(player.global_position + Vector3(0.2, 1.18, -0.3), start_line_length, start_elevation_deg, Wind.get_direction())
+	player.look_at_point(player.global_position + Wind.get_direction() * 10.0 + Vector3.UP * 4.0)
+	player_rig.launch_in_hand(player.global_position + Vector3(0.2, 1.18, -0.3), Wind.get_direction())
 	player.look_at_point(player_rig.body.x)
 	EventBus.kite_launched.emit()
 
@@ -69,8 +72,15 @@ func reset_kite() -> void:
 func _cycle_line() -> void:
 	_line_index = (_line_index + 1) % LINE_TYPES.size()
 	player_rig.line_type = load(LINE_TYPES[_line_index])
+	gestures.line_color = player_rig.line_type.color
 	reset_kite()
-	hud.show_message("Linha: " + player_rig.line_type.display_name, 1.5)
+	hud.show_message(player_rig.line_type.display_name, 1.5)
+
+
+func _toggle_sound() -> void:
+	GameConfig.sound_enabled = not GameConfig.sound_enabled
+	gestures.sound_on = GameConfig.sound_enabled
+	audio.set_enabled(GameConfig.sound_enabled)
 
 
 func _on_line_cut(winner: Node, loser: Node) -> void:

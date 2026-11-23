@@ -14,7 +14,8 @@ var touch_sensitivity: float = 0.22
 var invert_y: bool = false
 ## Assistência de mira: a câmera tende a acompanhar a pipa ao puxar/recolher.
 var aim_assist: bool = true
-var show_debug: bool = true
+var show_debug: bool = false
+var sound_enabled: bool = true
 
 var quality: int = Quality.MEDIUM
 

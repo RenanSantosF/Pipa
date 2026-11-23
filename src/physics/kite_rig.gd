@@ -42,6 +42,19 @@ var stroke_dir := Vector3.BACK
 var stroke: float = 0.0
 var grip: float = 1.0
 var reel_rate: float = 0.0
+## A mão voltando da braçada joga a linha no chão? (falso no desbico: a linha escorrega)
+var shorten_on_return: bool = true
+## Pipa ainda segura na mão (antes do primeiro desbico).
+var held: bool = false
+## Enroscado (árvore, poste, fio): a pipa fica presa até um tranco forte soltar.
+var snagged: bool = false
+var snag_point := Vector3.ZERO
+var snag_strength: float = 10.0
+var snag_what: String = ""
+var snag_cooldown: float = 0.0
+var _snag_pull: float = 0.0
+var _held_x := Vector3.ZERO
+var _held_q := Quaternion.IDENTITY
 
 # Carretel.
 var spool: float = 250.0
@@ -58,6 +71,7 @@ var tail_renderer: TailRenderer
 var line_renderer: LineRenderer
 
 var _stroke_prev: float = 0.0
+var _no_shorten: bool = false
 var _x_frame_start := Vector3.ZERO
 var _ray := PhysicsRayQueryParameters3D.new()
 
@@ -105,6 +119,9 @@ func launch(hand: Vector3, length: float, elevation_deg: float, direction: Vecto
 	_stroke_prev = 0.0
 	tension = 0.0
 	loose = false
+	held = false
+	snagged = false
+	snag_cooldown = 0.0
 	age = 0.0
 	wear.clear()
 	hand_rest = hand
@@ -112,6 +129,40 @@ func launch(hand: Vector3, length: float, elevation_deg: float, direction: Vecto
 	kite_visual.bind(self)
 	tail_renderer.bind(self)
 	line_renderer.bind(rope, line_type)
+
+
+## Começa com a pipa na mão: linha curta, pipa segura na frente do jogador até o
+## primeiro desbico (release_hold).
+func launch_in_hand(hand: Vector3, facing: Vector3) -> void:
+	var dir := Vector3(facing.x, 0.0, facing.z).normalized()
+	launch(hand, 2.6, 38.0, dir)
+	held = true
+	_held_x = body.x
+	_held_q = body.q
+
+
+func try_snag(obstacles: WorldObstacles) -> void:
+	if snagged or held or snag_cooldown > 0.0 or body == null:
+		return
+	var hit := obstacles.kite_snag_test(body.x)
+	if hit.is_empty():
+		return
+	snagged = true
+	snag_what = hit[0]
+	snag_point = hit[1]
+	_snag_pull = 0.0
+	match snag_what:
+		"fio":
+			snag_strength = randf_range(9.0, 18.0)
+		"poste":
+			snag_strength = randf_range(7.0, 13.0)
+		_:
+			snag_strength = randf_range(5.0, 14.0)
+	EventBus.kite_snagged.emit(self, snag_what)
+
+
+func release_hold() -> void:
+	held = false
 
 
 func hand_position() -> Vector3:
@@ -147,14 +198,22 @@ func pre_frame(dt: float) -> void:
 
 func _update_spool(dt: float) -> void:
 	# Braçada: mão voltando à posição de pegada → trecho puxado vai para o chão.
-	var ds := stroke - _stroke_prev
+	var prev_pos := maxf(_stroke_prev, 0.0)
+	var now_pos := maxf(stroke, 0.0)
+	# Sobra de um desbico (mão voltando) nunca encurta a linha.
+	if not shorten_on_return:
+		_no_shorten = true
+	elif stroke <= 0.001:
+		_no_shorten = false
+	if shorten_on_return and not _no_shorten and now_pos < prev_pos and rope.length() > MIN_LENGTH:
+		var amount := prev_pos - now_pos
+		rope.feed(-amount)
+		pile += amount
 	_stroke_prev = stroke
-	if ds < 0.0 and rope.length() > MIN_LENGTH:
-		rope.feed(ds)
-		pile -= ds
 	# Soltar (dar linha): a linha corre quando a tensão vence a pegada.
 	if grip < 0.98 and pile + spool > 0.05:
-		var f_grip := grip * GRIP_MAX
+		# Atrito da mão cresce com o quadrado da pegada (mão quase aberta = linha corre fácil).
+		var f_grip := grip * grip * GRIP_MAX
 		feed_speed += ((rope.tension_hand - f_grip) / FEED_MASS - FEED_DAMP * feed_speed) * dt
 		feed_speed = maxf(feed_speed, 0.0)
 	else:
@@ -195,6 +254,10 @@ func solve(h: float) -> void:
 		rope.solve(h)
 	if body != null:
 		tail.solve(h)
+		if snagged:
+			body.x = body.x.lerp(snag_point, 0.6)
+			body.v *= 0.3
+			body.w *= 0.9
 		if body.x.y < 0.12:
 			body.x.y = 0.12
 
@@ -203,6 +266,11 @@ func finalize(h: float) -> void:
 	if body != null:
 		body.finalize(h)
 		tail.finalize(h)
+		if held:
+			body.x = _held_x
+			body.q = _held_q
+			body.v = Vector3.ZERO
+			body.w = Vector3.ZERO
 	if rope != null:
 		rope.finalize(h)
 
@@ -217,6 +285,16 @@ func post_frame(dt: float, h: float) -> void:
 			line_renderer.bind(null, line_type)
 	if body == null:
 		return
+	snag_cooldown = maxf(snag_cooldown - dt, 0.0)
+	if snagged and rope != null:
+		# Trancos fortes soltam a pipa do galho/fio.
+		if rope.tension_end > snag_strength:
+			_snag_pull += dt
+			if _snag_pull > 0.12:
+				snagged = false
+				snag_cooldown = 1.2
+		else:
+			_snag_pull = maxf(_snag_pull - dt * 0.5, 0.0)
 	_collide_world()
 	if not body.is_valid():
 		push_warning("KiteRig: estado inválido, relançando.")

@@ -3,6 +3,7 @@ extends Node
 ## Salva PNGs em res://build/shots/ (fora do APK) e fecha o jogo.
 
 const SHOTS := [
+	[2.5, "00_sol", "sun"],
 	[5.0, "01_inicio", "player"],
 	[9.0, "02_maos", "down"],
 	[12.0, "03_vizinho", "bot"],
@@ -53,6 +54,11 @@ func _aim(mode: String) -> void:
 	var player: FPController = main.player
 	var rig: KiteRig = main.player_rig
 	match mode:
+		"sun":
+			var sun: DirectionalLight3D = main.get_node("World/Sun")
+			_cam.global_position = player.camera.global_position
+			_cam.look_at(_cam.global_position + sun.global_basis.z * 100.0)
+			_cam.current = true
 		"player":
 			player.camera.current = true
 		"down":

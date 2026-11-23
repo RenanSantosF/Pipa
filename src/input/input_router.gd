@@ -1,11 +1,12 @@
 class_name InputRouter
 extends Node
 ## Junta gestos (GestureControls) e teclado/mouse (testes no PC) num PlayerIntent.
-## Teclado: WASD anda · botão direito prende o mouse para olhar · Espaço segurado
-## = braçada · E = abrir a mão (dar linha) · Q = enrolar · R = nova pipa ·
+## Teclado: WASD anda · botão direito prende o mouse para olhar · Espaço = desbico ·
+## F segurado = braçada · E = abrir a mão (dar linha) · Q = enrolar · R = nova pipa ·
 ## T = trocar linha · F1 debug · F2 qualidade.
 
 signal line_cycle_requested
+signal sound_toggle_requested
 
 var gestures: GestureControls
 var intent := PlayerIntent.new()
@@ -26,6 +27,7 @@ func set_gesture_controls(gc: GestureControls) -> void:
 	gc.intent = intent
 	gc.reset_pressed.connect(func() -> void: EventBus.reset_requested.emit())
 	gc.menu_pressed.connect(func() -> void: line_cycle_requested.emit())
+	gc.sound_pressed.connect(func() -> void: sound_toggle_requested.emit())
 
 
 func _register_default_actions() -> void:
@@ -33,7 +35,8 @@ func _register_default_actions() -> void:
 	_add_keys("move_back", [KEY_S, KEY_DOWN])
 	_add_keys("move_left", [KEY_A, KEY_LEFT])
 	_add_keys("move_right", [KEY_D, KEY_RIGHT])
-	_add_keys("kite_pull", [KEY_SPACE])
+	_add_keys("kite_desbico", [KEY_SPACE])
+	_add_keys("kite_pull", [KEY_F])
 	_add_keys("kite_release", [KEY_E])
 	_add_keys("kite_reel", [KEY_Q])
 	_add_keys("kite_reset", [KEY_R])
@@ -61,6 +64,8 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event is InputEventMouseMotion:
 		if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 			intent.look_delta += (event as InputEventMouseMotion).relative * GameConfig.mouse_sensitivity
+	elif event.is_action_pressed("kite_desbico"):
+		intent.desbico_taps += 1
 	elif event.is_action_pressed("kite_reset"):
 		EventBus.reset_requested.emit()
 	elif event.is_action_pressed("line_cycle"):

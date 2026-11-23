@@ -17,10 +17,16 @@ const _FACES := [
 var _st := SurfaceTool.new()
 var _with_uv: bool = false
 var _vertex_count: int = 0
+## Quanto da cor de vértice tinge a textura (0 = textura pura, 1 = cor cheia).
+var tint: float = 1.0
+## Gera UV por projeção no mundo + tangentes (para materiais com textura).
+var textured: bool = false
 
 
-func _init(with_uv: bool = false) -> void:
+func _init(with_uv: bool = false, p_tint: float = 1.0, p_textured: bool = false) -> void:
 	_with_uv = with_uv
+	tint = p_tint
+	textured = p_textured
 	_st.begin(Mesh.PRIMITIVE_TRIANGLES)
 
 
@@ -118,10 +124,19 @@ func _smooth_tri(center: Vector3, radius: Vector3, da: Vector3, db: Vector3, dc:
 
 
 func _vertex(p: Vector3, n: Vector3, color: Color, uv: Vector2) -> void:
-	_st.set_color(color)
+	_st.set_color(Color.WHITE.lerp(color, tint) if tint < 1.0 else color)
 	_st.set_normal(n)
 	if _with_uv:
 		_st.set_uv(uv)
+	elif textured:
+		# Projeção pelo eixo dominante da normal (tiling contínuo entre peças).
+		var an := n.abs()
+		if an.y >= an.x and an.y >= an.z:
+			_st.set_uv(Vector2(p.x, p.z))
+		elif an.x >= an.z:
+			_st.set_uv(Vector2(p.z * signf(n.x), -p.y))
+		else:
+			_st.set_uv(Vector2(-p.x * signf(n.z), -p.y))
 	_st.add_vertex(p)
 	_vertex_count += 1
 
@@ -129,4 +144,6 @@ func _vertex(p: Vector3, n: Vector3, color: Color, uv: Vector2) -> void:
 func commit() -> ArrayMesh:
 	if _vertex_count == 0:
 		return null
+	if textured:
+		_st.generate_tangents()
 	return _st.commit()

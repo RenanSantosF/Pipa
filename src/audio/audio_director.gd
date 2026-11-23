@@ -13,16 +13,12 @@ var player_rig: KiteRig
 
 var _flutters: Dictionary = {}   # KiteRig -> AudioStreamPlayer3D
 var _grinds: Array[AudioStreamPlayer3D] = []
-var _hum: AudioStreamPlayer
-var _ratchet: AudioStreamPlayer
 var _wind: AudioStreamPlayer
 var _vibe_cooldown: float = 0.0
 
 
 func _ready() -> void:
-	_hum = _player2d(Sfx.hum, -40.0)
-	_ratchet = _player2d(Sfx.ratchet, -40.0)
-	_wind = _player2d(Sfx.wind, -18.0)
+	_wind = _player2d(Sfx.wind, -24.0)
 	for i in 2:
 		var g := AudioStreamPlayer3D.new()
 		g.stream = Sfx.grind
@@ -57,15 +53,15 @@ func _process(delta: float) -> void:
 		if f == null or not is_instance_valid(f):
 			f = AudioStreamPlayer3D.new()
 			f.stream = Sfx.flutter
-			f.unit_size = 3.0
-			f.max_distance = 160.0
+			f.unit_size = 1.2
+			f.max_distance = 45.0
 			r.add_child(f)
 			f.play(randf() * 1.5)
 			_flutters[r] = f
 		f.global_position = r.body.x
 		var air := clampf(r.body.airspeed / 12.0, 0.0, 1.5)
-		f.volume_db = linear_to_db(0.05 + air * 0.9)
-		f.pitch_scale = 0.75 + air * 0.45
+		f.volume_db = linear_to_db(0.02 + air * 0.35)
+		f.pitch_scale = 0.85 + air * 0.25
 	for k in _flutters.keys():
 		if not is_instance_valid(k) or (k as KiteRig).body == null:
 			var p: Node = _flutters[k]
@@ -81,26 +77,19 @@ func _process(delta: float) -> void:
 			var c: LineCombat.Contact = cs[i]
 			var energy := clampf(c.force * (0.2 + c.slide) / 6.0, 0.0, 1.0)
 			g.global_position = c.position
-			g.volume_db = linear_to_db(0.02 + energy)
+			g.volume_db = linear_to_db(0.01 + energy * 0.5)
 			g.pitch_scale = 0.8 + clampf(c.slide / 4.0, 0.0, 0.8)
 			if player_rig and (c.a == player_rig or c.b == player_rig) and energy > 0.15:
 				_vibrate(25, clampf(energy, 0.2, 1.0))
 		else:
 			g.volume_db = -60.0
-	# Linha cantando na mão + lata + vento.
-	if player_rig and player_rig.rope:
-		var t := player_rig.tension
-		_hum.volume_db = linear_to_db(clampf(t / 14.0, 0.0, 1.0) * 0.5 + 0.0001)
-		_hum.pitch_scale = clampf(0.55 + sqrt(maxf(t, 0.0)) * 0.22, 0.5, 2.5)
-		var spin := absf(player_rig.feed_speed) + player_rig.reel_rate
-		_ratchet.volume_db = linear_to_db(clampf(spin / 3.0, 0.0, 1.0) * 0.6 + 0.0001)
-		_ratchet.pitch_scale = clampf(0.5 + spin * 0.35, 0.5, 3.0)
-		if t > player_rig.line_type.break_tension * 0.7:
-			_vibrate(15, 0.4)
-	else:
-		_hum.volume_db = -60.0
-		_ratchet.volume_db = -60.0
-	_wind.volume_db = linear_to_db(0.08 + clampf(Wind.get_gust_factor() - 0.7, 0.0, 1.0) * 0.25)
+	if player_rig and player_rig.rope and player_rig.tension > player_rig.line_type.break_tension * 0.75:
+		_vibrate(15, 0.4)
+	_wind.volume_db = linear_to_db(0.05 + clampf(Wind.get_gust_factor() - 0.7, 0.0, 1.0) * 0.12)
+
+
+func set_enabled(on: bool) -> void:
+	AudioServer.set_bus_mute(0, not on)
 
 
 func _vibrate(ms: int, amplitude: float) -> void:
@@ -113,7 +102,8 @@ func _vibrate(ms: int, amplitude: float) -> void:
 func _snap_at(pos: Vector3) -> void:
 	var p := AudioStreamPlayer3D.new()
 	p.stream = Sfx.snap
-	p.unit_size = 8.0
+	p.unit_size = 5.0
+	p.volume_db = -6.0
 	p.max_distance = 200.0
 	add_child(p)
 	p.global_position = pos
