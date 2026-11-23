@@ -121,7 +121,7 @@ func _start_combat() -> void:
 	var center := Vector3(0, 0, 40)
 	var hand_a := center
 	var hand_b := center - wd * 10.0
-	var top := maxf(Ground.height_at(hand_a.x, hand_a.z), Ground.height_at(hand_b.x, hand_b.z)) + 15.0
+	var top := maxf(Ground.height_at(hand_a.x, hand_a.z), Ground.height_at(hand_b.x, hand_b.z)) + 30.0
 	hand_a.y = top
 	hand_b.y = top - 13.0
 	rig.launch(hand_a, 30.0, 50.0, wd)

@@ -108,20 +108,11 @@ func try_snag(obstacles: WorldObstacles, pull: float, dt: float) -> void:
 			pinned_index = -1
 		return
 	for i in range(pos.size() - 1, maxi(pos.size() - 5, 0) - 1, -1):
-		var p := pos[i]
-		for idx in obstacles.query(p):
-			var e: Array = obstacles.entries[idx]
-			var hit := false
-			if e[0] == WorldObstacles.Kind.WIRE:
-				var res := LineCombat.closest_segments(p, p, e[1], e[2])
-				hit = float(res[2]) < 0.05
-			elif e[0] == WorldObstacles.Kind.CANOPY:
-				hit = p.distance_to(e[1]) < float(e[2]) * 0.6
-			if hit:
-				pinned_index = i
-				pin_pos = p
-				pin_time = randf_range(1.5, 7.0)
-				return
+		if obstacles.tail_hit(pos[i]):
+			pinned_index = i
+			pin_pos = pos[i]
+			pin_time = randf_range(1.5, 7.0)
+			return
 
 
 func finalize(h: float) -> void:

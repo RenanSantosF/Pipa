@@ -39,7 +39,12 @@ func start(p_main) -> void:
 		elif a.begins_with("--size="):
 			rig.profile.apply_size(int(a.substr(7)))
 	print("PROBE perfil: ", rig.profile.describe(), " diedro=%.1f°" % rad_to_deg(rig.profile.dihedral()))
-	rig.launch(main.player.global_position + Vector3(0.2, 1.18, -0.3), 25.0, 55.0, Wind.get_direction())
+	var el := 55.0
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--elev="):
+			el = float(a.substr(7))
+			zenith_mode = true
+	rig.launch(main.player.global_position + Vector3(0.2, 1.18, -0.3), 25.0, el, Wind.get_direction())
 	_side = Wind.get_direction().cross(Vector3.UP).normalized()  # direita de quem empina
 
 
@@ -48,6 +53,7 @@ func heading() -> float:
 
 
 var wrap_mode := false
+var zenith_mode := false
 var _tree_added := false
 var _events := [[6.0, "dir", [1.0]], [9.0, "esq", [-1.0]], [12.0, "dupla", [1.0, 1.0]], [15.0, "dir x6", [1, 1, 1, 1, 1, 1]], [21.0, "livre", []]]
 var _ev := -1
@@ -64,6 +70,13 @@ func _physics_process(delta: float) -> void:
 	_t += delta
 	if wrap_mode:
 		_wrap_step(delta)
+		return
+	if zenith_mode:
+		var d := rig.body.x - rig.hand_position()
+		if fmod(_t, 0.5) < delta:
+			print("ZEN t=%4.1f elev=%5.1f° ar=%5.2f aoa=%5.1f T=%5.2f sust=%5.2f arr=%5.2f" % [_t, rad_to_deg(asin(d.y / d.length())), rig.body.airspeed, rad_to_deg(rig.body.angle_of_attack), rig.tension, rig.body.lift, rig.body.drag])
+		if _t > 10.0:
+			get_tree().quit(0)
 		return
 	var lat := rig.body.x.dot(_side)
 	_lat_hist.append(lat)
@@ -113,18 +126,57 @@ func _report() -> void:
 	print("PROBE ▶ %-7s pico lateral %+.2f m em %.2f s · rumo pico %+.0f° · resto após %.1f s: %+.2f m" % [_events[_ev][1], _peak, _peak_t, _hpeak, _t - _ev_t0, lat - _ev_lat0])
 
 
-## Copa ao lado do meio da linha; desbica para lá e mede o enrosco.
+## Obstáculos ao lado/embaixo da linha: encostar tem que DESLIZAR; enroscar só ao
+## dar volta, pendurar ou apertar. Modo: --wrapprobe [--obj=poste|fio|galho|telhado]
+var _obj := "poste"
+
+
 func _wrap_step(delta: float) -> void:
 	var world: KitePhysicsWorld = main.physics_world
+	if _t < 0.1:
+		for a in OS.get_cmdline_user_args():
+			if a.begins_with("--obj="):
+				_obj = a.substr(6)
 	if _t > 4.0 and not _tree_added and world.obstacles:
-		var mid := rig.rope.pos[int(rig.rope.pos.size() * 0.5)]
-		world.obstacles.add_canopy(mid + _side * 2.2, 1.6)
+		var r0 := rig.rope
+		var mid := r0.pos[int(r0.pos.size() * 0.5)]
+		match _obj:
+			"poste":
+				world.obstacles.add_capsule(mid - _side * 1.5 + Vector3.DOWN * 12.0, mid - _side * 1.5 + Vector3.UP * 6.0, 0.13, "poste")
+			"galho":
+				world.obstacles.add_capsule(mid - _side * 1.5 + Vector3.DOWN * 1.0, mid - _side * 1.5 + Vector3.UP * 1.5 + Wind.get_direction() * 1.0, 0.05, "galho")
+			"fio":
+				world.obstacles.add_capsule(mid + Vector3.DOWN * 1.2 - _side * 15.0, mid + Vector3.DOWN * 1.2 + _side * 15.0, 0.008, "fio")
+			"telhado":
+				world.obstacles.add_box(mid + Vector3.DOWN * 2.5, Vector3(8.0, 3.0, 8.0), "telhado")
 		_tree_added = true
-		print("WRAP árvore em ", mid + _side * 2.2)
-	if _t > 5.0 and _t < 12.0 and fmod(_t, 0.5) < delta:
-		it.taps.append(-1.0)
+		print("WRAP obstáculo ", _obj, " perto de ", mid.round())
+	# 5–11 s: desbicos para a esquerda (leva a linha para o obstáculo) ou dá linha (fio/telhado).
+	if _obj in ["poste", "galho"]:
+		if _t > 5.0 and _t < 11.0 and fmod(_t, 0.45) < delta:
+			it.taps.append(-1.0)
+	else:
+		it.grip = 0.15 if (_t > 5.0 and _t < 9.0) else 1.0
+		if _t > 12.0 and _t < 16.0 and fmod(_t, 0.5) < delta:
+			it.taps.append(1.0 if fmod(_t, 1.0) < 0.5 else -1.0)
 	if fmod(_t, 0.5) < delta:
 		var r := rig.rope
-		print("WRAP t=%5.1f nós_presos=%d T_mão=%5.2f T_pipa=%5.2f lateral=%6.2f alt=%5.1f" % [_t, r.pin_count(), r.tension_hand, r.tension_end, rig.body.x.dot(_side), rig.body.x.y])
-	if _t > 16.0:
+		var dev := 0.0
+		for i in range(1, r.pos.size()):
+			if r.pin_obstacle[i] >= 0:
+				var nx := r.pos[i + 1] if i + 1 < r.pos.size() else r.end_point()
+				dev = maxf(dev, rad_to_deg(PI - acos(clampf((r.pos[i - 1] - r.pos[i]).normalized().dot((nx - r.pos[i]).normalized()), -1.0, 1.0))))
+		if _obj == "fio" and _tree_added:
+			var e: Array = world.obstacles.entries[world.obstacles.entries.size() - 1]
+			var best := 99.0
+			var sy := 0.0
+			for i in r.segment_count():
+				var pp := r.segment_points(i)
+				var res := LineCombat.closest_segments(pp[0], pp[1], e[1], e[2])
+				if float(res[2]) < best:
+					best = float(res[2])
+					sy = (pp[0].lerp(pp[1], res[0]) - (e[1] as Vector3).lerp(e[2], res[1])).y
+			print("WRAP   fio: dist=%.3f lado_y=%+.3f" % [best, sy])
+		print("WRAP t=%5.1f contatos=%d presos=%d θmax=%5.1f° T_mão=%5.2f T_pipa=%5.2f lateral=%6.2f alt=%5.1f linha=%5.1f pipa_presa=%s" % [_t, r.contact_count(), r.pin_count(), dev, r.tension_hand, r.tension_end, rig.body.x.dot(_side), rig.body.x.y, rig.flying_length(), str(rig.snagged)])
+	if _t > 20.0:
 		get_tree().quit(0)

@@ -159,11 +159,20 @@ func launch_in_hand(hand: Vector3, facing: Vector3) -> void:
 	_held_q = body.q
 
 
-func try_snag(obstacles: WorldObstacles) -> void:
-	if snagged or held or snag_cooldown > 0.0 or body == null:
+## Contato da pipa com galhos, postes, fios e copas (WorldObstacles.kite_contact):
+## encostar só quica/escorrega; prende quando o cabresto engancha ou entra fundo na copa.
+func try_snag(obstacles: WorldObstacles, dt: float) -> void:
+	if held or body == null:
 		return
-	var hit := obstacles.kite_snag_test(body.x)
-	if hit.is_empty():
+	var knot := body.world_point(rope.end_local if rope != null and rope.end_body == body else body.tow_local)
+	var c := body.corners
+	var h := profile.height
+	var anchors := PackedVector3Array([
+		body.world_point(c[0] + Vector3(0, -0.07 * h, 0)),
+		body.world_point(Vector3(c[3].x * 0.75, c[0].y - profile.lower_at * h, 0)),
+		body.world_point(Vector3(c[1].x * 0.75, c[0].y - profile.lower_at * h, 0))])
+	var hit := obstacles.kite_contact(body, knot, anchors, dt)
+	if snagged or snag_cooldown > 0.0 or hit.is_empty():
 		return
 	snagged = true
 	snag_what = hit[0]
@@ -172,7 +181,7 @@ func try_snag(obstacles: WorldObstacles) -> void:
 	match snag_what:
 		"fio":
 			snag_strength = randf_range(9.0, 18.0)
-		"poste":
+		"poste", "cruzeta":
 			snag_strength = randf_range(7.0, 13.0)
 		_:
 			snag_strength = randf_range(5.0, 14.0)
@@ -233,6 +242,7 @@ func pre_frame(dt: float) -> void:
 			_update_spool(dt)
 			rope.hand_position = hand_position()
 		rope.compute_forces()
+		rope.snapshot_frame()
 	if body != null:
 		body.sail_asym = 0.0 if loose else sail_asym
 		if rope != null and rope.end_body == body:

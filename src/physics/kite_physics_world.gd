@@ -16,7 +16,6 @@ var rigs: Array[KiteRig] = []
 var combat := LineCombat.new()
 var frame_ms: float = 0.0
 var obstacles: WorldObstacles
-var _line_caught: Dictionary = {}
 
 
 func _ready() -> void:
@@ -76,19 +75,17 @@ func _collide_with_world() -> void:
 		if sb == null:
 			return
 		obstacles = sb.get("obstacles")
+	var dt := get_physics_process_delta_time()
 	for r in rigs:
 		if r.rope != null:
-			var caught := obstacles.collide_rope(r.rope)
-			var wrapped := obstacles.wrap_rope(r.rope, get_physics_process_delta_time())
-			if wrapped != "":
-				caught = wrapped
-			var was: bool = _line_caught.get(r, false)
-			_line_caught[r] = caught != ""
-			if caught != "" and not was and r.is_flying():
-				EventBus.kite_snagged.emit(r, caught)
+			var snag := obstacles.update_rope(r.rope, dt)
+			if snag != "" and r.is_flying():
+				EventBus.kite_snagged.emit(r, snag)
 		if r.is_flying():
-			r.try_snag(obstacles)
-			r.tail.try_snag(obstacles, r.rope.tension_end, get_physics_process_delta_time())
+			r.try_snag(obstacles, dt)
+			r.tail.try_snag(obstacles, r.rope.tension_end, dt)
+		elif r.loose and r.body != null:
+			r.try_snag(obstacles, dt)
 
 
 func _opponent_in_contact(rig: KiteRig) -> KiteRig:

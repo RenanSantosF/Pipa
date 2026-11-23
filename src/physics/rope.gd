@@ -33,6 +33,14 @@ var pin_pos: PackedVector3Array = PackedVector3Array()
 var pin_mu: PackedFloat32Array = PackedFloat32Array()
 var pin_break: PackedFloat32Array = PackedFloat32Array()
 var pin_obstacle: PackedInt32Array = PackedInt32Array()
+## Contato com obstáculo (nó deslizante): normal do lado da superfície e tempo de aperto.
+var c_normal: PackedVector3Array = PackedVector3Array()
+var c_hold: PackedFloat32Array = PackedFloat32Array()
+## Obstáculos (para a restrição de contato por subpasso).
+var obstacles: WorldObstacles = null
+## Posições no começo do quadro (detecção contínua contra obstáculos finos).
+var frame_pos: PackedVector3Array = PackedVector3Array()
+var frame_end := Vector3.ZERO
 ## Tensão de cada segmento no último tick (N).
 var seg_tension: PackedFloat32Array = PackedFloat32Array()
 var _lam_sum: PackedFloat32Array = PackedFloat32Array()
@@ -107,6 +115,10 @@ func _reset_pins(n: int) -> void:
 	pin_break.resize(n)
 	pin_obstacle.resize(n)
 	pin_obstacle.fill(-1)
+	c_normal.resize(n)
+	c_normal.fill(Vector3.ZERO)
+	c_hold.resize(n)
+	c_hold.fill(0.0)
 
 
 func pin_count() -> int:
@@ -114,6 +126,36 @@ func pin_count() -> int:
 	for v in pinned:
 		c += v
 	return c
+
+
+func contact_count() -> int:
+	var c := 0
+	for v in pin_obstacle:
+		if v >= 0:
+			c += 1
+	return c
+
+
+## Marca o nó i como nó de contato (deslizante) com o obstáculo idx.
+func set_contact(i: int, idx: int, normal: Vector3) -> void:
+	pin_obstacle[i] = idx
+	c_normal[i] = normal
+	c_hold[i] = 0.0
+
+
+func clear_contact(i: int) -> void:
+	var was := pinned[i] == 1
+	pinned[i] = 0
+	pin_obstacle[i] = -1
+	c_hold[i] = 0.0
+	if was:
+		_rebuild_masses()
+
+
+## Guarda as posições do começo do quadro (antes dos subpassos).
+func snapshot_frame() -> void:
+	frame_pos = pos.duplicate()
+	frame_end = end_point()
 
 
 ## Insere um nó no índice i (entre i-1 e o antigo i). Mantém todos os arrays.
@@ -126,6 +168,10 @@ func insert_node(i: int, p: Vector3, v: Vector3, rest_before: float, rest_after:
 	pin_mu.insert(i, 0.0)
 	pin_break.insert(i, 0.0)
 	pin_obstacle.insert(i, -1)
+	c_normal.insert(i, Vector3.ZERO)
+	c_hold.insert(i, 0.0)
+	if frame_pos.size() == pos.size() - 1:
+		frame_pos.insert(i, p)
 	rest[i - 1] = rest_before
 	rest.insert(i, rest_after)
 	_rebuild_masses()
@@ -146,6 +192,10 @@ func remove_node(i: int) -> void:
 	pin_mu.remove_at(i)
 	pin_break.remove_at(i)
 	pin_obstacle.remove_at(i)
+	c_normal.remove_at(i)
+	c_hold.remove_at(i)
+	if frame_pos.size() == pos.size() + 1:
+		frame_pos.remove_at(i)
 	_rebuild_masses()
 
 
@@ -161,9 +211,9 @@ func pin_node(i: int, where: Vector3, mu: float, break_force: float, obstacle: i
 	_rebuild_masses()
 
 
+## Solta o enrosco: o nó continua encostado (contato deslizante).
 func unpin_node(i: int) -> void:
 	pinned[i] = 0
-	pin_obstacle[i] = -1
 	_rebuild_masses()
 
 
@@ -222,7 +272,7 @@ func feed(delta_len: float) -> void:
 		var new_pos := pos[1] + dir * minf(segment_target, dl)
 		insert_node(1, new_pos, vel[1], rest[0] - segment_target, segment_target)
 	# Remove nós quando o primeiro segmento fica curto.
-	while rest[0] < segment_target * 0.4 and pos.size() > min_nodes and pinned[1] == 0:
+	while rest[0] < segment_target * 0.4 and pos.size() > min_nodes and pinned[1] == 0 and pin_obstacle[1] < 0:
 		remove_node(1)
 	_update_material_coords()
 
@@ -231,7 +281,7 @@ func feed(delta_len: float) -> void:
 func _coarsen() -> void:
 	var i := 2
 	while i < pos.size() - 1:
-		if pinned[i] == 0:
+		if pinned[i] == 0 and pin_obstacle[i] < 0:
 			remove_node(i)
 		i += 1
 	segment_target *= 2.0
@@ -335,6 +385,8 @@ func solve(h: float) -> void:
 	if seg_n > 0:
 		_lam_hand_sum += lam[0]
 		_lam_end_sum += lam[seg_n - 1]
+	if obstacles != null:
+		obstacles.solve_contacts(self)
 	if _lam_sum.size() != seg_n:
 		_lam_sum.resize(seg_n)
 		_lam_sum.fill(0.0)
@@ -439,12 +491,17 @@ func split_at(s_cut: float) -> Rope:
 	var old_mu := pin_mu.duplicate()
 	var old_br := pin_break.duplicate()
 	var old_ob := pin_obstacle.duplicate()
+	var old_cn := c_normal.duplicate()
+	var old_ch := c_hold.duplicate()
 	_reset_pins(pos.size())
+	frame_pos = PackedVector3Array()
 	for i in mini(k + 1, old_pinned.size()):
 		pinned[i] = old_pinned[i]
 		pin_pos[i] = old_pp[i]
 		pin_mu[i] = old_mu[i]
 		pin_break[i] = old_br[i]
 		pin_obstacle[i] = old_ob[i]
+		c_normal[i] = old_cn[i]
+		c_hold[i] = old_ch[i]
 	_rebuild_masses()
 	return kite_side

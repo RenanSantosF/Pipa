@@ -9,7 +9,14 @@ const SHOTS := [
 	[12.0, "03_vizinho", "bot"],
 	[15.0, "04_visao_geral", "overview"],
 	[18.0, "05_linha_barriga", "side"],
+	[20.0, "06_pipa_perto", "kite_front"],
+	[21.0, "07_pipa_envergada", "kite_side"],
+	[22.0, "08_pipa_contra_luz", "kite_back"],
+	[24.0, "09_arvores", "trees"],
+	[26.0, "10_escala", "scale"],
 ]
+
+var _shots: Array = []
 
 var main
 var _t: float = 0.0
@@ -21,6 +28,15 @@ var _capturing: bool = false
 
 func start(p_main) -> void:
 	main = p_main
+	_shots = SHOTS.duplicate()
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--only="):
+			var keys := a.substr(7).split(",")
+			_shots = _shots.filter(func(sh) -> bool:
+				for k in keys:
+					if String(sh[1]).contains(k):
+						return true
+				return false)
 	_dir = ProjectSettings.globalize_path("res://build/shots")
 	DirAccess.make_dir_recursive_absolute(_dir)
 	_cam = Camera3D.new()
@@ -31,9 +47,9 @@ func start(p_main) -> void:
 
 func _process(delta: float) -> void:
 	_t += delta
-	if _i >= SHOTS.size():
+	if _i >= _shots.size():
 		return
-	var shot: Array = SHOTS[_i]
+	var shot: Array = _shots[_i]
 	var at: float = shot[0]
 	var mode: String = shot[2]
 	if _t > at - 1.0:
@@ -46,7 +62,7 @@ func _process(delta: float) -> void:
 		print("SCREENSHOT ", shot[1])
 		_i += 1
 		_capturing = false
-		if _i >= SHOTS.size():
+		if _i >= _shots.size():
 			get_tree().quit(0)
 
 
@@ -83,4 +99,31 @@ func _aim(mode: String) -> void:
 			var mid: Vector3 = (k2 + pp2) * 0.5
 			_cam.global_position = mid + Vector3(25, 12, 0)
 			_cam.look_at(mid)
+			_cam.current = true
+		"kite_front", "kite_side", "kite_back":
+			if rig.body == null:
+				return
+			var b := rig.body
+			var nrm: Vector3 = b.q * Vector3.BACK
+			var lat: Vector3 = b.q * Vector3.RIGHT
+			var off := nrm * 1.25 + lat * 0.25
+			if mode == "kite_side":
+				off = lat * 1.1 + nrm * 0.35 + (b.q * Vector3.UP) * 0.15
+			elif mode == "kite_back":
+				off = -nrm * 1.3 + lat * 0.3
+			_cam.global_position = b.x + off
+			_cam.look_at(b.x, b.q * Vector3.UP)
+			_cam.fov = 50.0
+			_cam.current = true
+		"trees":
+			_cam.fov = 60.0
+			var sb: StreetBuilder = main.get_node("World/StreetBuilder")
+			var tp: Vector3 = sb.showcase_tree if "showcase_tree" in sb else player.global_position + Vector3(8, 0, -8)
+			_cam.global_position = tp + Vector3(9, 2.2, 9)
+			_cam.look_at(tp + Vector3(0, 4.5, 0))
+			_cam.current = true
+		"scale":
+			_cam.fov = 60.0
+			_cam.global_position = player.global_position + Vector3(-6, 1.6, 7)
+			_cam.look_at(player.global_position + Vector3(0, 2.5, -4))
 			_cam.current = true

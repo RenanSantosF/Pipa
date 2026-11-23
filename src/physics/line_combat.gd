@@ -5,7 +5,8 @@ extends RefCounted
 ## 1) Detecção (por tick): segmentos próximos (< DETECT_RADIUS) viram um CONTATO.
 ## 2) Contato (por subpasso): as linhas não se atravessam — cada contato guarda o
 ##    lado (normal) e empurra os dois segmentos para manter a folga. A tração das
-##    linhas aperta uma contra a outra: é o "cruzou / enroscou".
+##    linhas aperta uma contra a outra: é o "cruzou / enroscou". Atrito de Coulomb
+##    no contato (μ médio das duas linhas): apertadas, elas pegam e escorregam.
 ## 3) Desgaste (por tick): energia de atrito E = μ·N·v_desliz·dt. Cada linha recebe
 ##    E × abrasão_da_outra / resistência_própria, espalhada pelo trecho de MATERIAL
 ##    dela que passou pelo ponto de contato. Quem dá linha (ou puxa rápido) passa
@@ -226,7 +227,7 @@ static func closest_segments(p1: Vector3, q1: Vector3, p2: Vector3, q2: Vector3)
 
 # --- Resolução (subpasso) ----------------------------------------------------
 
-func solve(_h: float) -> void:
+func solve(h: float) -> void:
 	for c in contacts:
 		_refresh(c)
 		var ra := c.a.rope
@@ -269,6 +270,33 @@ func solve(_h: float) -> void:
 		_push(rb, c.ib, nv * ub)
 		_push(rb, c.ib + 1, nv * c.tb)
 		c.impulse += lam
+		if c.hooked:
+			continue
+		# Atrito de Coulomb entre as linhas: o deslizamento relativo do subpasso é
+		# limitado por μ × (correção normal). Linhas apertadas "pegam" e escorregam
+		# com resistência (relo), em vez de deslizar livres.
+		var mu := (c.a.line_type.friction + c.b.line_type.friction) * 0.5
+		var da := _disp(ra, c.ia, h).lerp(_disp(ra, c.ia + 1, h), c.ta)
+		var db := _disp(rb, c.ib, h).lerp(_disp(rb, c.ib + 1, h), c.tb)
+		var rel := db - da
+		var tang := rel - nrm * rel.dot(nrm)
+		var tl := tang.length()
+		if tl > 1e-7:
+			var lt := minf(tl / wsum, mu * lam)
+			var tdir := tang / tl
+			_push(ra, c.ia, tdir * (lt * ua))
+			_push(ra, c.ia + 1, tdir * (lt * c.ta))
+			_push(rb, c.ib, -tdir * (lt * ub))
+			_push(rb, c.ib + 1, -tdir * (lt * c.tb))
+
+
+## Deslocamento do ponto `idx` da linha neste subpasso.
+static func _disp(r: Rope, idx: int, h: float) -> Vector3:
+	if idx < r.pos.size():
+		return r.pos[idx] - r.prev[idx]
+	if r.end_body != null:
+		return r.end_body.point_velocity(r.end_body.q * r.end_local) * h
+	return Vector3.ZERO
 
 
 ## Massa inversa do ponto `idx` da linha (o índice depois do último nó é o cabresto).

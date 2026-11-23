@@ -1,40 +1,76 @@
 class_name WorldObstacles
 extends RefCounted
-## Obstáculos do cenário para a física da pipa e da linha (mais leve que o motor
-## de física do Godot para dezenas de nós por quadro): copas de árvore (esferas
-## porosas), troncos e postes (cilindros), casas e muros (caixas) e fios (segmentos).
-## Indexados numa grade 2D (XZ) para consultas rápidas.
+## Obstáculos do cenário para a física da pipa e da linha (docs/REVISAO_V5.md §5).
+##
+## Tipos de geometria:
+##   CANOPY  — volume de folhagem (poroso: só arrasto, NÃO segura a linha);
+##   CAPSULE — tronco, galho, poste, cruzeta, fio (segmento com raio);
+##   BOX     — casa, laje, telhado, muro.
+##
+## ENCOSTAR ≠ ENROSCAR. Quando um trecho da linha encosta num obstáculo, ganha um
+## NÓ DE CONTATO livre que fica na superfície (restrição unilateral resolvida a cada
+## subpasso) e escorrega com atrito de Coulomb:
+##   - ao longo do obstáculo (barrida no fio, no beiral, em volta do poste);
+##   - através do contato (a linha corre por cima; razão de tensões ≤ e^(μθ)).
+## O nó só PRENDE (enrosco) quando: o ângulo de abraçamento θ passa do limite do
+## material (deu volta / caiu por cima e pendurou), ou o atrito estático segurou com
+## tensão alta por um tempo (apertou). Solta quando θ volta a ser pequeno, quando um
+## tranco quebra o galho, ou quando a linha escorrega para fora da ponta.
+## Cada material tem sua regra (MATERIALS): nada de colisão genérica.
 
 const CELL := 8.0
+const MAX_CONTACTS := 8
+## Nós de contato por obstáculo (2 bastam para uma volta completa).
+const MAX_PER_OBSTACLE := 2
+const LINE_RADIUS := 0.0015
 
-enum Kind { CANOPY, CYLINDER, BOX, WIRE }
+enum Kind { CANOPY, CAPSULE, BOX }
 
-## Cada entrada: [Kind, dados...]
-##  CANOPY:   [kind, centro, raio]
-##  CYLINDER: [kind, base(x, y0, z), y1, raio, nome]
-##  BOX:      [kind, AABB]
-##  WIRE:     [kind, a, b]
+## μ, θ para prender (rad), tensão de aperto (N), tempo de aperto (s), quebra mín/máx (N).
+const MATERIALS := {
+	"galho": [0.62, 1.7, 5.0, 0.4, 8.0, 24.0],
+	"árvore": [0.65, 2.4, 8.0, 0.6, 1000.0, 1000.0],
+	"coqueiro": [0.5, 2.5, 9.0, 0.7, 1000.0, 1000.0],
+	"poste": [0.42, 2.6, 12.0, 0.8, 1000.0, 1000.0],
+	"cruzeta": [0.5, 2.1, 10.0, 0.6, 1000.0, 1000.0],
+	"fio": [0.15, 99.0, 99.0, 99.0, 1000.0, 1000.0],   # nunca trava: pendura e escorrega ao longo
+	"trave": [0.35, 2.6, 12.0, 0.8, 1000.0, 1000.0],
+	"telhado": [0.55, 99.0, 10.0, 0.9, 1000.0, 1000.0],
+	"muro": [0.5, 99.0, 11.0, 0.9, 1000.0, 1000.0],
+}
+
+## Cada entrada:
+##  CANOPY:  [kind, centro, raio]
+##  CAPSULE: [kind, a, b, raio, nome]
+##  BOX:     [kind, AABB, nome]
 var entries: Array = []
 var _grid: Dictionary = {}
+## Nome do último enrosco (para avisos/HUD).
+var last_snag: String = ""
 
 
 func add_canopy(center: Vector3, radius: float) -> void:
 	_insert([Kind.CANOPY, center, radius], center - Vector3.ONE * radius, center + Vector3.ONE * radius)
 
 
+func add_capsule(a: Vector3, b: Vector3, radius: float, what: String) -> void:
+	var mn := Vector3(minf(a.x, b.x), minf(a.y, b.y), minf(a.z, b.z)) - Vector3.ONE * radius
+	var mx := Vector3(maxf(a.x, b.x), maxf(a.y, b.y), maxf(a.z, b.z)) + Vector3.ONE * radius
+	_insert([Kind.CAPSULE, a, b, radius, what], mn, mx)
+
+
+## Compatibilidade: cilindro vertical (tronco, poste, trave).
 func add_cylinder(base: Vector3, height: float, radius: float, what: String) -> void:
-	_insert([Kind.CYLINDER, base, base.y + height, radius, what], base - Vector3(radius, 0, radius), base + Vector3(radius, height, radius))
-
-
-func add_box(center: Vector3, size: Vector3) -> void:
-	var box := AABB(center - size * 0.5, size)
-	_insert([Kind.BOX, box], box.position, box.end)
+	add_capsule(base, base + Vector3.UP * height, radius, what)
 
 
 func add_wire(a: Vector3, b: Vector3) -> void:
-	var mn := Vector3(minf(a.x, b.x), minf(a.y, b.y), minf(a.z, b.z))
-	var mx := Vector3(maxf(a.x, b.x), maxf(a.y, b.y), maxf(a.z, b.z))
-	_insert([Kind.WIRE, a, b], mn, mx)
+	add_capsule(a, b, 0.008, "fio")
+
+
+func add_box(center: Vector3, size: Vector3, what: String = "telhado") -> void:
+	var box := AABB(center - size * 0.5, size)
+	_insert([Kind.BOX, box, what], box.position, box.end)
 
 
 func _insert(e: Array, mn: Vector3, mx: Vector3) -> void:
@@ -50,6 +86,11 @@ func _insert(e: Array, mn: Vector3, mx: Vector3) -> void:
 			_grid[key] = arr
 
 
+func query(p: Vector3) -> PackedInt32Array:
+	var key := Vector2i(floori(p.x / CELL), floori(p.z / CELL))
+	return _grid.get(key, PackedInt32Array())
+
+
 ## Altura do topo do que houver em (x, z): laje/telhado (caixas) ou o chão.
 func top_at(x: float, z: float) -> float:
 	var y := Ground.height_at(x, z)
@@ -62,218 +103,42 @@ func top_at(x: float, z: float) -> float:
 	return y
 
 
-func query(p: Vector3) -> PackedInt32Array:
-	var key := Vector2i(floori(p.x / CELL), floori(p.z / CELL))
-	return _grid.get(key, PackedInt32Array())
+static func material(what: String) -> Array:
+	return MATERIALS.get(what, MATERIALS["telhado"])
 
 
-## Colide os nós da linha com o cenário (por quadro, depois dos subpassos).
-## Retorna o nome do que prendeu a linha ("" se nada).
-func collide_rope(rope: Rope) -> String:
-	var caught := ""
-	var n := rope.pos.size()
-	var start := 1 if rope.hand_fixed else 0
-	for i in range(start, n):
-		var p := rope.pos[i]
-		var v := rope.vel[i]
-		var touched := false
-		for idx in query(p):
-			var e: Array = entries[idx]
-			match e[0]:
-				Kind.CANOPY:
-					var c: Vector3 = e[1]
-					var r: float = e[2]
-					var d := p - c
-					if d.length() < r:
-						# Folhagem porosa: a linha entra e fica presa nos galhos.
-						v *= 0.12
-						p += d.normalized() * (r - d.length()) * 0.15
-						touched = true
-						caught = "árvore"
-				Kind.CYLINDER:
-					var base: Vector3 = e[1]
-					var y1: float = e[2]
-					var rr: float = e[3] + 0.01
-					if p.y > base.y and p.y < y1:
-						var h := Vector2(p.x - base.x, p.z - base.z)
-						if h.length() < rr:
-							var out := h.normalized() * rr if h.length() > 0.0001 else Vector2(rr, 0)
-							p = Vector3(base.x + out.x, p.y, base.z + out.y)
-							v *= 0.4
-							touched = true
-							caught = e[4]
-				Kind.BOX:
-					var box: AABB = e[1]
-					if box.has_point(p):
-						p = _push_out_of_box(box, p)
-						v *= 0.35
-						touched = true
-						if caught == "":
-							caught = "telhado"
-		if touched:
-			rope.pos[i] = p
-			rope.vel[i] = v
-	return caught
-
-
-const MAX_PINS := 6
-
-## Enroscar de verdade: um trecho da linha que cruza copa/poste/fio ganha um nó
-## preso naquele ponto (a linha desvia: 3 pontos). O nó desliza com atrito de
-## cabrestante (razão de tensões e^(μθ)) e solta quando a linha se endireita ou
-## quando um tranco quebra o galho. Retorna o nome do que prendeu agora ("" se nada).
-func wrap_rope(rope: Rope, dt: float) -> String:
-	_update_pins(rope, dt)
-	if rope.pin_count() >= MAX_PINS:
-		return ""
-	var n := rope.pos.size()
-	var seg_n := rope.segment_count()
-	for i in seg_n:
-		var a := rope.pos[i]
-		var b := rope.pos[i + 1] if i + 1 < n else rope.end_point()
-		var mid := (a + b) * 0.5
-		for idx in query(mid):
-			if rope.pin_obstacle.has(idx):
-				continue  # um nó por obstáculo
-			var hit := _segment_hit(a, b, idx)
-			if hit.is_empty():
-				continue
-			var t: float = hit[0]
-			# Não prende colado na mão nem no cabresto.
-			if (i == 0 and rope.hand_fixed and t < 0.25) or (i == seg_n - 1 and t > 0.85):
-				continue
-			var l := rope.rest[i]
-			rope.insert_node(i + 1, hit[1], rope.vel[i], l * t, l * (1.0 - t))
-			rope.pin_node(i + 1, hit[1], hit[2], hit[3], idx)
-			return hit[4]
-	return ""
-
-
-## [t, ponto, μ, força_de_quebra, nome] ou [].
-func _segment_hit(a: Vector3, b: Vector3, idx: int) -> Array:
+func entry_name(idx: int) -> String:
 	var e: Array = entries[idx]
 	match e[0]:
-		Kind.CANOPY:
-			var c: Vector3 = e[1]
-			var r: float = e[2]
-			var ab := b - a
-			var t := clampf((c - a).dot(ab) / maxf(ab.length_squared(), 1e-6), 0.0, 1.0)
-			var q := a + ab * t
-			if q.distance_to(c) < r * 0.7:
-				return [t, q, 0.9, randf_range(9.0, 26.0), "árvore"]
-		Kind.CYLINDER:
-			var base: Vector3 = e[1]
-			var top := Vector3(base.x, e[2], base.z)
-			var rad: float = e[3]
-			var res := LineCombat.closest_segments(a, b, base, top)
-			if float(res[2]) < rad:
-				var sp := a.lerp(b, res[0])
-				var ap := base.lerp(top, res[1])
-				var hdir := Vector3(sp.x - ap.x, 0.0, sp.z - ap.z)
-				if hdir.length() < 0.001:
-					hdir = (b - a).cross(Vector3.UP)
-				return [res[0], ap + hdir.normalized() * (rad + 0.012), 0.45, 1000.0, e[4]]
+		Kind.CAPSULE:
+			return e[4]
 		Kind.BOX:
-			var box: AABB = e[1]
-			if box.size.y < 0.5:
-				return []
-			var hit := _segment_box(a, b, box.grow(0.02))
-			if not hit.is_empty():
-				return [hit[0], hit[1], 0.7, 1000.0, "telhado"]
-		Kind.WIRE:
-			var wa: Vector3 = e[1]
-			var wb: Vector3 = e[2]
-			var res2 := LineCombat.closest_segments(a, b, wa, wb)
-			if float(res2[2]) < 0.035:
-				var sp2 := a.lerp(b, res2[0])
-				var wp := wa.lerp(wb, res2[1])
-				var off := sp2 - wp
-				off = off.normalized() if off.length() > 0.0005 else Vector3.UP
-				return [res2[0], wp + off * 0.012, 0.3, 1000.0, "fio"]
-	return []
+			return e[2]
+	return "árvore"
 
 
-func _update_pins(rope: Rope, dt: float) -> void:
-	var i := rope.pos.size() - 1
-	while i >= 1:
-		if rope.pinned[i] == 0:
-			i -= 1
-			continue
-		var n := rope.pos.size()
-		var p := rope.pos[i]
-		var has_next := i + 1 < n or rope.end_body != null
-		if not has_next:
-			rope.unpin_node(i)
-			i -= 1
-			continue
-		var prev_p := rope.pos[i - 1]
-		var next_p := rope.pos[i + 1] if i + 1 < n else rope.end_point()
-		var u1 := (prev_p - p).normalized()
-		var u2 := (next_p - p).normalized()
-		var dev := PI - acos(clampf(u1.dot(u2), -1.0, 1.0))
-		var t_hand: float = rope.seg_tension[i - 1] if i - 1 < rope.seg_tension.size() else 0.0
-		var t_kite: float = rope.seg_tension[i] if i < rope.seg_tension.size() else 0.0
-		var release := false
-		var oi := rope.pin_obstacle[i]
-		if oi >= 0 and oi < entries.size():
-			var e: Array = entries[oi]
-			match e[0]:
-				Kind.CANOPY:
-					var c: Vector3 = e[1]
-					var ab := next_p - prev_p
-					var t := clampf((c - prev_p).dot(ab) / maxf(ab.length_squared(), 1e-6), 0.0, 1.0)
-					release = (prev_p + ab * t).distance_to(c) > float(e[2]) * 0.85
-				Kind.CYLINDER:
-					var base: Vector3 = e[1]
-					var res := LineCombat.closest_segments(prev_p, next_p, base, Vector3(base.x, e[2], base.z))
-					release = float(res[2]) > float(e[3]) + 0.02
-				Kind.WIRE:
-					release = dev < 0.05
-				Kind.BOX:
-					release = _segment_box(prev_p, next_p, (e[1] as AABB).grow(-0.03)).is_empty() and dev < 0.6
-		if dev < 0.02 or maxf(t_hand, t_kite) > rope.pin_break[i]:
-			release = true
-		if release:
-			rope.unpin_node(i)
-			rope.remove_node(i)
-			i -= 1
-			continue
-		# Cabrestante: a linha só desliza se um lado vencer o outro × e^(μθ).
-		var ratio := exp(rope.pin_mu[i] * dev)
-		var move := 0.0
-		if t_kite > t_hand * ratio + 0.05:
-			move = minf((t_kite - t_hand * ratio) * 0.6, 4.0) * dt          # pipa puxa linha
-		elif t_hand > t_kite * ratio + 0.05:
-			move = -minf((t_hand - t_kite * ratio) * 0.6, 4.0) * dt         # mão puxa linha
-		if move != 0.0 and i < rope.rest.size():
-			move = clampf(move, -(rope.rest[i] - 0.05), rope.rest[i - 1] - 0.05)
-			rope.rest[i - 1] -= move
-			rope.rest[i] += move
-		i -= 1
+# --- Geometria ---------------------------------------------------------------
+
+## Ponto mais próximo no eixo da cápsula: [ponto, t].
+static func _axis_point(a: Vector3, b: Vector3, p: Vector3) -> Array:
+	var ab := b - a
+	var t := clampf((p - a).dot(ab) / maxf(ab.length_squared(), 1e-9), 0.0, 1.0)
+	return [a + ab * t, t]
 
 
-## A pipa encostou em algo que prende? Retorna [nome, ponto] ou [].
-func kite_snag_test(x: Vector3) -> Array:
-	for idx in query(x):
-		var e: Array = entries[idx]
-		match e[0]:
-			Kind.CANOPY:
-				var c: Vector3 = e[1]
-				if x.distance_to(c) < float(e[2]) + 0.1:
-					return ["árvore", x]
-			Kind.CYLINDER:
-				var base: Vector3 = e[1]
-				if x.y > base.y and x.y < float(e[2]) + 0.3:
-					if Vector2(x.x - base.x, x.z - base.z).length() < float(e[3]) + 0.25:
-						return [e[4], x]
-			Kind.WIRE:
-				var res := LineCombat.closest_segments(x, x, e[1], e[2])
-				if float(res[2]) < 0.22:
-					return ["fio", x]
-	return []
+## Normal (⟂ ao eixo) de p em relação à cápsula; `fallback` se p está no eixo.
+static func _capsule_side(a: Vector3, b: Vector3, p: Vector3, fallback: Vector3) -> Vector3:
+	var ax := (b - a).normalized()
+	var q: Vector3 = _axis_point(a, b, p)[0]
+	var d := p - q
+	d -= ax * d.dot(ax)
+	if d.length() > 1e-5:
+		return d.normalized()
+	var f := fallback - ax * fallback.dot(ax)
+	return f.normalized() if f.length() > 1e-5 else ax.cross(Vector3.UP).normalized()
 
 
-## Segmento × caixa (teste de lajes): [t de entrada, ponto na face] ou [].
+## Segmento × caixa: [t de entrada, ponto na face, normal da face] ou [].
 static func _segment_box(a: Vector3, b: Vector3, box: AABB) -> Array:
 	var d := b - a
 	var t0 := 0.0
@@ -304,23 +169,427 @@ static func _segment_box(a: Vector3, b: Vector3, box: AABB) -> Array:
 		if t0 > t1:
 			return []
 	if normal == Vector3.ZERO:
-		return []  # começa dentro (o empurrão por nó resolve)
-	return [t0, a + d * t0 + normal * 0.02]
+		return []  # começa dentro (o nó comum resolve)
+	return [t0, a + d * t0 + normal * 0.003, normal]
 
 
-static func _push_out_of_box(box: AABB, p: Vector3) -> Vector3:
-	var dx0 := p.x - box.position.x
-	var dx1 := box.end.x - p.x
-	var dy1 := box.end.y - p.y
-	var dz0 := p.z - box.position.z
-	var dz1 := box.end.z - p.z
-	var m := minf(minf(dx0, dx1), minf(dy1, minf(dz0, dz1)))
-	if m == dy1:
-		return Vector3(p.x, box.end.y + 0.01, p.z)
-	if m == dx0:
-		return Vector3(box.position.x - 0.01, p.y, p.z)
-	if m == dx1:
-		return Vector3(box.end.x + 0.01, p.y, p.z)
-	if m == dz0:
-		return Vector3(p.x, p.y, box.position.z - 0.01)
-	return Vector3(p.x, p.y, box.end.z + 0.01)
+## Face de saída mais próxima de um ponto dentro da caixa: [ponto na face, normal].
+static func _box_exit(box: AABB, p: Vector3) -> Array:
+	var best := INF
+	var out := p
+	var nrm := Vector3.UP
+	for axis in 3:
+		for s in [-1.0, 1.0]:
+			if axis == 1 and s < 0.0:
+				continue  # nunca empurra para dentro do chão
+			var face := box.end[axis] if s > 0.0 else box.position[axis]
+			var dist := absf(face - p[axis])
+			if dist < best:
+				best = dist
+				out = p
+				out[axis] = face + s * 0.003
+				nrm = Vector3.ZERO
+				nrm[axis] = s
+	return [out, nrm]
+
+
+# --- Linha: restrição por subpasso -------------------------------------------
+
+## Chamado pela Rope no fim de cada subpasso: mantém os nós de contato na
+## superfície do obstáculo e aplica atrito de Coulomb ao deslizar.
+func solve_contacts(rope: Rope) -> void:
+	var n := rope.pos.size()
+	for i in range(1, n):
+		var idx := rope.pin_obstacle[i]
+		if idx < 0 or rope.pinned[i] == 1 or idx >= entries.size():
+			continue
+		var e: Array = entries[idx]
+		var p := rope.pos[i]
+		var corr := Vector3.ZERO
+		var nrm := rope.c_normal[i]
+		var mu := 0.5
+		match e[0]:
+			Kind.CAPSULE:
+				var a: Vector3 = e[1]
+				var b: Vector3 = e[2]
+				var r: float = float(e[3]) + LINE_RADIUS
+				mu = material(e[4])[0]
+				var q: Vector3 = _axis_point(a, b, p)[0]
+				var ax := (b - a).normalized()
+				var d := p - q
+				d -= ax * d.dot(ax)
+				# A linha apoia do lado oposto à resultante das duas pernas (bissetriz):
+				# é esse o lado da superfície em que o nó fica. Só segue a bissetriz
+				# enquanto ela aperta contra o obstáculo do lado guardado — assim o nó
+				# não "dá a volta" por baixo e a linha não atravessa.
+				var nxt := rope.pos[i + 1] if i + 1 < n else rope.end_point()
+				var bis := (rope.pos[i - 1] - p).normalized() + (nxt - p).normalized()
+				bis -= ax * bis.dot(ax)
+				var pressing := false
+				if bis.length() > 0.05:
+					var nt := -bis.normalized()
+					if nt.dot(nrm) > 0.0:
+						nrm = nt
+						pressing = true
+				var side := d.dot(nrm)
+				if pressing and side < r:
+					corr = nrm * r - d          # apoiada: fica na superfície, do lado da linha
+				elif side < r:
+					corr = nrm * (r - side)     # dentro / do outro lado: volta para o lado guardado
+			Kind.BOX:
+				var box: AABB = e[1]
+				mu = material(e[2])[0]
+				if box.has_point(p):
+					var ex := _box_exit(box, p)
+					corr = (ex[0] as Vector3) - p
+					nrm = ex[1]
+		if corr == Vector3.ZERO:
+			rope.c_normal[i] = nrm
+			continue
+		p += corr
+		# Atrito de Coulomb posicional: o deslocamento tangencial do subpasso é
+		# limitado por μ × (correção normal). Parado → atrito estático segura.
+		var dn := corr.length()
+		var disp := p - rope.prev[i]
+		var tang := disp - nrm * disp.dot(nrm)
+		var tl := tang.length()
+		if tl > 1e-7:
+			if tl <= mu * dn * 1.25:
+				p -= tang
+			else:
+				p -= tang * (mu * dn / tl)
+		rope.pos[i] = p
+		rope.c_normal[i] = nrm
+
+
+# --- Linha: por quadro ---------------------------------------------------------
+
+## Detecta contatos novos, decide enrosco/soltura e o deslizamento através dos
+## contatos. Retorna o nome do que ENROSCOU agora ("" se nada).
+func update_rope(rope: Rope, dt: float) -> String:
+	rope.obstacles = self
+	_foliage_drag(rope, dt)
+	var snag := _update_contacts(rope, dt)
+	_absorb_nodes(rope)
+	if rope.contact_count() < MAX_CONTACTS:
+		_detect(rope)
+	return snag
+
+
+## Folhagem: arrasto poroso nos nós dentro da copa (a linha atravessa devagar).
+func _foliage_drag(rope: Rope, dt: float) -> void:
+	var start := 1 if rope.hand_fixed else 0
+	for i in range(start, rope.pos.size()):
+		if rope.inv_mass[i] <= 0.0:
+			continue
+		var p := rope.pos[i]
+		for idx in query(p):
+			var e: Array = entries[idx]
+			if e[0] == Kind.CANOPY and p.distance_to(e[1]) < float(e[2]):
+				var k := exp(-3.5 * dt)
+				var v := rope.vel[i] * k
+				rope.prev[i] = p - v * dt
+				rope.vel[i] = v
+				break
+
+
+## Nós comuns que entraram num obstáculo viram nós de contato (com atrito).
+func _absorb_nodes(rope: Rope) -> void:
+	var start := 1 if rope.hand_fixed else 0
+	for i in range(start, rope.pos.size()):
+		if rope.pin_obstacle[i] >= 0 or rope.contact_count() >= MAX_CONTACTS:
+			continue
+		var p := rope.pos[i]
+		for idx in query(p):
+			if _contacts_on(rope, idx) >= MAX_PER_OBSTACLE:
+				continue
+			var e: Array = entries[idx]
+			match e[0]:
+				Kind.CAPSULE:
+					var q: Vector3 = _axis_point(e[1], e[2], p)[0]
+					if p.distance_to(q) < float(e[3]) + LINE_RADIUS:
+						rope.set_contact(i, idx, _capsule_side(e[1], e[2], p, rope.vel[i] * -1.0))
+				Kind.BOX:
+					var box: AABB = e[1]
+					if box.has_point(p):
+						rope.set_contact(i, idx, (_box_exit(box, p)[1] as Vector3))
+			if rope.pin_obstacle[i] >= 0:
+				break
+
+
+## Segmentos que cruzam um obstáculo ganham um nó de contato no ponto de toque.
+## Teste contínuo: compara com as posições do começo do quadro (mesmo material),
+## para a linha não atravessar um fio de 1 cm entre dois quadros.
+func _detect(rope: Rope) -> void:
+	var n := rope.pos.size()
+	var seg_n := rope.segment_count()
+	var has_prev := rope.frame_pos.size() == n
+	var hits: Array = []   # [i, t, ponto, idx, normal]
+	for i in seg_n:
+		var a := rope.pos[i]
+		var b := rope.pos[i + 1] if i + 1 < n else rope.end_point()
+		var mid := (a + b) * 0.5
+		var ids := query(mid)
+		if ids.is_empty():
+			continue
+		for idx in ids:
+			if (i > 0 and rope.pin_obstacle[i] == idx) or (i + 1 < n and rope.pin_obstacle[i + 1] == idx):
+				continue  # já tem contato com este obstáculo neste trecho
+			if _contacts_on(rope, idx) >= MAX_PER_OBSTACLE:
+				continue
+			var e: Array = entries[idx]
+			var hit: Array = []
+			match e[0]:
+				Kind.CAPSULE:
+					var ca: Vector3 = e[1]
+					var cb: Vector3 = e[2]
+					var r: float = float(e[3]) + LINE_RADIUS
+					var res := LineCombat.closest_segments(a, b, ca, cb)
+					var t: float = res[0]
+					var sp := a.lerp(b, t)
+					var ap := ca.lerp(cb, res[1])
+					# Lado da linha em relação ao obstáculo medido na NORMAL COMUM (⟂ às
+					# duas direções): é o sinal dela que troca quando uma atravessa a outra.
+					var nc := (b - a).cross(cb - ca)
+					if nc.length() < 1e-6:
+						nc = _capsule_side(ca, cb, sp, Vector3.UP)
+					nc = nc.normalized()
+					var s_now := (sp - ap).dot(nc)
+					var s_old := s_now
+					if has_prev:
+						var a0 := rope.frame_pos[i]
+						var b0 := rope.frame_pos[i + 1] if i + 1 < n else rope.frame_end
+						s_old = (a0.lerp(b0, t) - ap).dot(nc)
+					var from_side := nc * (1.0 if s_old >= 0.0 else -1.0)
+					if float(res[2]) < r:
+						hit = [t, ap + from_side * (r + 0.001), from_side]
+					elif has_prev and float(res[2]) < 1.5 and t > 0.0 and t < 1.0 and res[1] > 0.0 and res[1] < 1.0 and s_old * s_now < 0.0:
+						# Atravessou entre quadros: volta para o lado de onde veio.
+						hit = [t, ap + from_side * (r + 0.001), from_side]
+				Kind.BOX:
+					var box: AABB = e[1]
+					if box.size.y > 0.3:
+						var bh := _segment_box(a, b, box.grow(0.01))
+						if not bh.is_empty():
+							hit = bh
+			if hit.is_empty():
+				continue
+			var t2: float = hit[0]
+			# Não cria colado na mão nem no cabresto.
+			if (i == 0 and rope.hand_fixed and t2 < 0.15) or (i == seg_n - 1 and t2 > 0.9):
+				continue
+			hits.append([i, t2, hit[1], idx, hit[2]])
+			break
+	# Insere do fim para o começo (os índices anteriores não mudam).
+	hits.sort_custom(func(x, y) -> bool: return x[0] > y[0])
+	for h in hits:
+		if rope.contact_count() >= MAX_CONTACTS:
+			break
+		var i: int = h[0]
+		var t: float = h[1]
+		var l := rope.rest[i]
+		rope.insert_node(i + 1, h[2], rope.velocity_at(i, t), l * t, l * (1.0 - t))
+		rope.set_contact(i + 1, h[3], h[4])
+
+
+func _contacts_on(rope: Rope, idx: int) -> int:
+	var c := 0
+	for v in rope.pin_obstacle:
+		if v == idx:
+			c += 1
+	return c
+
+
+func _deviation(rope: Rope, i: int) -> float:
+	var n := rope.pos.size()
+	var p := rope.pos[i]
+	var prev_p := rope.pos[i - 1]
+	var next_p := rope.pos[i + 1] if i + 1 < n else rope.end_point()
+	var u1 := (prev_p - p).normalized()
+	var u2 := (next_p - p).normalized()
+	return PI - acos(clampf(u1.dot(u2), -1.0, 1.0))
+
+
+func _update_contacts(rope: Rope, dt: float) -> String:
+	var snagged_now := ""
+	var i := rope.pos.size() - 1
+	while i >= 1:
+		var idx := rope.pin_obstacle[i]
+		if idx < 0 or idx >= entries.size():
+			i -= 1
+			continue
+		var n := rope.pos.size()
+		var has_next := i + 1 < n or rope.end_body != null
+		if not has_next:
+			rope.clear_contact(i)
+			i -= 1
+			continue
+		var e: Array = entries[idx]
+		var what := entry_name(idx)
+		var mat := material(what)
+		var dev := _deviation(rope, i)
+		var t_hand: float = rope.seg_tension[i - 1] if i - 1 < rope.seg_tension.size() else 0.0
+		var t_kite: float = rope.seg_tension[i] if i < rope.seg_tension.size() else 0.0
+		var t_max := maxf(t_hand, t_kite)
+		var p := rope.pos[i]
+		var off_surface := _surface_gap(e, p)
+		var slipped_off := false
+		if e[0] == Kind.CAPSULE:
+			var tt: float = _axis_point(e[1], e[2], p)[1]
+			slipped_off = (tt <= 0.0 or tt >= 1.0) and off_surface > 0.01
+		if rope.pinned[i] == 1:
+			# ENROSCADO: solta quando endireita ou quando o tranco quebra o galho.
+			if dev < 0.05 or slipped_off:
+				rope.unpin_node(i)
+			elif t_max > rope.pin_break[i]:
+				rope.unpin_node(i)
+				rope.c_hold[i] = -2.0   # galho quebrou: não prende de novo logo
+			else:
+				_capstan(rope, i, dev, t_hand, t_kite, rope.pin_mu[i], dt)
+				i -= 1
+				continue
+		# CONTATO DESLIZANTE.
+		if (dev < 0.04 and off_surface > 0.01) or slipped_off or off_surface > 0.35:
+			rope.clear_contact(i)
+			# Nó criado só para o contato (trecho curto) volta a ser um segmento só.
+			if i < rope.rest.size() and minf(rope.rest[i - 1], rope.rest[i]) < rope.segment_target * 0.7:
+				rope.remove_node(i)
+			i -= 1
+			continue
+		# Regras de enrosco do material.
+		var speed := rope.vel[i].length()
+		var hold := rope.c_hold[i]
+		if hold < 0.0:
+			hold = minf(hold + dt, 0.0)
+		elif dev > 0.5 and t_max > float(mat[2]) and speed < 0.08:
+			hold += dt
+		else:
+			hold = maxf(hold - dt * 2.0, 0.0)
+		rope.c_hold[i] = hold
+		if hold >= 0.0 and (dev > float(mat[1]) or hold > float(mat[3])):
+			rope.pin_node(i, p, float(mat[0]), randf_range(float(mat[4]), float(mat[5])), idx)
+			snagged_now = what
+			last_snag = what
+		else:
+			# A linha corre por cima do obstáculo (atrito cinético, cabrestante).
+			_capstan(rope, i, dev, t_hand, t_kite, float(mat[0]), dt)
+		i -= 1
+	return snagged_now
+
+
+## Distância do nó até a superfície (>0 = afastado).
+func _surface_gap(e: Array, p: Vector3) -> float:
+	match e[0]:
+		Kind.CAPSULE:
+			var q: Vector3 = _axis_point(e[1], e[2], p)[0]
+			return p.distance_to(q) - float(e[3]) - LINE_RADIUS
+		Kind.BOX:
+			var box: AABB = e[1]
+			var c := p.clamp(box.position, box.end)
+			return p.distance_to(c)
+	return 1.0
+
+
+## Cabrestante: o material da linha só passa pelo contato se um lado vencer o
+## outro × e^(μθ). Transfere comprimento de repouso entre os dois trechos.
+func _capstan(rope: Rope, i: int, dev: float, t_hand: float, t_kite: float, mu: float, dt: float) -> void:
+	if i >= rope.rest.size():
+		return
+	var ratio := exp(mu * dev)
+	var move := 0.0
+	if t_kite > t_hand * ratio + 0.05:
+		move = minf((t_kite - t_hand * ratio) * 0.8, 6.0) * dt          # pipa puxa linha
+	elif t_hand > t_kite * ratio + 0.05:
+		move = -minf((t_hand - t_kite * ratio) * 0.8, 6.0) * dt         # mão puxa linha
+	if move != 0.0:
+		move = clampf(move, -(rope.rest[i] - 0.05), rope.rest[i - 1] - 0.05)
+		rope.rest[i - 1] -= move
+		rope.rest[i] += move
+	# O trecho vizinho acabou: o próximo nó comum chega ao contato e a sobra
+	# continua passando (a linha inteira corre por cima, não só um segmento).
+	if rope.rest[i - 1] < 0.12 and i - 1 > 0 and rope.pin_obstacle[i - 1] < 0 and rope.pinned[i - 1] == 0:
+		rope.remove_node(i - 1)
+	elif i < rope.rest.size() and rope.rest[i] < 0.12 and i + 1 < rope.pos.size() and rope.pin_obstacle[i + 1] < 0 and rope.pinned[i + 1] == 0:
+		rope.remove_node(i + 1)
+
+
+# --- Pipa e rabiola -------------------------------------------------------------
+
+## Contato da PIPA com o cenário. Empurra para fora de galhos/postes/fios (quica e
+## escorrega) e retorna [nome, ponto] só quando ela PRENDE de verdade:
+##  - o fio/galho passou entre o cabresto e a vela (o cabresto enganchou);
+##  - entrou fundo na copa, devagar (presa na folhagem).
+func kite_contact(body: KiteRigidBody, knot: Vector3, anchors: PackedVector3Array, dt: float) -> Array:
+	var x := body.x
+	var rad := body.profile.height * 0.45
+	for idx in query(x):
+		var e: Array = entries[idx]
+		match e[0]:
+			Kind.CANOPY:
+				var c: Vector3 = e[1]
+				var r: float = e[2]
+				var depth := r - x.distance_to(c)
+				if depth > 0.0:
+					# Folhagem freia a pipa; fundo e devagar = presa.
+					body.v *= exp(-4.0 * dt)
+					body.w *= exp(-3.0 * dt)
+					if depth > r * 0.35 and body.airspeed < 2.5:
+						return ["árvore", x]
+			Kind.CAPSULE:
+				var a: Vector3 = e[1]
+				var b: Vector3 = e[2]
+				var cr: float = e[3]
+				# Cabresto enganchado: o eixo cruza os triângulos do cabresto.
+				for k in anchors.size():
+					var a1 := anchors[k]
+					var a2 := anchors[(k + 1) % anchors.size()]
+					if _segment_triangle(a, b, knot, a1, a2):
+						return [e[4], x]
+				var q: Vector3 = _axis_point(a, b, x)[0]
+				var d := x - q
+				var dist := d.length()
+				if dist < cr + rad * 0.5 and dist > 1e-5:
+					var nrm := d / dist
+					body.x = q + nrm * (cr + rad * 0.5)
+					var vn := body.v.dot(nrm)
+					if vn < 0.0:
+						body.v -= nrm * vn * 1.4   # quica
+					body.v *= 0.85
+	return []
+
+
+## Segmento × triângulo (Möller–Trumbore).
+static func _segment_triangle(p0: Vector3, p1: Vector3, a: Vector3, b: Vector3, c: Vector3) -> bool:
+	var d := p1 - p0
+	var e1 := b - a
+	var e2 := c - a
+	var h := d.cross(e2)
+	var det := e1.dot(h)
+	if absf(det) < 1e-9:
+		return false
+	var f := 1.0 / det
+	var s := p0 - a
+	var u := f * s.dot(h)
+	if u < 0.0 or u > 1.0:
+		return false
+	var qv := s.cross(e1)
+	var v := f * d.dot(qv)
+	if v < 0.0 or u + v > 1.0:
+		return false
+	var t := f * e2.dot(qv)
+	return t >= 0.0 and t <= 1.0
+
+
+## A rabiola (plástico mole) engancha quando enrola num galho ou fio.
+func tail_hit(p: Vector3) -> bool:
+	for idx in query(p):
+		var e: Array = entries[idx]
+		match e[0]:
+			Kind.CAPSULE:
+				var q: Vector3 = _axis_point(e[1], e[2], p)[0]
+				if String(e[4]) in ["fio", "galho", "cruzeta"] and p.distance_to(q) < float(e[3]) + 0.04:
+					return true
+			Kind.CANOPY:
+				if p.distance_to(e[1]) < float(e[2]) * 0.55:
+					return true
+	return false
