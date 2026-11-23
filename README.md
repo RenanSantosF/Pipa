@@ -8,6 +8,8 @@ Jogo de pipa em primeira pessoa num bairro brasileiro, para Android (Godot 4.7 /
 
 ## Como baixar o APK pelo celular
 
+> Todos os APKs a partir de agora usam a mesma chave (`android/debug.keystore`), então cada versão instala por cima da anterior.
+
 Cada push gera um APK automaticamente (GitHub Actions):
 
 1. No GitHub, abra **Releases** → **apk-latest** → baixe `pipa-debug.apk`.
@@ -16,18 +18,22 @@ Cada push gera um APK automaticamente (GitHub Actions):
 
 Também ficam disponíveis: o *artifact* `pipa-debug-apk` na execução do workflow e a branch `apk-builds`.
 
-## Controles (gestos — sem botões de ação)
+## Controles (gestos)
 
-| Gesto | Onde | O que faz |
-|---|---|---|
-| Arrastar **para baixo** | metade direita | **braçada**: a distância do arrasto é o tamanho do puxão e a velocidade do dedo é a força. Ao tirar o dedo, a mão volta e a linha puxada fica **no chão** |
-| Arrastar **para cima** | metade direita | **abrir a mão / dar linha**: quanto mais alto, mais solta. A linha corre com a força da pipa |
-| Fazer **círculos** | metade direita | **enrolar na lata**: enrola primeiro a linha do chão, depois a que voa |
-| Arrastar | faixa de cima | olhar em volta. A câmera **volta para a pipa sozinha, como uma mola** |
-| Joystick flutuante | metade esquerda | andar |
-| **NOVA** / **LINHA** | canto superior direito | nova pipa / trocar o tipo de linha (pura, rapinha, cerol, cerol fino, chilena) |
+| Gesto | O que faz |
+|---|---|
+| **Toque rápido** em qualquer lugar | **desbico**: a mão afrouxa (a pipa mergulha) e dá o tranco (ela sobe). Cada toque, um desbico |
+| Arrastar **para cima** (lado direito) | abrir a mão / **dar linha** |
+| Arrastar **para baixo** (lado direito) | braçada longa (a linha puxada vai para o chão) |
+| **Círculos** (lado direito) | enrolar na lata |
+| Arrastar na faixa de cima | olhar em volta (a câmera volta para a pipa como mola) |
+| Joystick (canto inferior esquerdo) | andar |
+| Ícones no canto | nova pipa · trocar linha · som |
 
-PC (testes): WASD anda · botão direito prende o mouse · Espaço = braçada · E = dar linha · Q = enrolar · R = nova pipa · T = trocar linha · F1 debug · F2 qualidade.
+A pipa **começa na mão**: vá desbicando e dando linha para levantar.
+Ela e a linha **enroscam** em árvores, postes, fios e telhados se você não controlar — trancos fortes soltam.
+
+PC (testes): Espaço = desbico · E = dar linha · F = braçada · Q = enrolar · R = nova pipa · T = trocar linha.
 
 ## Como é a física (resumo)
 

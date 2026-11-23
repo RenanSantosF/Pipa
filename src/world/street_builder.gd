@@ -31,7 +31,7 @@ const SURFACES := {
 }
 const POLES_PATH := "res://assets/models/poles/modular_electricity_poles_1k.gltf"
 const POLE_SCALE := 1.5
-const LEAVES := [Color(0.27, 0.45, 0.18), Color(0.33, 0.50, 0.20), Color(0.22, 0.40, 0.17), Color(0.38, 0.52, 0.22)]
+const LEAVES := [Color(1.0, 1.0, 1.0), Color(0.92, 0.98, 0.85), Color(1.0, 0.95, 0.85), Color(0.85, 0.92, 0.8)]
 
 ## Material das árvores (o World atualiza os parâmetros de vento).
 var tree_material: ShaderMaterial
@@ -68,6 +68,7 @@ func build() -> void:
 	_opaque_material.metallic_specular = 0.3
 	tree_material = ShaderMaterial.new()
 	tree_material.shader = load("res://src/world/tree_sway.gdshader")
+	tree_material.set_shader_parameter("leaves", load("res://assets/textures/foliage_cluster.png"))
 
 	_build_ground()
 	_build_street()
@@ -125,8 +126,34 @@ func add_tree(base: Vector3, canopy_radius: float, height: float) -> void:
 		var off := Vector3(_rng.randf_range(-0.6, 0.6), _rng.randf_range(-0.4, 0.3), _rng.randf_range(-0.6, 0.6)) * canopy_radius
 		var r := canopy_radius * _rng.randf_range(0.7, 1.0)
 		var weight := 0.12 + 0.05 * height
-		tb.add_sphere(top + off, Vector3(r, r * 0.8, r), 9, 6, leaves.darkened(_rng.randf() * 0.12), Vector2(weight, phase))
+		_canopy_cards(tb, top + off, r, leaves.darkened(_rng.randf() * 0.12), Vector2(weight, phase))
 		obstacles.add_canopy(top + off, r * 0.9)
+		# Galho do tronco até a copa.
+		b.add_cylinder(Transform3D(Basis(_arc_basis(Vector3.UP, (top + off - (base + Vector3(0, trunk_h, 0))).normalized())), (base + Vector3(0, trunk_h, 0) + top + off) * 0.5), 0.06, (top + off).distance_to(base + Vector3(0, trunk_h, 0)), 5, TRUNK)
+
+
+## Copa feita de cartões de folhagem distribuídos num elipsoide, voltados para fora.
+func _canopy_cards(tb: MeshBatch, center: Vector3, r: float, color: Color, sway: Vector2) -> void:
+	var count := clampi(int(r * r * 12.0), 6, 48)
+	for _i in count:
+		var dir := Vector3(_rng.randf_range(-1, 1), _rng.randf_range(-0.6, 1.0), _rng.randf_range(-1, 1)).normalized()
+		var pos := center + dir * Vector3(r, r * 0.8, r) * _rng.randf_range(0.35, 0.95)
+		var out := (pos - center).normalized()
+		var right := out.cross(Vector3.UP)
+		if right.length() < 0.1:
+			right = Vector3.RIGHT
+		right = right.normalized().rotated(out, _rng.randf_range(-0.8, 0.8))
+		var up := right.cross(out).normalized() * -1.0
+		up = (up + out * 0.6).normalized()
+		var size := r * _rng.randf_range(0.8, 1.15)
+		var tint := color.lightened(_rng.randf_range(0.0, 0.15))
+		tb.add_card(pos, right, up, size, out, tint, sway)
+
+
+static func _arc_basis(from: Vector3, to: Vector3) -> Basis:
+	if from.dot(to) > 0.9999:
+		return Basis.IDENTITY
+	return Basis(Quaternion(from, to))
 
 
 # --- Partes do bairro -----------------------------------------------------------
@@ -152,12 +179,6 @@ func _build_street() -> void:
 			bs.add_box(_xf(Vector3(float(s) * (w + 0.06), 0.08, zc)), Vector3(0.12, 0.16, seg_len), CURB)
 			add_collider(_xf(Vector3(x, 0.075, zc)), Vector3(sw, 0.15, seg_len))
 		z += seg_len
-	# Remendos de asfalto e bueiros.
-	for _i in 18:
-		var pz := _rng.randf_range(-street_extent, street_extent)
-		var px := _rng.randf_range(-w + 0.6, w - 0.6)
-		var size := Vector3(_rng.randf_range(0.6, 2.2), 0.005, _rng.randf_range(0.6, 2.0))
-		batch_for(pz).add_box(_xf(Vector3(px, 0.022, pz)), size, ASPHALT.darkened(_rng.randf_range(0.1, 0.25)))
 
 
 func _build_lots(side: float) -> void:
@@ -222,7 +243,7 @@ func _build_vacant_lot(side: float, front: float, z0: float, width: float) -> vo
 		var p := Vector3(side * (front + _rng.randf_range(1.0, lot_depth - 1.0)), 0.2, _rng.randf_range(z0 + 0.5, z0 + width - 0.5))
 		var r := _rng.randf_range(0.4, 0.9)
 		var c: Color = LEAVES[_rng.randi() % LEAVES.size()]
-		tb.add_sphere(p, Vector3(r, r * 0.7, r), 7, 4, c.lightened(0.12), Vector2(0.1, _rng.randf() * TAU))
+		_canopy_cards(tb, p, r, c.lightened(0.15), Vector2(0.1, _rng.randf() * TAU))
 	# Entulho.
 	for _i in 4:
 		var p := Vector3(side * (front + _rng.randf_range(2.0, lot_depth - 2.0)), 0.2, _rng.randf_range(z0 + 1.0, z0 + width - 1.0))

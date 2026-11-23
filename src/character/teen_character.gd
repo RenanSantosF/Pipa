@@ -20,11 +20,9 @@ const WALK_ANIM_SPEED := 1.25
 static var _mesh_cache: Dictionary = {}
 static var _lib_cache: AnimationLibrary
 
-@export var first_person: bool = false:
-	set(v):
-		first_person = v
-		if _ik:
-			_ik.hide_head = v
+## Primeira pessoa: a câmera vê só os BRAÇOS (malha extraída do próprio corpo);
+## o corpo inteiro vira só sombra. Sem encolher ossos (evita vértices esticados).
+@export var first_person: bool = false
 
 ## Entradas (mundo).
 var right_hand_target := Vector3.ZERO
@@ -92,7 +90,8 @@ func _build_model(scene: PackedScene) -> void:
 	_ik.name = "ArmIK"
 	skeleton.add_child(_ik)
 	_ik.setup(skeleton)
-	_ik.hide_head = first_person
+	if first_person and body_mesh:
+		_setup_first_person()
 
 	var head := skeleton.find_bone("Head")
 	if head >= 0:
@@ -178,6 +177,73 @@ func _process(delta: float) -> void:
 		_ik.left_target = lata_pos - right * 0.02 - fwd * 0.03
 		_ik.right_pole = gt.origin + shoulder_h + right * 0.6 - Vector3.UP * 0.5 + gt.basis.z * 0.3
 		_ik.left_pole = gt.origin + shoulder_h - right * 0.6 - Vector3.UP * 0.5 + gt.basis.z * 0.3
+
+
+const ARM_WORDS := ["Arm", "Hand", "Index", "Middle", "Ring", "Little", "Thumb"]
+
+func _setup_first_person() -> void:
+	var arms := MeshInstance3D.new()
+	arms.name = "ArmsOnly"
+	arms.mesh = _arms_mesh(body_mesh.mesh as ArrayMesh, body_mesh.skin)
+	arms.skin = body_mesh.skin
+	arms.material_override = body_mesh.material_override
+	arms.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	body_mesh.get_parent().add_child(arms)
+	arms.transform = body_mesh.transform
+	arms.skeleton = arms.get_path_to(skeleton)
+	body_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_SHADOWS_ONLY
+	for mi in skeleton.find_children("*", "MeshInstance3D", true, false):
+		if mi != arms and mi != body_mesh:
+			(mi as MeshInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_SHADOWS_ONLY
+
+
+## Mantém só os triângulos presos aos ossos dos braços/mãos.
+static func _arms_mesh(src: ArrayMesh, skin: Skin) -> ArrayMesh:
+	var out := ArrayMesh.new()
+	if src == null or skin == null:
+		return out
+	var is_arm := PackedByteArray()
+	is_arm.resize(skin.get_bind_count())
+	for i in skin.get_bind_count():
+		var n := String(skin.get_bind_name(i))
+		is_arm[i] = 0
+		for wd in ARM_WORDS:
+			if n.contains(wd) and not n.contains("Shoulder"):
+				is_arm[i] = 1
+	for sidx in src.get_surface_count():
+		var arrays := src.surface_get_arrays(sidx)
+		var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+		var bones: PackedInt32Array = arrays[Mesh.ARRAY_BONES]
+		var weights: PackedFloat32Array = arrays[Mesh.ARRAY_WEIGHTS]
+		var idx: PackedInt32Array = arrays[Mesh.ARRAY_INDEX] if arrays[Mesh.ARRAY_INDEX] != null else PackedInt32Array()
+		if verts.is_empty() or bones.is_empty():
+			continue
+		var per := bones.size() / verts.size()
+		var arm_w := PackedFloat32Array()
+		arm_w.resize(verts.size())
+		for v in verts.size():
+			var aw := 0.0
+			for j in per:
+				var b := bones[v * per + j]
+				if b < is_arm.size() and is_arm[b] == 1:
+					aw += weights[v * per + j]
+			arm_w[v] = aw
+		if idx.is_empty():
+			idx.resize(verts.size())
+			for v in verts.size():
+				idx[v] = v
+		var keep := PackedInt32Array()
+		for t in range(0, idx.size(), 3):
+			if arm_w[idx[t]] > 0.5 and arm_w[idx[t + 1]] > 0.5 and arm_w[idx[t + 2]] > 0.5:
+				keep.append(idx[t])
+				keep.append(idx[t + 1])
+				keep.append(idx[t + 2])
+		if keep.is_empty():
+			continue
+		arrays[Mesh.ARRAY_INDEX] = keep
+		out.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+		out.surface_set_material(out.get_surface_count() - 1, src.surface_get_material(sidx))
+	return out
 
 
 func _build_lata() -> void:

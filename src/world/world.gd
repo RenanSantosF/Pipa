@@ -7,7 +7,7 @@ extends Node3D
 const HDRI_SUN_U := 0.6003
 const HDRI_SUN_ELEVATION := 19.07
 ## Giro do céu (graus) para o sol ficar ao lado/atrás do jogador, que olha a favor do vento.
-@export var sky_yaw_deg: float = 95.0
+@export var sky_yaw_deg: float = 0.0
 
 @onready var sun: DirectionalLight3D = $Sun
 @onready var street: StreetBuilder = $StreetBuilder
@@ -26,8 +26,8 @@ func _align_sun_with_sky() -> void:
 	env.sky_rotation = Vector3(0.0, yaw, 0.0)
 	var az := (HDRI_SUN_U - 0.5) * TAU
 	var el := deg_to_rad(HDRI_SUN_ELEVATION)
-	# Mapeamento do panorama do Godot: u = atan2(x, -z)/2π + 0,5.
-	var to_sun := Vector3(sin(az) * cos(el), sin(el), -cos(az) * cos(el))
+	# Mapeamento do panorama no Godot (medido renderizando o céu): u = atan2(-x, z)/2π + 0,5.
+	var to_sun := Vector3(-sin(az) * cos(el), sin(el), cos(az) * cos(el))
 	to_sun = Basis.from_euler(env.sky_rotation) * to_sun
 	sun.basis = Basis.looking_at(-to_sun, Vector3.UP)
 

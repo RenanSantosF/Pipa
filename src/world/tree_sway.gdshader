@@ -1,15 +1,17 @@
 shader_type spatial;
-// Balanço das copas das árvores pelo vento, todo na GPU (custo zero de CPU).
-// UV.x = peso do balanço (0 = parado), UV.y = fase própria de cada árvore.
-// Cores de vértice gravadas em sRGB.
+render_mode cull_disabled, diffuse_lambert_wrap, specular_schlick_ggx;
+// Copas de árvore com cartões de folhagem real (atlas de folhas Poly Haven, CC0).
+// UV  = coordenadas da textura de galho com folhas.
+// UV2 = (peso do balanço, fase própria da árvore). Balanço todo na GPU.
 
+uniform sampler2D leaves : source_color, filter_linear_mipmap, repeat_disable;
 uniform vec3 wind_direction = vec3(0.0, 0.0, -1.0);
 uniform float wind_strength = 0.25;
 uniform float gust = 1.0;
 
 void vertex() {
-	float w = UV.x;
-	float phase = UV.y;
+	float w = UV2.x;
+	float phase = UV2.y;
 	float t = TIME;
 	float sway = sin(t * 1.6 + phase) * 0.6 + sin(t * 2.9 + phase * 1.7) * 0.3;
 	float flutter = sin(t * 7.0 + phase * 3.0 + VERTEX.x * 2.0 + VERTEX.z * 2.0) * 0.08;
@@ -19,7 +21,12 @@ void vertex() {
 }
 
 void fragment() {
-	ALBEDO = pow(COLOR.rgb, vec3(2.2));
-	ROUGHNESS = 0.95;
-	SPECULAR = 0.2;
+	vec4 tex = texture(leaves, UV);
+	if (tex.a < 0.45) {
+		discard;
+	}
+	ALBEDO = tex.rgb * pow(COLOR.rgb, vec3(2.2));
+	ROUGHNESS = 0.75;
+	SPECULAR = 0.25;
+	BACKLIGHT = vec3(0.35, 0.4, 0.15);
 }

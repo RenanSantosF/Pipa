@@ -102,6 +102,21 @@ func add_sphere(center: Vector3, radius: Vector3, segments: int, rings: int, col
 			_smooth_tri(center, radius, d00, d11, d01, color, uv)
 
 
+## Cartão de folhagem (quad duplo-face). `up` aponta da base do galho (UV y=1) para a ponta.
+func add_card(center: Vector3, right: Vector3, up: Vector3, size: float, n: Vector3, color: Color, sway: Vector2) -> void:
+	var r := right * (size * 0.5)
+	var u := up * (size * 0.5)
+	var p := [center - r - u, center + r - u, center + r + u, center - r + u]
+	var uvs := [Vector2(0, 1), Vector2(1, 1), Vector2(1, 0), Vector2(0, 0)]
+	for idx in [0, 1, 2, 0, 2, 3]:
+		_st.set_color(color)
+		_st.set_normal(n)
+		_st.set_uv(uvs[idx])
+		_st.set_uv2(sway)
+		_st.add_vertex(p[idx])
+		_vertex_count += 1
+
+
 func _sph(theta: float, phi: float) -> Vector3:
 	return Vector3(sin(theta) * cos(phi), cos(theta), sin(theta) * sin(phi))
 
@@ -127,7 +142,7 @@ func _vertex(p: Vector3, n: Vector3, color: Color, uv: Vector2) -> void:
 	_st.set_color(Color.WHITE.lerp(color, tint) if tint < 1.0 else color)
 	_st.set_normal(n)
 	if _with_uv:
-		_st.set_uv(uv)
+		_st.set_uv2(uv)
 	elif textured:
 		# Projeção pelo eixo dominante da normal (tiling contínuo entre peças).
 		var an := n.abs()

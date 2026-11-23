@@ -36,8 +36,6 @@ func _process_modification() -> void:
 	var sk := get_skeleton()
 	if sk == null:
 		return
-	if hide_head and _head >= 0:
-		sk.set_bone_pose_scale(_head, Vector3.ONE * 0.001)
 	var inv := sk.global_transform.affine_inverse()
 	if _ru >= 0 and _rl >= 0 and _rh >= 0 and right_weight > 0.0:
 		_solve(sk, _ru, _rl, _rh, inv * right_target, inv * right_pole, right_weight)
