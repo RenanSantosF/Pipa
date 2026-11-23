@@ -28,6 +28,8 @@ var _capturing: bool = false
 
 func start(p_main) -> void:
 	main = p_main
+	# Mostra a interface de toque (botão PUXAR etc.) também nas capturas do PC.
+	main.gestures.visible = true
 	_shots = SHOTS.duplicate()
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--only="):

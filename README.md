@@ -22,11 +22,11 @@ Também ficam disponíveis: o *artifact* `pipa-debug-apk` na execução do workf
 
 | Gesto | O que faz |
 |---|---|
-| **Toque na metade esquerda** | **desbico para a esquerda**: braçada rápida e a pipa volta sozinha |
-| **Toque na metade direita** | **desbico para a direita** |
-| **Dois toques rápidos** | **desbicada dupla**: lado do 1º toque → lado oposto |
-| Toques seguidos para o mesmo lado | cada um empurra antes do retorno: a pipa vai mais longe |
-| Perto do chão | o desbico sai quase reto: serve para levantar a pipa |
+| **Segurar na metade esquerda** | **desbico para a esquerda**: dá linha, o bico gira e a pipa mergulha na diagonal; **soltar** = retoma a linha e ela se recupera |
+| **Segurar na metade direita** | **desbico para a direita** |
+| **Dois toques rápidos** | **desbicada dupla** (lado do 1º toque → oposto) |
+| **Botão PUXAR** (canto inferior direito) | **puxão** no instante do toque: a pipa dispara para onde o bico aponta; toques seguidos = puxões seguidos (mão sobre mão); segurar = em série |
+| Desbica e puxa | a jogada básica: desbica até o bico apontar para onde você quer e puxa |
 | Arrastar **para cima** (lado direito) | abrir a mão / **dar linha** |
 | Arrastar **para baixo** (lado direito) | braçada longa (a linha puxada vai para o chão) |
 | **Círculos** (lado direito) | enrolar na lata |
@@ -34,12 +34,14 @@ Também ficam disponíveis: o *artifact* `pipa-debug-apk` na execução do workf
 | Joystick (canto inferior esquerdo) | andar |
 | Ícones no canto | nova pipa · trocar linha · som · **tamanho P/M/G** · **envergadura** |
 
-A pipa **começa na mão**: vá desbicando e dando linha para levantar.
+A pipa **começa na mão**: vá dando puxões (perto do chão eles saem de lado, em zigue-zague) e, com ela subindo, dê linha.
 **Envergadura** (quanto a travessa é arqueada) muda tudo: muita envergadura = pipa estável, desbico **fino e curto**; pouca = desbico **longo**, pipa arisca.
 
 **Encostar não é enroscar**: a linha que encosta em fio, telhado, poste ou galho **desliza** com atrito (barrida). Ela só **enrosca** quando dá volta, cai por cima de um galho ou aperta forte contra a casca. Solta quando endireita, ou com tranco até o galho quebrar. No fio ela nunca trava: fica pendurada e escorrega ao longo dele. A pipa só prende se o fio/galho entrar no cabresto (ou se cair fundo na copa).
 
-PC (testes): clique esquerdo/← = desbico esquerda · clique direito/→ = desbico direita · Espaço = dupla · Tab = olhar com o mouse · E = dar linha · F = braçada · Q = enrolar · R = nova pipa · T = trocar linha · Y = tamanho · U = envergadura.
+PC (testes): segurar clique esquerdo/← = desbico esquerda · segurar clique direito/→ = desbico direita · F = puxão · Espaço = dupla · Tab = olhar com o mouse · E = dar linha · G = braçada lenta · Q = enrolar · R = nova pipa · T = trocar linha · Y = tamanho · U = envergadura.
+
+Detalhes do desbico e do puxão (medições antes/depois): `docs/DESBICO_PUXAO.md`.
 
 ## Como é a física (resumo)
 
