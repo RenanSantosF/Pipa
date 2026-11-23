@@ -45,6 +45,8 @@ const MATERIALS := {
 ##  BOX:     [kind, AABB, nome]
 var entries: Array = []
 var _grid: Dictionary = {}
+## Altura do topo mais alto de cada célula: linha acima disso nem é testada.
+var _cell_top: Dictionary = {}
 ## Nome do último enrosco (para avisos/HUD).
 var last_snag: String = ""
 ## A pipa consultada por último em kite_contact está dentro de uma copa?
@@ -86,6 +88,13 @@ func _insert(e: Array, mn: Vector3, mx: Vector3) -> void:
 			var arr: PackedInt32Array = _grid[key]
 			arr.append(idx)
 			_grid[key] = arr
+			_cell_top[key] = maxf(_cell_top.get(key, -INF), mx.y)
+
+
+## Algum obstáculo da célula de p chega até a altura de p (+ folga)?
+func below_top(p: Vector3, margin: float = 0.3) -> bool:
+	var key := Vector2i(floori(p.x / CELL), floori(p.z / CELL))
+	return p.y < float(_cell_top.get(key, -INF)) + margin
 
 
 func query(p: Vector3) -> PackedInt32Array:
@@ -285,6 +294,8 @@ func _foliage_drag(rope: Rope, dt: float) -> void:
 		if rope.inv_mass[i] <= 0.0:
 			continue
 		var p := rope.pos[i]
+		if not below_top(p):
+			continue
 		for idx in query(p):
 			var e: Array = entries[idx]
 			if e[0] == Kind.CANOPY and p.distance_to(e[1]) < float(e[2]):
@@ -302,6 +313,8 @@ func _absorb_nodes(rope: Rope) -> void:
 		if rope.pin_obstacle[i] >= 0 or rope.contact_count() >= MAX_CONTACTS:
 			continue
 		var p := rope.pos[i]
+		if not below_top(p):
+			continue
 		for idx in query(p):
 			if _contacts_on(rope, idx) >= MAX_PER_OBSTACLE:
 				continue
@@ -331,6 +344,9 @@ func _detect(rope: Rope) -> void:
 		var a := rope.pos[i]
 		var b := rope.pos[i + 1] if i + 1 < n else rope.end_point()
 		var mid := (a + b) * 0.5
+		var low := Vector3(mid.x, minf(a.y, b.y), mid.z)
+		if not (below_top(low, 1.6) or below_top(Vector3(a.x, low.y, a.z), 1.6) or below_top(Vector3(b.x, low.y, b.z), 1.6)):
+			continue
 		var ids := query(mid)
 		if ids.is_empty():
 			continue

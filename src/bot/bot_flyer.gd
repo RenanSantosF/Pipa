@@ -40,7 +40,7 @@ var _rng := RandomNumberGenerator.new()
 
 func _ready() -> void:
 	process_physics_priority = -50
-	_rng.randomize()
+	_rng.seed = randi()  # segue a semente global (testes reproduzíveis com --seed)
 	_style_release = _rng.randf() < 0.5
 	_timer = _rng.randf_range(0.5, 4.0)
 
@@ -104,7 +104,7 @@ func _physics_process(delta: float) -> void:
 			_recovering = true
 			reel = 4.0
 			if rig.flying_length() < 3.0:
-				rig.cut(0.05)  # pipa recolhida: guarda e relança
+				rig.stow()  # pipa recolhida: guarda e relança
 				_state = State.WAIT
 				_timer = _rng.randf_range(1.0, 3.0)
 				_recovering = false
@@ -121,7 +121,8 @@ func _physics_process(delta: float) -> void:
 				if _tap_timer <= 0.0:
 					_tap(-_hand.last_side)  # zigue-zague para subir
 					_tap_timer = _rng.randf_range(0.45, 0.7)
-				if rig.tension > 0.8 and rig.flying_length() < _target_length:
+				# Só dá linha com a pipa alta e puxando (senão ela cai).
+				if rig.tension > 1.2 and _hand.line_elevation() > 0.5 and rig.flying_length() < _target_length:
 					grip = 0.3
 				if rig.flying_length() >= _target_length and alt > 12.0:
 					_state = State.HUNT
@@ -159,6 +160,14 @@ func _hunt(alt: float) -> Array:
 			_tap_timer = _rng.randf_range(1.2, 2.0)
 		return [pull, grip]
 	var b := rig.body
+	# Desbicos seguidos para um lado levam a pipa para a beira da janela e ela
+	# desce: baixa demais, para de caçar e volta a subir (zigue-zague, sem dar linha).
+	if alt < 10.0 or _hand.line_elevation() < 0.45:
+		if _tap_timer <= 0.0:
+			_tap(-_hand.last_side)
+			_tap_timer = _rng.randf_range(0.5, 0.7)
+		rig.reel_rate = 0.6 if alt < 6.0 else 0.0
+		return [0.0, 1.0]
 	var tp := target.rope.pos
 	# Para cruzar a linha do alvo, a pipa precisa ATRAVESSAR o plano vertical da
 	# linha dele (mão → pipa). Vai para o outro lado desse plano, na altura da pipa dele.

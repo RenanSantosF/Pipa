@@ -230,6 +230,20 @@ func flying_length() -> float:
 	return rope.length() if rope else 0.0
 
 
+## Guarda a pipa (recolhida na mão): some sem virar pipa voada.
+func stow() -> void:
+	body = null
+	tail = null
+	rope = null
+	loose = false
+	held = false
+	snagged = false
+	wear.clear()
+	kite_visual.unbind()
+	tail_renderer.bind(null)
+	line_renderer.bind(null, line_type)
+
+
 ## Adota pipa + rabiola + trecho de linha de outra pipa que foi cortada (pipa voada).
 func adopt_loose(p_body: KiteRigidBody, p_tail: TailChain, p_rope: Rope) -> void:
 	body = p_body
@@ -435,7 +449,8 @@ func cut(s_cut: float) -> KiteRig:
 	lost.line_type = line_type
 	lost.display_name = display_name
 	get_parent().add_child(lost)
-	lost.adopt_loose(body, tail, kite_side)
+	# Sobra de linha muito curta presa na pipa não é simulada (instável e invisível).
+	lost.adopt_loose(body, tail, kite_side if kite_side.length() > 0.5 else null)
 	body = null
 	tail = null
 	wear.clear()

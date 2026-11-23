@@ -15,6 +15,8 @@ const LOOSE_LIFETIME := 45.0
 var rigs: Array[KiteRig] = []
 var combat := LineCombat.new()
 var frame_ms: float = 0.0
+## Parte do quadro gasta com o cenário (contatos da linha com obstáculos).
+var world_ms: float = 0.0
 var obstacles: WorldObstacles
 
 
@@ -45,7 +47,9 @@ func _physics_process(dt: float) -> void:
 		for r in rigs:
 			r.finalize(h)
 	combat.post_frame(dt, h, sub)
+	var tw := Time.get_ticks_usec()
 	_collide_with_world()
+	world_ms = float(Time.get_ticks_usec() - tw) / 1000.0
 	for r in rigs:
 		r.post_frame(dt, h)
 	# Cortes por atrito (quem cortou = dono da outra linha do contato).

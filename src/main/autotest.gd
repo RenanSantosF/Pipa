@@ -39,10 +39,17 @@ func start(p_main) -> void:
 	EventBus.line_cut.connect(_on_line_cut)
 	# Começa na mão, como no jogo.
 	seed(20260)
+	var size := KiteProfile.Size.M
+	var bow := KiteProfile.Bow.MEDIA
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--size="):
+			size = int(a.substr(7))
+		elif a.begins_with("--bow="):
+			bow = int(a.substr(6))
 	for r in [rig, bot_rig]:
 		r.profile = r.profile.duplicate()
-		r.profile.apply_size(KiteProfile.Size.M)
-		r.profile.apply_bow(KiteProfile.Bow.MEDIA)
+		r.profile.apply_size(size)
+		r.profile.apply_bow(bow)
 	rig.launch_in_hand(main.player.global_position + Vector3(0.2, 1.18, -0.3), Wind.get_direction())
 	print("AUTOTEST: início (vento %.1f m/s, linha %s)" % [Wind.base_speed, rig.line_type.display_name])
 
@@ -87,7 +94,9 @@ func _phase_flight(_delta: float) -> void:
 		# quando a pipa puxa (vai dando linha).
 		if fmod(_t, 0.6) < 1.0 / 60.0:
 			it.taps.append(-1.0 if int(_t / 0.6) % 2 == 0 else 1.0)
-		it.grip = 0.3 if (fmod(_t, 3.0) > 1.8 and rig.tension > 1.0) else 1.0
+		var d := rig.body.x - rig.hand_position()
+		var high := d.y / maxf(d.length(), 0.01) > 0.48   # linha acima de ~30°
+		it.grip = 0.3 if (fmod(_t, 3.0) > 1.8 and rig.tension > 1.0 and high) else 1.0
 	else:
 		it.grip = 1.0
 	if _t > 26.0:
@@ -123,6 +132,9 @@ func _start_combat() -> void:
 	# encosta na sua por baixo) e vai dando linha: as duas relam até alguém cortar.
 	rig.line_type = load("res://src/physics/lines/pura.tres")
 	bot_rig.line_type = load("res://src/physics/lines/chilena.tres")
+	for r in [rig, bot_rig]:
+		r.profile.apply_size(KiteProfile.Size.M)
+		r.profile.apply_bow(KiteProfile.Bow.MEDIA)
 	var wd := Wind.get_direction()
 	var side := wd.cross(Vector3.UP).normalized()
 	_side = side

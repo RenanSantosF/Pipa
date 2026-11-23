@@ -94,9 +94,17 @@ func desbico(side: float) -> void:
 
 ## Virou arrasto (puxar/dar linha) logo no começo: aborta o desbico.
 func cancel() -> void:
-	if _active and _t < SLACK_END + 0.05:
+	if _active and _t < TUG_END:
 		_active = false
 		_queue.clear()
+
+
+## Ângulo da linha acima do horizonte (rad), da mão até a pipa.
+func line_elevation() -> float:
+	if rig == null or rig.body == null:
+		return 0.0
+	var d := rig.body.x - rig.hand_position()
+	return asin(clampf(d.y / maxf(d.length(), 0.01), -1.0, 1.0))
 
 
 static func _smooth(a: float, b: float, x: float) -> float:
@@ -121,8 +129,8 @@ func update(delta: float, pull_stroke: float, grip_in: float, reel: float) -> vo
 		elif _t < TUG_END:
 			stroke = lerpf(_tug_from, TUG_STROKE * strength, _smooth(SLACK_END, TUG_END - 0.02, _t))
 			pitch = -0.6
-			if auto_feed:
-				grip = minf(grip, 0.35)  # pipa puxando forte: a linha escorrega → ela sobe
+			if auto_feed and line_elevation() > 0.5:
+				grip = minf(grip, 0.35)  # pipa alta puxando forte: a linha escorrega → ela sobe
 		elif _t < RETURN_END:
 			# A mão devolve a linha (pequena folga): a pipa perde tração e a rabiola
 			# (pêndulo) traz o bico de volta mais rápido.

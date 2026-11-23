@@ -19,6 +19,12 @@ func start(p_main) -> void:
 
 func _physics_process(delta: float) -> void:
 	_t += delta
+	if _t < 30.0 and fmod(_t, 0.5) < delta:
+		for b in main.bots:
+			var bb: BotFlyer = b
+			var rr := bb.rig
+			if rr and rr.body:
+				print("BOTDBG t=%4.1f %s est=%d alt_mão=%.1f T=%.2f L=%.1f contatos=%d presa=%s ar=%.1f perfil=%s" % [_t, rr.display_name, bb._state, rr.body.x.y - rr.hand_position().y, rr.tension, rr.flying_length(), rr.rope.contact_count() if rr.rope else -1, str(rr.snagged), rr.body.airspeed, rr.profile.describe()])
 	if fmod(_t, 5.0) < delta:
 		var pr: KiteRig = main.player_rig
 		var line := ""
@@ -31,7 +37,7 @@ func _physics_process(delta: float) -> void:
 				for p in pr.rope.pos:
 					d = minf(d, p.distance_to(r.body.x))
 			line += " | %s est=%d alt=%.0f L=%.0f dist_linha=%.1f" % [r.display_name if r else "-", bot._state, (r.body.x.y - Ground.height_at(r.body.x.x, r.body.x.z)) if r and r.body else -1.0, r.flying_length() if r else 0.0, d]
-		print("BOTS t=%4.0f contatos=%d%s" % [_t, main.physics_world.combat.contacts.size(), line])
+		print("BOTS t=%4.0f física=%.1fms cenário=%.1fms contatos=%d%s" % [_t, main.physics_world.frame_ms, main.physics_world.world_ms, main.physics_world.combat.contacts.size(), line])
 	if _t > 70.0:
 		print("BOTS cortes: ", _cuts)
 		get_tree().quit(0)

@@ -96,7 +96,7 @@ func _input(event: InputEvent) -> void:
 			var info: Array = _starts[sd.index]
 			info[2] = maxf(info[2], (sd.position - (info[1] as Vector2)).length())
 			if sd.index == _tap_index and float(info[2]) >= TAP_MOVE:
-				if _time - float(info[0]) < 0.15:
+				if _time - float(info[0]) < 0.2:
 					intent.cancel_desbico = true  # virou arrasto logo: aborta o desbico
 				_tap_index = -1
 		if sd.index == _joy_index:

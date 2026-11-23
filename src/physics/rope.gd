@@ -272,7 +272,11 @@ func feed(delta_len: float) -> void:
 		var new_pos := pos[1] + dir * minf(segment_target, dl)
 		insert_node(1, new_pos, vel[1], rest[0] - segment_target, segment_target)
 	# Remove nós quando o primeiro segmento fica curto.
-	while rest[0] < segment_target * 0.4 and pos.size() > min_nodes and pinned[1] == 0 and pin_obstacle[1] < 0:
+	# Recolhendo: o trecho junto da mão sai de qualquer contato (a mão puxa a linha
+	# de cima do telhado/galho) e o nó é absorvido.
+	while rest[0] < segment_target * 0.4 and pos.size() > min_nodes:
+		if pin_obstacle[1] >= 0:
+			clear_contact(1)
 		remove_node(1)
 	_update_material_coords()
 

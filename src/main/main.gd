@@ -38,11 +38,43 @@ func _bot_spots(street: StreetBuilder, center: Vector3, n: int) -> Array:
 	var angles := [-70.0, 35.0, -25.0, 75.0]
 	var radii := [22.0, 18.0, 30.0, 26.0]
 	for i in n:
-		var d := back.rotated(Vector3.UP, deg_to_rad(angles[i % angles.size()]))
-		var p: Vector3 = center + d * float(radii[i % radii.size()])
-		p.y = street.obstacles.top_at(p.x, p.z) + 0.05
-		out.append(p)
+		var best := Vector3.ZERO
+		# Procura em volta do ponto planejado um lugar com o céu livre a favor do vento
+		# (pipa sobe sem cair direto numa copa, fio ou casa).
+		for tries in 24:
+			var ang: float = angles[i % angles.size()] + (float(tries % 6) - 2.5) * 12.0
+			var rad: float = radii[i % radii.size()] + float(tries / 6) * 6.0
+			var d := back.rotated(Vector3.UP, deg_to_rad(ang))
+			var p: Vector3 = center + d * rad
+			p.y = street.obstacles.top_at(p.x, p.z) + 0.05
+			if best == Vector3.ZERO:
+				best = p
+			if _sky_clear(street.obstacles, p):
+				best = p
+				break
+		out.append(best)
 	return out
+
+
+## Céu livre a partir de p na direção do vento (subindo a ~45°) por 30 m?
+func _sky_clear(obs: WorldObstacles, p: Vector3) -> bool:
+	var d := (Wind.get_direction() * 0.7 + Vector3.UP * 0.7).normalized()
+	for k in range(2, 31, 2):
+		var q := p + Vector3.UP * 1.2 + d * float(k)
+		for idx in obs.query(q):
+			var e: Array = obs.entries[idx]
+			match e[0]:
+				WorldObstacles.Kind.CANOPY:
+					if q.distance_to(e[1]) < float(e[2]) + 2.0:
+						return false
+				WorldObstacles.Kind.CAPSULE:
+					var res := LineCombat.closest_segments(q, q, e[1], e[2])
+					if float(res[2]) < float(e[3]) + 1.5:
+						return false
+				WorldObstacles.Kind.BOX:
+					if (e[1] as AABB).grow(1.0).has_point(q):
+						return false
+	return true
 
 
 func _spawn_bot(pos: Vector3, i: int) -> void:
@@ -75,6 +107,9 @@ func _spawn_bot(pos: Vector3, i: int) -> void:
 
 
 func _ready() -> void:
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--seed="):
+			seed(int(a.substr(7)))
 	var street: StreetBuilder = $World/StreetBuilder
 	player.global_position = street.spawn_point
 	var z0 := street.spawn_point.z
