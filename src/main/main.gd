@@ -153,6 +153,9 @@ func _ready() -> void:
 		add_child(probe)
 		probe.call("start", self)
 		return
+	if args.has("--controlprobe"):
+		_attach("res://src/main/control_probe.gd")
+		return
 	if args.has("--botprobe"):
 		reset_kite()
 		_attach("res://src/main/bot_probe.gd")

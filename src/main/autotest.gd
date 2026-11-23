@@ -24,6 +24,9 @@ var _cut_time: float = -1.0
 var _done: bool = false
 var _hand_b0 := Vector3.ZERO
 var _side := Vector3.RIGHT
+const PILOT_PERIOD := 0.65
+const PILOT_HOLD := 0.15
+const PILOT_PULL := 0.18
 var _hand_b: KiteHand
 var _rise := 0.0
 
@@ -90,13 +93,14 @@ func _phase_flight(_delta: float) -> void:
 	it.stroke = 0.0
 	it.reel_rate = 0.0
 	if _t < 28.0:
-		# Desbico a cada 0,6 s alternando os lados (zigue-zague); entre eles, abre a mão
-		# quando a pipa puxa (vai dando linha).
-		if fmod(_t, 0.6) < 1.0 / 60.0:
-			it.taps.append(-1.0 if int(_t / 0.6) % 2 == 0 else 1.0)
+		# Como um pipeiro levantando a pipa: trancos a cada 0,6 s (soltando da mão
+		# eles saem de lado, em zigue-zague); com ela alta e puxando, de tempos em
+		# tempos abre a mão e deixa correr linha. Firme no alto: para de puxar.
 		var d := rig.body.x - rig.hand_position()
-		var high := d.y / maxf(d.length(), 0.01) > 0.48   # linha acima de ~30°
-		it.grip = 0.3 if (fmod(_t, 3.0) > 1.8 and rig.tension > 1.0 and high) else 1.0
+		var el := d.y / maxf(d.length(), 0.01)
+		if fmod(_t, 0.6) < 1.0 / 60.0:
+			it.pull_taps += 1
+		it.grip = 0.3 if (fmod(_t, 3.0) > 1.8 and rig.tension > 1.0 and el > 0.48) else 1.0
 	else:
 		it.grip = 1.0
 	if _t > 26.0:

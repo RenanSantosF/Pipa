@@ -119,7 +119,7 @@ func _physics_process(delta: float) -> void:
 			State.CLIMB:
 				# Desbica a cada ~0,6 s e dá linha quando a pipa puxa.
 				if _tap_timer <= 0.0:
-					_tap(-_hand.last_side)  # zigue-zague para subir
+					_pull()  # puxões para subir (a linha escorrega quando ela está alta)
 					_tap_timer = _rng.randf_range(0.45, 0.7)
 				# Só dá linha com a pipa alta e puxando (senão ela cai).
 				if rig.tension > 1.2 and _hand.line_elevation() > 0.5 and rig.flying_length() < _target_length:
@@ -156,7 +156,7 @@ func _hunt(alt: float) -> Array:
 	if target == null or not target.is_flying():
 		# Sem alvo: só mantém no alto com desbicos espaçados.
 		if _tap_timer <= 0.0:
-			_tap(-_hand.last_side)
+			_pull()
 			_tap_timer = _rng.randf_range(1.2, 2.0)
 		return [pull, grip]
 	var b := rig.body
@@ -164,7 +164,7 @@ func _hunt(alt: float) -> Array:
 	# desce: baixa demais, para de caçar e volta a subir (zigue-zague, sem dar linha).
 	if alt < 10.0 or _hand.line_elevation() < 0.45:
 		if _tap_timer <= 0.0:
-			_tap(-_hand.last_side)
+			_pull()
 			_tap_timer = _rng.randf_range(0.5, 0.7)
 		rig.reel_rate = 0.6 if alt < 6.0 else 0.0
 		return [0.0, 1.0]
@@ -188,13 +188,11 @@ func _hunt(alt: float) -> Array:
 	var h := rig.heading()
 	if absf(lateral) > 2.0 and _rng.randf() < aggression + 0.2:
 		if _tap_timer <= 0.0:
-			# Desbicos seguidos para o lado certo (cada um empurra antes do retorno).
-			_tap(need_side)
-			_tap_timer = lerpf(0.5, 0.32, clampf(absf(lateral) / 10.0, 0.0, 1.0)) * lerpf(1.2, 0.85, skill)
-			if signf(h) != need_side and _rng.randf() < 0.25 * skill:
-				_hand.double_desbico()
+			# Desbica para o lado (o bico gira) e puxa quando o bico aponta para lá.
+			_combo(need_side, clampf(absf(lateral) / 10.0, 0.0, 1.0))
+			_tap_timer = lerpf(1.1, 0.75, skill)
 	elif _tap_timer <= 0.0:
-		_tap(-_hand.last_side)
+		_pull()
 		_tap_timer = _rng.randf_range(0.9, 1.5)
 	if vertical > 4.0 and rig.tension > 0.8 and rig.flying_length() < _target_length * 1.4:
 		# Abaixo da pipa do alvo: dá linha (pipa sobe ganhando linha) + puxadas.
@@ -208,6 +206,21 @@ func _hunt(alt: float) -> Array:
 	return [pull, grip]
 
 
-func _tap(side: float) -> void:
+## Puxão (mão do vizinho).
+func _pull() -> void:
 	_hand.strength = lerpf(0.85, 1.1, skill)
-	_hand.desbico(side)
+	_hand.puxao()
+
+
+## Desbico para o lado (dá linha um tempo proporcional à distância) e, quando o
+## bico já girou, puxão: a pipa sai na direção do bico.
+func _combo(side: float, amount: float) -> void:
+	_hand.strength = lerpf(0.85, 1.1, skill)
+	_hand.press_desbico(side)
+	var hold := lerpf(0.3, 0.6, amount) * _rng.randf_range(0.85, 1.15)
+	get_tree().create_timer(hold, true, true).timeout.connect(func() -> void:
+		if _hand != null:
+			_hand.release_desbico())
+	get_tree().create_timer(hold + lerpf(0.12, 0.05, skill), true, true).timeout.connect(func() -> void:
+		if _hand != null and rig != null and rig.is_flying():
+			_hand.puxao())

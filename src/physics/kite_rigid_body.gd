@@ -20,6 +20,7 @@ extends RefCounted
 
 const RHO := 1.225
 const GRAVITY := Vector3(0.0, -9.8, 0.0)
+static var RELAX_DIHEDRAL := 0.0
 
 var profile: KiteProfile
 var mass: float = 0.03
@@ -38,6 +39,12 @@ var tail_local := Vector3.ZERO
 ## Diedro de repouso (envergadura) e flexão assimétrica atual (desbico).
 var dihedral: float = 0.17
 var sail_asym: float = 0.0
+## Vareta RELAXADA na folga (0 = linha esticada, 1 = sem tensão) e o viés da
+## relaxação para um lado (−1 esquerda … +1 direita), dado pelo jeito de soltar.
+## Vareta envergada sob carga fica simétrica; sem carga ela relaxa torta e o vento
+## na vela torta gira a pipa em torno da normal ("a pipa roda / vira o bico").
+var relax: float = 0.0
+var spin_bias: float = 0.0
 
 # Meias-velas: [esquerda, direita] — pontos locais planos, área.
 var _half_pts: Array[PackedVector3Array] = []
@@ -97,8 +104,11 @@ static func _poly_centroid(pts: Array) -> Vector2:
 ## Diedro de cada meia-vela agora (0 = esquerda, 1 = direita), com a flexão do desbico.
 ## sail_asym > 0: a meia-vela DIREITA fecha (vai para trás), a esquerda abre.
 func half_dihedral(i: int) -> float:
-	var s := sail_asym if i == 1 else -sail_asym
-	return clampf(dihedral + (s if s > 0.0 else s * 0.6), 0.0, 0.8)
+	# Folga: a vareta relaxa (menos envergada) e fica torta para o lado do desbico.
+	var a := sail_asym - spin_bias * relax * 0.1
+	var s := a if i == 1 else -a
+	var base := dihedral * (1.0 - RELAX_DIHEDRAL * relax)
+	return clampf(base + (s if s > 0.0 else s * 0.6), 0.0, 0.8)
 
 
 ## Normal local da meia-vela i (as pontas vão para trás = −Z).
@@ -218,6 +228,10 @@ func compute_forces() -> void:
 	airspeed = sp_sum * 0.5
 	lift = lift_sum
 	drag = drag_sum
+	# Vela torta na folga: momento em torno da normal (gira o BICO, sem força lateral).
+	if spin_bias != 0.0 and relax > 0.0:
+		var qa := 0.5 * RHO * airspeed * airspeed * (_half_area[0] + _half_area[1]) * profile.height
+		_torque += (q * Vector3.BACK) * (-spin_bias * profile.spin_coef * qa * relax)
 	var span := profile.width * profile.height * 0.5 * profile.height * profile.height
 	_torque -= w * (profile.rotational_damping * 0.5 * RHO * maxf(airspeed, 1.0) * span)
 

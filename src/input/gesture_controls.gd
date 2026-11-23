@@ -2,9 +2,11 @@ class_name GestureControls
 extends Control
 ## Controles por GESTOS, quase sem interface:
 ##
-##   TOQUE na metade ESQUERDA  → desbico para a esquerda
-##   TOQUE na metade DIREITA   → desbico para a direita
-##   DOIS TOQUES rápidos       → desbicada dupla (lado do 1º toque → oposto)
+##   SEGURAR na metade ESQUERDA → desbico para a esquerda (dá linha enquanto segura;
+##   SEGURAR na metade DIREITA  → desbico para a direita   soltou = retoma a linha)
+##   DOIS TOQUES rápidos        → desbicada dupla (lado do 1º toque → oposto)
+##   Botão PUXAR (canto inferior direito) → puxão no instante do toque; toques
+##                                seguidos = puxões seguidos; segurar = em série
 ##   Arrastar para BAIXO (lado direito) → braçada longa
 ##   Arrastar para CIMA  (lado direito) → abrir a mão / dar linha
 ##   CÍRCULOS            (lado direito) → enrolar na lata
@@ -30,6 +32,9 @@ const SPOOL_RADIUS := 0.06
 const REEL_GAIN := 1.6
 const REEL_MAX := 4.5
 const ICON_R := 24.0
+## Botão de puxar: raio (px) e margem do canto inferior direito.
+const PULL_R := 62.0
+const PULL_MARGIN := 34.0
 
 @onready var joystick: TouchJoystick = $Joystick
 
@@ -56,6 +61,8 @@ var _reel_omega: float = 0.0
 var _time: float = 0.0
 var _taps_fx: Array = []       # [posição, idade]
 var _tap_index: int = -1
+var _pull_index: int = -1
+var _pull_fx: float = 1.0
 ## Rótulos curtos dos ícones de tamanho/envergadura (atualizados pelo Main).
 var size_label: String = "M"
 var bow_level: int = 1
@@ -96,8 +103,7 @@ func _input(event: InputEvent) -> void:
 			var info: Array = _starts[sd.index]
 			info[2] = maxf(info[2], (sd.position - (info[1] as Vector2)).length())
 			if sd.index == _tap_index and float(info[2]) >= TAP_MOVE:
-				if _time - float(info[0]) < 0.2:
-					intent.cancel_desbico = true  # virou arrasto logo: aborta o desbico
+				intent.release_desbico()   # virou arrasto (olhar/linha): retoma a linha
 				_tap_index = -1
 		if sd.index == _joy_index:
 			joystick.move(sd.position)
@@ -108,17 +114,29 @@ func _input(event: InputEvent) -> void:
 			_line_drag(sd.position)
 
 
+func pull_center() -> Vector2:
+	return Vector2(size.x - PULL_MARGIN - PULL_R, size.y - PULL_MARGIN - PULL_R)
+
+
 func _down(index: int, pos: Vector2) -> void:
 	var ic := _icon_at(pos)
 	if ic != "":
 		_icon_down[index] = ic
 		queue_redraw()
 		return
+	# Botão PUXAR: responde no toque (sem esperar soltar), área generosa.
+	if pos.distance_to(pull_center()) < PULL_R * 1.25:
+		_pull_index = index
+		intent.pull_taps += 1
+		intent.pull_held = true
+		_pull_fx = 0.0
+		queue_redraw()
+		return
 	_starts[index] = [_time, pos, 0.0]
 	var is_joy := pos.x < size.x * MOVE_ZONE_X and pos.y > size.y * MOVE_ZONE_Y
-	if not is_joy:
+	if not is_joy and _tap_index == -1:
 		# Desbico na hora do toque (resposta imediata): lado = metade da tela.
-		intent.taps.append(-1.0 if pos.x < size.x * 0.5 else 1.0)
+		intent.press_desbico(-1.0 if pos.x < size.x * 0.5 else 1.0)
 		_taps_fx.append([pos, 0.0])
 		_tap_index = index
 	if is_joy:
@@ -141,6 +159,11 @@ func _down(index: int, pos: Vector2) -> void:
 
 
 func _up(index: int, pos: Vector2) -> void:
+	if index == _pull_index:
+		_pull_index = -1
+		intent.pull_held = false
+		queue_redraw()
+		return
 	if _icon_down.has(index):
 		var ic: String = _icon_down[index]
 		_icon_down.erase(index)
@@ -160,6 +183,7 @@ func _up(index: int, pos: Vector2) -> void:
 		return
 	_starts.erase(index)
 	if index == _tap_index:
+		intent.release_desbico()
 		_tap_index = -1
 	if index == _joy_index:
 		_joy_index = -1
@@ -240,6 +264,7 @@ func _process(delta: float) -> void:
 		intent.stroke = 0.0
 		intent.grip = 1.0
 	intent.gesture_mode = _mode if _line_index != -1 else ""
+	_pull_fx = minf(_pull_fx + delta / 0.25, 1.0)
 	for fx in _taps_fx:
 		fx[1] += delta
 	_taps_fx = _taps_fx.filter(func(fx) -> bool: return fx[1] < 0.35)
@@ -252,12 +277,20 @@ func get_move() -> Vector2:
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_APPLICATION_PAUSED:
-		for idx in [_joy_index, _look_index, _line_index]:
+		for idx in [_joy_index, _look_index, _line_index, _tap_index, _pull_index]:
 			if idx != -1:
 				_up(idx, Vector2(-999, -999))
 
 
 func _draw() -> void:
+	# Botão PUXAR: círculo grande com braço puxando a linha; pulsa a cada puxão.
+	var pc := pull_center()
+	var held := _pull_index != -1
+	draw_circle(pc, PULL_R, Color(0.06, 0.08, 0.11, 0.5 if held else 0.36))
+	draw_arc(pc, PULL_R - 1.0, 0.0, TAU, 64, Color(1.0, 0.82, 0.35, 0.95 if held else 0.55), 3.0, true)
+	if _pull_fx < 1.0:
+		draw_arc(pc, PULL_R + 14.0 * _pull_fx, 0.0, TAU, 64, Color(1.0, 0.82, 0.35, 0.8 * (1.0 - _pull_fx)), 4.0, true)
+	Icons.pull(self, pc, PULL_R * 0.55, Color(1, 1, 1, 0.95), Icons.ACCENT)
 	# Ícones (canto superior direito).
 	for ic in _icons():
 		var c: Vector2 = ic[1]

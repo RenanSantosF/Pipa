@@ -47,6 +47,9 @@ const BOW_NAMES := ["pouca", "média", "muita"]
 @export var rotational_damping: float = 0.05
 ## Curso da flexão assimétrica das varetas no desbico (rad de diedro a mais num lado).
 @export var flex_asym: float = 0.35
+## Momento da vela torta na folga (gira o bico): pouca envergadura = vareta mais
+## mole e torta → gira mais (pipa arisca); muita = gira menos (desbico fino).
+@export var spin_coef: float = 0.11
 
 @export_group("Cabresto")
 ## Posição do nó do cabresto ao longo da espinha, a partir do nariz (fração da altura).
@@ -104,6 +107,7 @@ func apply_bow(b: int) -> void:
 	bow = BOW_FRACTION[bow_class] * width * 0.5 * 2.2
 	# Vareta mais arqueada tem mais curso para fechar no desbico.
 	flex_asym = 0.25 + 1.2 * BOW_FRACTION[bow_class]
+	spin_coef = 0.11 * sqrt(BOW_FRACTION[1] / BOW_FRACTION[bow_class])
 
 
 func describe() -> String:

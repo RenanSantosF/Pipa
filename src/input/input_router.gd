@@ -1,9 +1,10 @@
 class_name InputRouter
 extends Node
 ## Junta gestos (GestureControls) e teclado/mouse (testes no PC) num PlayerIntent.
-## Teclado/mouse: WASD anda · clique ESQUERDO / ← = desbico para a esquerda ·
-## clique DIREITO / → = desbico para a direita · Espaço = desbicada dupla ·
-## botão do meio ou Tab prende o mouse para olhar · F segurado = braçada ·
+## Teclado/mouse: WASD anda · SEGURAR clique ESQUERDO / ← = desbico para a esquerda ·
+## SEGURAR clique DIREITO / → = desbico para a direita (soltou = retoma a linha) ·
+## Espaço = desbicada dupla · F = PUXÃO (toques seguidos; segurar = em série) ·
+## botão do meio ou Tab prende o mouse para olhar · G segurado = braçada lenta ·
 ## E = abrir a mão (dar linha) · Q = enrolar · R = nova pipa · T = trocar linha ·
 ## Y = tamanho da pipa · U = envergadura · F1 debug · F2 qualidade.
 
@@ -43,7 +44,8 @@ func _register_default_actions() -> void:
 	_add_keys("mouse_look", [KEY_TAB])
 	_add_keys("kite_size", [KEY_Y])
 	_add_keys("kite_bow", [KEY_U])
-	_add_keys("kite_pull", [KEY_F])
+	_add_keys("kite_puxao", [KEY_F])
+	_add_keys("kite_pull", [KEY_G])
 	_add_keys("kite_release", [KEY_E])
 	_add_keys("kite_reel", [KEY_Q])
 	_add_keys("kite_reset", [KEY_R])
@@ -68,18 +70,27 @@ func _unhandled_input(event: InputEvent) -> void:
 		if mb.pressed and not _is_touch_device():
 			match mb.button_index:
 				MOUSE_BUTTON_LEFT:
-					intent.taps.append(-1.0)
+					intent.press_desbico(-1.0)
 				MOUSE_BUTTON_RIGHT:
-					intent.taps.append(1.0)
+					intent.press_desbico(1.0)
 				MOUSE_BUTTON_MIDDLE:
 					_toggle_mouse()
+		elif not mb.pressed and not _is_touch_device() and mb.button_index in [MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT]:
+			intent.release_desbico()
 	elif event is InputEventMouseMotion:
 		if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 			intent.look_delta += (event as InputEventMouseMotion).relative * GameConfig.mouse_sensitivity
-	elif event.is_action_pressed("desbico_left"):
-		intent.taps.append(-1.0)
-	elif event.is_action_pressed("desbico_right"):
-		intent.taps.append(1.0)
+	elif event.is_action_pressed("desbico_left") and not event.is_echo():
+		intent.press_desbico(-1.0)
+	elif event.is_action_pressed("desbico_right") and not event.is_echo():
+		intent.press_desbico(1.0)
+	elif event.is_action_released("desbico_left") or event.is_action_released("desbico_right"):
+		intent.release_desbico()
+	elif event.is_action_pressed("kite_puxao") and not event.is_echo():
+		intent.pull_taps += 1
+		intent.pull_held = true
+	elif event.is_action_released("kite_puxao"):
+		intent.pull_held = false
 	elif event.is_action_pressed("desbico_double"):
 		intent.double_taps += 1
 	elif event.is_action_pressed("mouse_look"):

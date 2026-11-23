@@ -14,8 +14,15 @@ var stroke: float = 0.0
 var grip: float = 1.0
 ## Enrolando na lata (m/s).
 var reel_rate: float = 0.0
-## Desbicos pedidos desde a última leitura: lado de cada toque (−1 esquerda, +1 direita).
+## DESBICO segurado: dedo encostou (lado de cada toque: −1 esquerda, +1 direita) …
+var desbico_press: Array[float] = []
+## … e quantas vezes soltou (retoma a linha).
+var desbico_release: int = 0
+## Desbicos de toque completo (teclado/compatibilidade): lado de cada um.
 var taps: Array[float] = []
+## PUXÃO: toques no botão desde a última leitura e se o botão está segurado.
+var pull_taps: int = 0
+var pull_held: bool = false
 ## Desbicadas duplas pedidas de uma vez (teclado).
 var double_taps: int = 0
 ## O toque virou arrasto logo no começo: aborta o desbico.
@@ -25,6 +32,14 @@ var size_cycle: int = 0
 var bow_cycle: int = 0
 ## Modo do gesto atual (para feedback visual): "", "puxar", "soltar", "enrolar".
 var gesture_mode: String = ""
+
+
+func press_desbico(side: float) -> void:
+	desbico_press.append(side)
+
+
+func release_desbico() -> void:
+	desbico_release += 1
 
 
 func consume_look() -> Vector2:

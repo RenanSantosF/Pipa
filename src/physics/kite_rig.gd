@@ -50,6 +50,8 @@ var reel_rate: float = 0.0
 ##                   direita fecha). Desloca o centro de sustentação.
 var bridle_offset := Vector2.ZERO
 var sail_asym: float = 0.0
+## Viés da vareta relaxada na folga (−1..1), escrito pela mão no desbico.
+var spin_bias: float = 0.0
 ## A mão voltando da braçada joga a linha no chão? (falso no desbico: a linha escorrega)
 var shorten_on_return: bool = true
 ## Pipa ainda segura na mão (antes do primeiro desbico).
@@ -85,7 +87,6 @@ var _stroke_prev: float = 0.0
 var _was_on_ground: bool = false
 var _in_leaves: bool = false
 var _last_impact: float = -10.0
-var _no_shorten: bool = false
 var _x_frame_start := Vector3.ZERO
 var _ray := PhysicsRayQueryParameters3D.new()
 var _shape_query := PhysicsShapeQueryParameters3D.new()
@@ -194,6 +195,17 @@ func try_snag(obstacles: WorldObstacles, dt: float) -> void:
 	EventBus.kite_snagged.emit(self, snag_what)
 
 
+## Mão sobre mão: a outra mão pega a linha mais à frente — o trecho já puxado
+## (`amount`) vai para o chão e o braço recomeça sem soltar a pipa.
+func regrip(amount: float) -> void:
+	if rope == null or amount <= 0.0:
+		return
+	var a := minf(amount, maxf(rope.length() - MIN_LENGTH, 0.0))
+	rope.feed(-a)
+	pile += a
+	_stroke_prev = maxf(_stroke_prev - amount, 0.0)
+
+
 func release_hold() -> void:
 	held = false
 
@@ -265,6 +277,14 @@ func pre_frame(dt: float) -> void:
 		rope.snapshot_frame()
 	if body != null:
 		body.sail_asym = 0.0 if loose else sail_asym
+		# Relaxação da vareta pela tensão REAL no cabresto (linha esticada = vareta
+		# carregada e simétrica; frouxa = relaxa).
+		var m := profile.mass + profile.tail_mass
+		var t_full := 75.0 * m       # vareta toda carregada (pipa M: ~5 N)
+		var t_slack := 15.0 * m      # vareta solta (~1 N)
+		var t_end := rope.tension_end if rope != null and rope.end_body == body else 0.0
+		body.relax = clampf((t_full - t_end) / (t_full - t_slack), 0.0, 1.0)
+		body.spin_bias = 0.0 if loose else spin_bias
 		if rope != null and rope.end_body == body:
 			var off := Vector2.ZERO if loose else bridle_offset
 			rope.end_local = body.tow_local + Vector3(off.x, off.y, 0.0)
@@ -276,12 +296,7 @@ func _update_spool(dt: float) -> void:
 	# Braçada: mão voltando à posição de pegada → trecho puxado vai para o chão.
 	var prev_pos := maxf(_stroke_prev, 0.0)
 	var now_pos := maxf(stroke, 0.0)
-	# Sobra de um desbico (mão voltando) nunca encurta a linha.
-	if not shorten_on_return:
-		_no_shorten = true
-	elif stroke <= 0.001:
-		_no_shorten = false
-	if shorten_on_return and not _no_shorten and now_pos < prev_pos and rope.length() > MIN_LENGTH:
+	if shorten_on_return and now_pos < prev_pos and rope.length() > MIN_LENGTH:
 		var amount := prev_pos - now_pos
 		rope.feed(-amount)
 		pile += amount

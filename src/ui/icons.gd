@@ -110,3 +110,14 @@ static func bow(ci: CanvasItem, c: Vector2, s: float, level: int, col: Color = I
 	for k in 3:
 		var on := k <= level
 		ci.draw_circle(c + Vector2(-s * 0.5 + s * 0.5 * float(k), s * 0.95), 2.2, ACCENT if on else Color(col, 0.35))
+
+
+## Puxar: linha vindo da pipa (acima) até a mão, com seta de arranque para baixo.
+static func pull(ci: CanvasItem, c: Vector2, s: float, col: Color = INK, accent: Color = ACCENT) -> void:
+	var top := c + Vector2(s * 0.35, -s * 1.0)
+	var hand := c + Vector2(-s * 0.1, s * 0.15)
+	ci.draw_line(top, hand, Color(col, 0.7), 2.0, true)
+	kite(ci, top + Vector2(s * 0.1, -s * 0.05), s * 0.28, col, 1.6)
+	# Mão (punho fechado) e seta do arranque.
+	ci.draw_circle(hand, s * 0.2, col)
+	arrow(ci, hand + Vector2(-s * 0.05, s * 0.25), hand + Vector2(-s * 0.35, s * 0.85), accent, 4.0)
