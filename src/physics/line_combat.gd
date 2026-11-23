@@ -19,6 +19,7 @@ const BIN := 0.1
 const DAMAGE_SCALE := 0.22
 const GROUP := 4
 const HOOK_GAP := 0.03
+const MAX_PER_PAIR := 8
 
 
 class Contact:
@@ -133,9 +134,14 @@ func _test_segments(ra: KiteRig, rb: KiteRig, pa: PackedVector3Array, pb: Packed
 		crossed_normal = old_d.normalized()
 	var sa := ra.rope.material_at(ia, ta)
 	var sb := rb.rope.material_at(ib, tb)
+	var pair_count := 0
 	for ex in contacts:
-		if ex.a == ra and ex.b == rb and absf(ex.sa_prev - sa) < 1.0 and absf(ex.sb_prev - sb) < 1.0:
-			return
+		if ex.a == ra and ex.b == rb:
+			pair_count += 1
+			if (ex.ia == ia and ex.ib == ib) or (absf(ex.sa_prev - sa) < 1.0 and absf(ex.sb_prev - sb) < 1.0):
+				return
+	if pair_count >= MAX_PER_PAIR:
+		return  # linhas deitadas uma sobre a outra: poucos contatos bastam
 	var c := Contact.new()
 	c.a = ra
 	c.b = rb

@@ -51,6 +51,9 @@ func _spawn_bot(pos: Vector3, i: int) -> void:
 	var prof: KiteProfile = (load("res://src/kite/profiles/pipa_classica.tres") as KiteProfile).duplicate()
 	prof.color_a = BOT_COLORS[i % BOT_COLORS.size()][0]
 	prof.color_b = BOT_COLORS[i % BOT_COLORS.size()][1]
+	prof.pattern = (i + 1) % 4
+	prof.apply_size(randi() % 3)
+	prof.apply_bow(randi() % 3)
 	r.profile = prof
 	r.line_type = load("res://src/physics/lines/%s.tres" % BOT_LINES[randi() % BOT_LINES.size()])
 	r.display_name = "Vizinho %d" % (i + 2)
@@ -81,6 +84,14 @@ func _ready() -> void:
 	input_router.set_gesture_controls(gestures)
 	input_router.line_cycle_requested.connect(_cycle_line)
 	input_router.sound_toggle_requested.connect(_toggle_sound)
+	gestures.size_pressed.connect(func() -> void: input_router.intent.size_cycle += 1)
+	gestures.bow_pressed.connect(func() -> void: input_router.intent.bow_cycle += 1)
+	player_rig.profile = player_rig.profile.duplicate()
+	player_rig.profile.apply_size(KiteProfile.Size.M)
+	if bot_rig.profile:
+		bot_rig.profile = bot_rig.profile.duplicate()
+		bot_rig.profile.apply_size(randi() % 3)
+		bot_rig.profile.apply_bow(randi() % 3)
 	gestures.line_color = player_rig.line_type.color
 	player.input_router = input_router
 	player.rig = player_rig
@@ -140,6 +151,22 @@ func _cycle_line() -> void:
 	gestures.line_color = player_rig.line_type.color
 	reset_kite()
 	hud.show_message(player_rig.line_type.display_name, 1.5)
+
+
+func _process(_delta: float) -> void:
+	var it := input_router.intent
+	if it.size_cycle > 0 or it.bow_cycle > 0:
+		var p := player_rig.profile
+		if it.size_cycle > 0:
+			p.apply_size((p.size_class + it.size_cycle) % 3)
+		if it.bow_cycle > 0:
+			p.apply_bow((p.bow_class + it.bow_cycle) % 3)
+		it.size_cycle = 0
+		it.bow_cycle = 0
+		gestures.size_label = KiteProfile.SIZE_NAMES[p.size_class]
+		gestures.bow_level = p.bow_class
+		reset_kite()
+		hud.show_message(p.describe(), 1.8)
 
 
 func _toggle_sound() -> void:

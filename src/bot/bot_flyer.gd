@@ -29,8 +29,6 @@ var _hand: KiteHand
 var _state: int = State.WAIT
 var _timer: float = 0.0
 var _tap_timer: float = 0.0
-var _pressing: bool = false
-var _press_left: float = 0.0
 var _target_length: float = 30.0
 var _style_release: bool = true
 var _best_alt: float = 0.0
@@ -110,7 +108,6 @@ func _physics_process(delta: float) -> void:
 				_state = State.WAIT
 				_timer = _rng.randf_range(1.0, 3.0)
 				_recovering = false
-			_update_press(delta)
 			_hand.update(delta, 0.0, 1.0, reel)
 			rig.hand_rest = hand_rest()
 			return
@@ -122,8 +119,8 @@ func _physics_process(delta: float) -> void:
 			State.CLIMB:
 				# Desbica a cada ~0,6 s e dá linha quando a pipa puxa.
 				if _tap_timer <= 0.0:
-					_tap(0.08)
-					_tap_timer = _rng.randf_range(0.5, 0.75)
+					_tap(-_hand.last_side)  # zigue-zague para subir
+					_tap_timer = _rng.randf_range(0.45, 0.7)
 				if rig.tension > 0.8 and rig.flying_length() < _target_length:
 					grip = 0.3
 				if rig.flying_length() >= _target_length and alt > 12.0:
@@ -141,7 +138,6 @@ func _physics_process(delta: float) -> void:
 				else:
 					pull = 0.6 if fmod(phase, 0.6) < 0.3 else 0.0
 					grip = 0.25 if phase > 1.4 else 1.0
-	_update_press(delta)
 	_hand.auto_feed = _state == State.CLIMB
 	_hand.update(delta, pull, grip, maxf(reel, rig.reel_rate if _state == State.HUNT else 0.0))
 	rig.hand_rest = hand_rest()
@@ -159,7 +155,7 @@ func _hunt(alt: float) -> Array:
 	if target == null or not target.is_flying():
 		# Sem alvo: só mantém no alto com desbicos espaçados.
 		if _tap_timer <= 0.0:
-			_tap(0.08)
+			_tap(-_hand.last_side)
 			_tap_timer = _rng.randf_range(1.2, 2.0)
 		return [pull, grip]
 	var b := rig.body
@@ -183,11 +179,13 @@ func _hunt(alt: float) -> Array:
 	var h := rig.heading()
 	if absf(lateral) > 2.0 and _rng.randf() < aggression + 0.2:
 		if _tap_timer <= 0.0:
-			# Desbica para o lado certo; toque mais longo quanto mais longe.
-			_tap(0.12 + 0.3 * clampf(absf(lateral) / 10.0, 0.0, 1.0), need_side)
-			_tap_timer = 0.38 if signf(h) == need_side else 0.6
+			# Desbicos seguidos para o lado certo (cada um empurra antes do retorno).
+			_tap(need_side)
+			_tap_timer = lerpf(0.5, 0.32, clampf(absf(lateral) / 10.0, 0.0, 1.0)) * lerpf(1.2, 0.85, skill)
+			if signf(h) != need_side and _rng.randf() < 0.25 * skill:
+				_hand.double_desbico()
 	elif _tap_timer <= 0.0:
-		_tap(0.08)
+		_tap(-_hand.last_side)
 		_tap_timer = _rng.randf_range(0.9, 1.5)
 	if vertical > 4.0 and rig.tension > 0.8 and rig.flying_length() < _target_length * 1.4:
 		# Abaixo da pipa do alvo: dá linha (pipa sobe ganhando linha) + puxadas.
@@ -201,18 +199,6 @@ func _hunt(alt: float) -> Array:
 	return [pull, grip]
 
 
-func _tap(hold: float, forced_side: float = 0.0) -> void:
-	if _pressing:
-		return
-	_pressing = true
-	_press_left = hold
-	_hand.press(forced_side)
-
-
-func _update_press(delta: float) -> void:
-	if not _pressing:
-		return
-	_press_left -= delta
-	if _press_left <= 0.0:
-		_pressing = false
-		_hand.release()
+func _tap(side: float) -> void:
+	_hand.strength = lerpf(0.85, 1.1, skill)
+	_hand.desbico(side)

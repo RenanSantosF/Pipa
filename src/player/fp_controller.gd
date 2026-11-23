@@ -39,7 +39,6 @@ var _gravity: float = 9.8
 var _stroke_smooth: float = 0.0
 var _body_yaw: float = 0.0
 var _hand: KiteHand
-var _was_slack: bool = false
 
 ## Curva da mão num desbico (m; negativo = mão vai para a frente e afrouxa a linha).
 const DESBICO_TIME := 0.46
@@ -156,15 +155,15 @@ func _drive_rig(delta: float) -> void:
 	# Desbico/puxar/dar linha pela "mão do pipeiro" (mesma lógica dos vizinhos).
 	if _hand == null or _hand.rig != rig:
 		_hand = KiteHand.new(rig)
-	if intent.slack and not _was_slack:
-		_hand.press()
-	elif not intent.slack and _was_slack:
-		if intent.desbico_taps > 0:
-			_hand.release()
-		else:
-			_hand.cancel()
-	_was_slack = intent.slack
-	intent.desbico_taps = 0
+	for side in intent.taps:
+		_hand.tap(side)
+	intent.taps.clear()
+	for _i in intent.double_taps:
+		_hand.double_desbico()
+	intent.double_taps = 0
+	if intent.cancel_desbico:
+		_hand.cancel()
+		intent.cancel_desbico = false
 	_hand.update(delta, intent.stroke, intent.grip, intent.reel_rate)
 	if character:
 		character.right_hand_target = rig.hand_position()

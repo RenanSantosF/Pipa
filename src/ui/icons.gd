@@ -96,3 +96,17 @@ static func snap(ci: CanvasItem, c: Vector2, s: float, col: Color = INK) -> void
 	for a in [0.4, 1.4, 2.4, 3.6, 4.6]:
 		var d := Vector2(cos(a), sin(a))
 		ci.draw_line(c + d * s * 0.25, c + d * s * 0.5, ACCENT, 1.5, true)
+
+
+## Vareta envergada (nível 0..2 = pouca/média/muita) com a espinha no meio.
+static func bow(ci: CanvasItem, c: Vector2, s: float, level: int, col: Color = INK, w: float = 2.0) -> void:
+	var sag := s * (0.15 + 0.28 * float(level))
+	var pts := PackedVector2Array()
+	for i in 13:
+		var t := float(i) / 12.0 * 2.0 - 1.0
+		pts.append(c + Vector2(t * s, sag * (t * t) - sag * 0.5))
+	ci.draw_polyline(pts, col, w, true)
+	ci.draw_line(c + Vector2(0, -s * 0.8), c + Vector2(0, s * 0.8), col, w * 0.8, true)
+	for k in 3:
+		var on := k <= level
+		ci.draw_circle(c + Vector2(-s * 0.5 + s * 0.5 * float(k), s * 0.95), 2.2, ACCENT if on else Color(col, 0.35))

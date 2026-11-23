@@ -2,17 +2,21 @@ class_name GestureControls
 extends Control
 ## Controles por GESTOS, quase sem interface:
 ##
-##   TOQUE rápido em qualquer lugar → DESBICO (afrouxa e dá o tranco)
+##   TOQUE na metade ESQUERDA  → desbico para a esquerda
+##   TOQUE na metade DIREITA   → desbico para a direita
+##   DOIS TOQUES rápidos       → desbicada dupla (lado do 1º toque → oposto)
 ##   Arrastar para BAIXO (lado direito) → braçada longa
 ##   Arrastar para CIMA  (lado direito) → abrir a mão / dar linha
 ##   CÍRCULOS            (lado direito) → enrolar na lata
 ##   Arrastar na faixa de cima          → olhar (volta para a pipa sozinha)
 ##   Joystick flutuante  (canto esquerdo de baixo) → andar
-##   Ícones no canto: nova pipa · trocar linha · som
+##   Ícones no canto: nova pipa · trocar linha · som · tamanho · envergadura
 
 signal reset_pressed
 signal menu_pressed
 signal sound_pressed
+signal size_pressed
+signal bow_pressed
 
 const STROKE_MAX := 0.75
 const STROKE_PX := 230.0
@@ -51,7 +55,10 @@ var _reel_angle: float = 0.0
 var _reel_omega: float = 0.0
 var _time: float = 0.0
 var _taps_fx: Array = []       # [posição, idade]
-var _slack_index: int = -1
+var _tap_index: int = -1
+## Rótulos curtos dos ícones de tamanho/envergadura (atualizados pelo Main).
+var size_label: String = "M"
+var bow_level: int = 1
 
 
 func _ready() -> void:
@@ -63,7 +70,8 @@ func _ready() -> void:
 func _icons() -> Array:
 	var y := ICON_R + 16.0
 	var x := size.x - ICON_R - 16.0
-	return [["reset", Vector2(x, y)], ["line", Vector2(x - ICON_R * 2.5, y)], ["sound", Vector2(x - ICON_R * 5.0, y)]]
+	return [["reset", Vector2(x, y)], ["line", Vector2(x - ICON_R * 2.5, y)], ["sound", Vector2(x - ICON_R * 5.0, y)],
+		["size", Vector2(x, y + ICON_R * 2.5)], ["bow", Vector2(x - ICON_R * 2.5, y + ICON_R * 2.5)]]
 
 
 func _icon_at(pos: Vector2) -> String:
@@ -87,9 +95,10 @@ func _input(event: InputEvent) -> void:
 		if _starts.has(sd.index):
 			var info: Array = _starts[sd.index]
 			info[2] = maxf(info[2], (sd.position - (info[1] as Vector2)).length())
-			if sd.index == _slack_index and float(info[2]) >= TAP_MOVE:
-				intent.slack = false  # virou arrasto: cancela o desbico
-				_slack_index = -1
+			if sd.index == _tap_index and float(info[2]) >= TAP_MOVE:
+				if _time - float(info[0]) < 0.15:
+					intent.cancel_desbico = true  # virou arrasto logo: aborta o desbico
+				_tap_index = -1
 		if sd.index == _joy_index:
 			joystick.move(sd.position)
 		elif sd.index == _look_index:
@@ -108,10 +117,10 @@ func _down(index: int, pos: Vector2) -> void:
 	_starts[index] = [_time, pos, 0.0]
 	var is_joy := pos.x < size.x * MOVE_ZONE_X and pos.y > size.y * MOVE_ZONE_Y
 	if not is_joy:
-		# Começo de um possível desbico: afrouxa já, gira o bico para o lado tocado.
-		intent.slack = true
-		intent.steer = clampf((pos.x - size.x * 0.5) / (size.x * 0.22), -1.0, 1.0)
-		_slack_index = index
+		# Desbico na hora do toque (resposta imediata): lado = metade da tela.
+		intent.taps.append(-1.0 if pos.x < size.x * 0.5 else 1.0)
+		_taps_fx.append([pos, 0.0])
+		_tap_index = index
 	if is_joy:
 		if _joy_index == -1:
 			_joy_index = index
@@ -143,19 +152,15 @@ func _up(index: int, pos: Vector2) -> void:
 					menu_pressed.emit()
 				"sound":
 					sound_pressed.emit()
+				"size":
+					size_pressed.emit()
+				"bow":
+					bow_pressed.emit()
 		queue_redraw()
 		return
-	# Toque rápido e parado = desbico (qualquer zona, menos o joystick).
-	if _starts.has(index):
-		var info: Array = _starts[index]
-		var quick: bool = _time - float(info[0]) < TAP_TIME and float(info[2]) < TAP_MOVE
-		if quick and index != _joy_index and index == _slack_index:
-			intent.desbico_taps += 1
-			_taps_fx.append([pos, 0.0])
-		_starts.erase(index)
-	if index == _slack_index:
-		intent.slack = false
-		_slack_index = -1
+	_starts.erase(index)
+	if index == _tap_index:
+		_tap_index = -1
 	if index == _joy_index:
 		_joy_index = -1
 		joystick.end()
@@ -266,12 +271,20 @@ func _draw() -> void:
 				Icons.spool(self, c + Vector2(-2, 2), ICON_R * 0.42, line_color, Icons.INK, 1.6)
 			"sound":
 				Icons.speaker(self, c, ICON_R * 0.42, sound_on, Icons.INK, 1.6)
+			"size":
+				Icons.kite(self, c + Vector2(-5, -1), ICON_R * (0.26 + 0.07 * float("PMG".find(size_label))), Icons.INK, 1.6)
+				draw_string(ThemeDB.fallback_font, c + Vector2(5, 12), size_label, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Icons.ACCENT)
+			"bow":
+				Icons.bow(self, c, ICON_R * 0.5, bow_level, Icons.INK, 1.8)
 	# Dicas de gesto nos primeiros segundos (só ícones).
 	if _time < 7.0:
 		var a := clampf(1.0 - (_time - 4.0) / 3.0, 0.0, 1.0) * 0.75
 		var col := Color(1, 1, 1, a)
 		var base := Vector2(size.x * 0.72, size.y * 0.62)
 		Icons.tap(self, base, 26.0, col)
+		Icons.tap(self, Vector2(size.x * 0.28, size.y * 0.4), 26.0, col)
+		Icons.arrow(self, Vector2(size.x * 0.28 - 20, size.y * 0.4 - 50), Vector2(size.x * 0.28 - 70, size.y * 0.4 - 50), col)
+		Icons.arrow(self, base + Vector2(20, -50), base + Vector2(70, -50), col)
 		Icons.arrow(self, base + Vector2(70, 10), base + Vector2(70, -45), Color(0.55, 0.85, 1.0, a))
 		Icons.arrow(self, base + Vector2(110, -45), base + Vector2(110, 10), Color(1.0, 0.82, 0.35, a))
 		draw_arc(base + Vector2(165, -18), 22.0, 0.0, TAU * 0.8, 20, Color(0.6, 1.0, 0.55, a), 2.5, true)

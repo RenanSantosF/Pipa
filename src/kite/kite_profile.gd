@@ -1,43 +1,66 @@
 class_name KiteProfile
 extends Resource
-## Parâmetros físicos e visuais de uma pipa (corpo rígido + rabiola).
-## Valores ajustados no protótipo (docs/FISICA_PIPA.md).
+## Parâmetros físicos e visuais de uma pipa de combate brasileira (losango, 3 varetas).
+## Ver docs/REVISAO_V5.md.
+##
+## Geometria (vista de frente, nariz para cima):
+##   - vareta vertical (espinha) do nariz até a ponta de baixo;
+##   - travessa principal ENVERGADA no ponto mais largo do losango (cross_at);
+##   - travessa inferior, mais curta e menos envergada (lower_at), que segura a
+##     parte de baixo da vela.
+## A envergadura (bow) define o DIEDRO real da vela — e o diedro decide como a pipa
+## responde ao desbico (muita envergadura = desbico fino; pouca = braçada longa).
+
+enum Size { P, M, G }
+enum Bow { POUCA, MEDIA, MUITA }
+
+const SIZE_HEIGHT := [0.50, 0.65, 0.80]
+const SIZE_NAMES := ["P", "M", "G"]
+const BOW_FRACTION := [0.045, 0.085, 0.13]   # flecha / meia-envergadura
+const BOW_NAMES := ["pouca", "média", "muita"]
 
 @export var display_name: String = "Pipa clássica"
 
 @export_group("Vela")
 ## Altura (nariz → ponta de baixo) e largura (m).
-@export var height: float = 0.66
-@export var width: float = 0.56
-## Alturas das duas varetas horizontais (fração da altura, a partir do centro).
-@export var upper_stick: float = 0.22
-@export var lower_stick: float = -0.14
-## Envergadura das varetas horizontais (m que as pontas vão para trás).
-@export var bow: float = 0.05
-## Massa (kg): papel de seda + varetas de bambu.
-@export var mass: float = 0.032
-## Ganho da força normal com fluxo colado / descolado (placa plana).
-@export var cn_attached: float = 4.0
-@export var cn_separated: float = 1.25
-@export var stall_start_deg: float = 15.0
-@export var stall_end_deg: float = 30.0
-@export var cd0: float = 0.06
-## Diedro (graus): a vela "embarrigada" que dá estabilidade lateral.
-@export var dihedral_deg: float = 10.0
-## Amortecimento aerodinâmico de rotação.
-@export var rotational_damping: float = 0.08
+@export var height: float = 0.65
+@export var width: float = 0.55
+## Ponto mais largo (travessa principal), fração da altura a partir do NARIZ.
+@export_range(0.15, 0.5) var cross_at: float = 0.32
+## Travessa inferior, fração da altura a partir do nariz.
+@export_range(0.5, 0.85) var lower_at: float = 0.66
+## Envergadura: quanto as pontas da travessa principal vão para trás (m).
+@export var bow: float = 0.051
+## Massa (kg): papel de seda + 3 varetas de bambu + cola + cabresto.
+@export var mass: float = 0.030
+## Sustentação potencial (Helmbold, alongamento ~1,7) e de vórtice (Polhamus parcial).
+@export var lift_kp: float = 2.3
+@export var lift_kv: float = 1.6
+## Estol: começa / termina (graus). Asa de baixo alongamento estola tarde.
+@export var stall_start_deg: float = 32.0
+@export var stall_end_deg: float = 46.0
+## Força normal da placa descolada (CN = k·sen α).
+@export var cn_separated: float = 1.17
+## Arrasto parasita (papel, varetas, bainha).
+@export var cd0: float = 0.05
+## Amortecimento aerodinâmico residual de rotação (o principal vem de ω×r por meia-vela).
+@export var rotational_damping: float = 0.05
+## Curso da flexão assimétrica das varetas no desbico (rad de diedro a mais num lado).
+@export var flex_asym: float = 0.35
 
 @export_group("Cabresto")
-## Posição do nó do cabresto ao longo da vareta, a partir do nariz (fração da altura).
+## Posição do nó do cabresto ao longo da espinha, a partir do nariz (fração da altura).
 ## Mais perto do nariz = pipa mais "deitada" (sobe mais, puxa menos).
-@export_range(0.05, 0.6) var tow_fraction: float = 0.22
+@export_range(0.05, 0.6) var tow_fraction: float = 0.24
 ## Distância do nó do cabresto até a vela (m).
-@export var bridle_length: float = 0.22
+@export var bridle_length: float = 0.24
+## Quanto a perna do cabresto carregada no desbico desloca o ponto de tração (fração da largura).
+@export var bridle_shift: float = 0.25
 
 @export_group("Rabiola")
 @export var tail_length: float = 2.6
 @export_range(2, 24) var tail_nodes: int = 10
-@export var tail_mass: float = 0.014
+@export var tail_mass: float = 0.04
 @export var tail_area: float = 0.03
 @export var tail_cd: float = 1.2
 ## Rabiola com cerol (poder de corte da rabiola; 0 = sem cerol).
@@ -48,3 +71,40 @@ extends Resource
 @export var color_b: Color = Color(0.88, 0.2, 0.18)
 @export var tail_color_a: Color = Color(0.95, 0.95, 0.95)
 @export var tail_color_b: Color = Color(0.2, 0.45, 0.9)
+## Desenho da vela: 0 = dividida na diagonal, 1 = faixas, 2 = olho (círculo), 3 = xadrez.
+@export_range(0, 3) var pattern: int = 0
+
+var size_class: int = Size.M
+var bow_class: int = Bow.MEDIA
+
+
+## Diedro de cada meia-vela (rad) dado pela envergadura da travessa principal.
+func dihedral() -> float:
+	return atan2(bow, width * 0.5)
+
+
+## Ajusta tamanho (P/M/G) mantendo as proporções e a massa realista.
+func apply_size(s: int) -> void:
+	size_class = clampi(s, 0, 2)
+	var h0 := height
+	height = SIZE_HEIGHT[size_class]
+	width = height * 0.85
+	var k := height / h0
+	# Área cresce com h²; varetas com h (mais grossas na grande): ≈ h^2,2.
+	mass *= pow(k, 2.2)
+	bridle_length *= k
+	tail_length *= k
+	tail_mass *= pow(k, 1.5)
+	tail_area *= pow(k, 1.6)
+	apply_bow(bow_class)
+
+
+func apply_bow(b: int) -> void:
+	bow_class = clampi(b, 0, 2)
+	bow = BOW_FRACTION[bow_class] * width * 0.5 * 2.2
+	# Vareta mais arqueada tem mais curso para fechar no desbico.
+	flex_asym = 0.25 + 1.2 * BOW_FRACTION[bow_class]
+
+
+func describe() -> String:
+	return "%s · %d cm · envergadura %s" % [SIZE_NAMES[size_class], int(round(height * 100.0)), BOW_NAMES[bow_class]]

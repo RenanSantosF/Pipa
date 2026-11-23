@@ -23,6 +23,9 @@ var _cut_loser: Node = null
 var _cut_time: float = -1.0
 var _done: bool = false
 var _hand_b0 := Vector3.ZERO
+var _side := Vector3.RIGHT
+var _hand_b: KiteHand
+var _rise := 0.0
 
 
 func start(p_main) -> void:
@@ -35,6 +38,11 @@ func start(p_main) -> void:
 		b.rig = null  # vizinhos parados durante o teste
 	EventBus.line_cut.connect(_on_line_cut)
 	# Começa na mão, como no jogo.
+	seed(20260)
+	for r in [rig, bot_rig]:
+		r.profile = r.profile.duplicate()
+		r.profile.apply_size(KiteProfile.Size.M)
+		r.profile.apply_bow(KiteProfile.Bow.MEDIA)
 	rig.launch_in_hand(main.player.global_position + Vector3(0.2, 1.18, -0.3), Wind.get_direction())
 	print("AUTOTEST: início (vento %.1f m/s, linha %s)" % [Wind.base_speed, rig.line_type.display_name])
 
@@ -75,16 +83,13 @@ func _phase_flight(_delta: float) -> void:
 	it.stroke = 0.0
 	it.reel_rate = 0.0
 	if _t < 28.0:
-		# Desbico a cada 0,6 s; entre eles, abre a mão quando a pipa puxa (vai dando linha).
-		var press := fmod(_t, 0.6) < 0.12
-		if it.slack and not press:
-			it.desbico_taps += 1
-		it.slack = press
-		it.steer = 0.0
+		# Desbico a cada 0,6 s alternando os lados (zigue-zague); entre eles, abre a mão
+		# quando a pipa puxa (vai dando linha).
+		if fmod(_t, 0.6) < 1.0 / 60.0:
+			it.taps.append(-1.0 if int(_t / 0.6) % 2 == 0 else 1.0)
 		it.grip = 0.3 if (fmod(_t, 3.0) > 1.8 and rig.tension > 1.0) else 1.0
 	else:
 		it.grip = 1.0
-		it.slack = false
 	if _t > 26.0:
 		_alt_sum += b.x.y
 		_alt_n += 1
@@ -105,19 +110,24 @@ func _start_combat() -> void:
 	_phase = 2
 	_t = 0.0
 	_cut_loser = null
-	# X simétrico: as duas linhas se cruzam no meio, na mesma altura.
+	# Relo por baixo: o vizinho está atrás (contra o vento) e mais baixo, com a linha
+	# correndo logo abaixo da sua, no mesmo plano. Ele sobe a mão (a linha dele
+	# encosta na sua por baixo) e vai dando linha: as duas relam até alguém cortar.
 	rig.line_type = load("res://src/physics/lines/pura.tres")
 	bot_rig.line_type = load("res://src/physics/lines/chilena.tres")
 	var wd := Wind.get_direction()
 	var side := wd.cross(Vector3.UP).normalized()
+	_side = side
 	var center := Vector3(0, 0, 40)
-	var hand_a := center + side * 6.0
-	var hand_b := center - side * 6.0
+	var hand_a := center
+	var hand_b := center - wd * 10.0
 	var top := maxf(Ground.height_at(hand_a.x, hand_a.z), Ground.height_at(hand_b.x, hand_b.z)) + 15.0
 	hand_a.y = top
-	hand_b.y = top + 1.5  # linha do vizinho começa por cima da sua
-	rig.launch(hand_a, 30.0, 45.0, (wd - side * 0.7).normalized())
-	bot_rig.launch(hand_b, 30.0, 45.0, (wd + side * 0.7).normalized())
+	hand_b.y = top - 13.0
+	rig.launch(hand_a, 30.0, 50.0, wd)
+	bot_rig.launch(hand_b, 40.0, 50.0, wd)
+	_hand_b = KiteHand.new(bot_rig)
+	_hand_b.auto_feed = false
 	main.player.rig = null  # mãos paradas, controladas pelo teste
 	rig.hand_rest = hand_a
 	bot_rig.hand_rest = hand_b
@@ -130,9 +140,12 @@ func _start_combat() -> void:
 func _phase_combat(_delta: float) -> void:
 	# Mãos paradas; o bot "dá linha" de vez em quando (como no relo de verdade).
 	rig.grip = 1.0
-	# A mão do vizinho desce arrastando a linha dele através da sua: tem que enganchar.
-	bot_rig.hand_rest = _hand_b0 + Vector3.DOWN * minf(_t * 3.0, 4.5)
-	bot_rig.grip = 0.3 if fmod(_t, 2.0) < 0.8 else 1.0
+	# Sobe a mão até a linha dele apertar a sua por baixo; depois segura a altura.
+	var con := (main.physics_world as KitePhysicsWorld).strongest_contact_for(bot_rig)
+	if _t > 2.0 and (con == null or con.force < 1.5) and _rise < 16.0:
+		_rise += 1.2 * _delta
+	bot_rig.hand_rest = _hand_b0 + Vector3.UP * _rise
+	_hand_b.update(_delta, 0.0, 0.3 if fmod(_t, 2.0) < 0.8 and _t > 4.0 else 1.0, 0.0)
 	if fmod(_t, 1.0) < 1.0 / 60.0:
 		var w := main.physics_world as KitePhysicsWorld
 		var c := w.strongest_contact_for(rig)

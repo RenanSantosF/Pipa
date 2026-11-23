@@ -5,10 +5,6 @@
 [resource]
 script = ExtResource("1_kp")
 display_name = "Pipa do vizinho"
-tail_length = 1.8
-tail_nodes = 8
-tail_mass = 0.014
-tail_area = 0.022
 color_a = Color(0.15, 0.55, 0.3, 1)
 color_b = Color(0.95, 0.95, 0.92, 1)
 tail_color_a = Color(0.95, 0.85, 0.1, 1)

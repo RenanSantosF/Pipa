@@ -49,10 +49,10 @@ func _build(body: KiteRigidBody, profile: KiteProfile) -> void:
 	# Envergadura: as pontas das varetas horizontais vão para trás.
 	var top := c[0]
 	var ur := c[1] + Vector3(0, 0, -bow)
-	var lr := c[2] + Vector3(0, 0, -bow * 0.8)
-	var bottom := c[3]
-	var ll := c[4] + Vector3(0, 0, -bow * 0.8)
-	var ul := c[5] + Vector3(0, 0, -bow)
+	var lr := c[1].lerp(c[2], 0.5) + Vector3(0, 0, -bow * 0.5)
+	var bottom := c[2]
+	var ll := c[3].lerp(c[2], 0.5) + Vector3(0, 0, -bow * 0.5)
+	var ul := c[3] + Vector3(0, 0, -bow)
 	var mu := Vector3(0, ur.y, 0.0)
 	var ml := Vector3(0, lr.y, 0.0)
 	var st := SurfaceTool.new()

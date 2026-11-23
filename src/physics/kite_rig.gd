@@ -42,13 +42,14 @@ var stroke_dir := Vector3.BACK
 var stroke: float = 0.0
 var grip: float = 1.0
 var reel_rate: float = 0.0
-## Controle do rumo durante o desbico: leva o bico até steer_target (rad, em torno
-## da linha; + = direita vista do pipeiro). Representa o punho + folga da linha.
-var steer_active: bool = false
-var steer_target: float = 0.0
-const STEER_KP := 0.5
-const STEER_KD := 0.05
-const STEER_MAX := 0.35
+## Atuadores físicos do desbico (escritos pela KiteHand; ver docs/REVISAO_V5.md §1):
+##   bridle_offset — deslocamento do ponto de tração (m, local X lateral / Y espinha):
+##                   a perna do cabresto do lado puxado carrega mais. O torque que gira
+##                   o bico sai da PRÓPRIA tensão da linha (T·sen b·Δx).
+##   sail_asym     — flexão assimétrica das varetas envergadas (rad; + = meia-vela
+##                   direita fecha). Desloca o centro de sustentação.
+var bridle_offset := Vector2.ZERO
+var sail_asym: float = 0.0
 ## A mão voltando da braçada joga a linha no chão? (falso no desbico: a linha escorrega)
 var shorten_on_return: bool = true
 ## Pipa ainda segura na mão (antes do primeiro desbico).
@@ -233,6 +234,10 @@ func pre_frame(dt: float) -> void:
 			rope.hand_position = hand_position()
 		rope.compute_forces()
 	if body != null:
+		body.sail_asym = 0.0 if loose else sail_asym
+		if rope != null and rope.end_body == body:
+			var off := Vector2.ZERO if loose else bridle_offset
+			rope.end_local = body.tow_local + Vector3(off.x, off.y, 0.0)
 		tail.compute_forces()
 		_x_frame_start = body.x
 
@@ -284,12 +289,6 @@ func _update_spool(dt: float) -> void:
 func predict(h: float) -> void:
 	if body != null:
 		body.compute_forces()
-		if steer_active and rope != null:
-			var axis := (body.world_point(body.tow_local) - rope.hand_position).normalized()
-			var err := wrapf(steer_target - heading(), -PI, PI)
-			var air := clampf(body.airspeed / 6.0, 0.4, 1.5)
-			var tq := clampf((STEER_KP * err - STEER_KD * body.w.dot(axis)) * air, -STEER_MAX, STEER_MAX)
-			body.add_torque(axis * tq)
 		body.predict(h)
 		tail.predict(h)
 	if rope != null:
