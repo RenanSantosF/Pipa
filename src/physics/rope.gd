@@ -162,7 +162,17 @@ func clear_contact(i: int) -> void:
 
 
 ## Guarda as posições do começo do quadro (antes dos subpassos).
+## Pontos de contato com outra linha neste tick (trecho, t): o desenho passa por
+## eles em linha reta (a curva suave não pode "furar" a outra linha).
+var render_kinks: PackedVector2Array = PackedVector2Array()
+
+
+func add_render_kink(seg: int, t: float) -> void:
+	render_kinks.append(Vector2(float(seg), t))
+
+
 func snapshot_frame() -> void:
+	render_kinks.resize(0)
 	frame_pos = pos.duplicate()
 	frame_end = end_point()
 	# A mão anda suave DENTRO do tick (subpasso a subpasso), não aos saltos: com a
@@ -223,6 +233,7 @@ func pin_node(i: int, where: Vector3, mu: float, break_force: float, obstacle: i
 	pin_mu[i] = mu
 	pin_break[i] = break_force
 	pin_obstacle[i] = obstacle
+	c_hold[i] = 0.0
 	pos[i] = where
 	prev[i] = where
 	vel[i] = Vector3.ZERO

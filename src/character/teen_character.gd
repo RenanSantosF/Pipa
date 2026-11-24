@@ -160,13 +160,18 @@ func _process(delta: float) -> void:
 	if _lod_t <= 0.0:
 		_lod_t = 0.5
 		var cam := get_viewport().get_camera_3d()
-		var far := cam != null and cam.global_position.distance_to(global_position) > 30.0
+		var dist := cam.global_position.distance_to(global_position) if cam != null else 0.0
+		var far := cam != null and dist > 30.0
 		if far != _far:
 			_far = far
 			if anim:
 				anim.active = not far
 			if _ik:
 				_ik.active = not far
+		# Bem longe (qualidade baixa): nem desenha o corpo (10 mil triângulos cada).
+		var hide_far := GameConfig.quality == GameConfig.Quality.LOW and dist > 65.0
+		if model and model.visible == hide_far:
+			model.visible = not hide_far
 	if _far:
 		return
 	if anim:

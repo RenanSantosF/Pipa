@@ -121,3 +121,19 @@ static func pull(ci: CanvasItem, c: Vector2, s: float, col: Color = INK, accent:
 	# Mão (punho fechado) e seta do arranque.
 	ci.draw_circle(hand, s * 0.2, col)
 	arrow(ci, hand + Vector2(-s * 0.05, s * 0.25), hand + Vector2(-s * 0.35, s * 0.85), accent, 4.0)
+
+
+## Rabiola (comprimento 0 curta · 1 média · 2 grande): linha ondulada com tirinhas.
+static func tail(ci: CanvasItem, c: Vector2, s: float, level: int, col: Color = INK, accent: Color = ACCENT) -> void:
+	var n := 3 + level * 2
+	var top := c + Vector2(0, -s)
+	var len := s * 2.0
+	var pts := PackedVector2Array()
+	for i in 13:
+		var t := float(i) / 12.0
+		pts.append(top + Vector2(sin(t * PI * 2.2) * s * 0.28, t * len * (0.55 + 0.225 * float(level))))
+	ci.draw_polyline(pts, col, 1.6, true)
+	for k in n:
+		var t := (float(k) + 0.5) / float(n)
+		var p := top + Vector2(sin(t * PI * 2.2) * s * 0.28, t * len * (0.55 + 0.225 * float(level)))
+		ci.draw_line(p + Vector2(-4, -2), p + Vector2(4, 2), accent if k % 2 == 0 else col, 2.0, true)

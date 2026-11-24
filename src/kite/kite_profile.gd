@@ -18,6 +18,12 @@ const SIZE_HEIGHT := [0.50, 0.65, 0.80]
 const SIZE_NAMES := ["P", "M", "G"]
 const BOW_FRACTION := [0.045, 0.085, 0.13]   # flecha / meia-envergadura
 const BOW_NAMES := ["pouca", "média", "muita"]
+## Rabiola: curta / média / grande (fator de comprimento sobre a média).
+const TAIL_NAMES := ["curta", "média", "grande"]
+const TAIL_FACTOR := [0.55, 1.0, 1.6]
+const TAIL_NODES := [6, 10, 14]
+## Tirinhas mais espaçadas na grande: a massa cresce menos que o comprimento.
+const TAIL_MASS_FACTOR := [0.6, 1.0, 1.25]
 
 @export var display_name: String = "Pipa clássica"
 
@@ -84,6 +90,7 @@ const BOW_NAMES := ["pouca", "média", "muita"]
 
 var size_class: int = Size.M
 var bow_class: int = Bow.MEDIA
+var tail_class: int = 1
 
 
 ## Diedro de cada meia-vela (rad) dado pela envergadura da travessa principal.
@@ -103,10 +110,20 @@ func apply_size(s: int) -> void:
 	# Área cresce com h²; varetas com h (mais grossas na grande): ≈ h^2,2.
 	mass *= pow(k, 2.2)
 	bridle_length *= k
-	tail_length *= k
-	tail_mass *= pow(k, 1.5)
-	tail_area *= pow(k, 1.6)
 	apply_bow(bow_class)
+	apply_tail(tail_class)
+
+
+## Rabiola curta (pipa arisca, desbica fácil) / média / grande (estável, lenta).
+## Massa e área crescem com o comprimento (mesmas tirinhas, mais longa).
+func apply_tail(c: int) -> void:
+	tail_class = clampi(c, 0, 2)
+	var k := height / 0.65
+	var f: float = TAIL_FACTOR[tail_class]
+	tail_length = 2.6 * k * f
+	tail_mass = 0.04 * pow(k, 1.5) * float(TAIL_MASS_FACTOR[tail_class])
+	tail_area = 0.03 * pow(k, 1.6) * float(TAIL_MASS_FACTOR[tail_class])
+	tail_nodes = TAIL_NODES[tail_class]
 
 
 func apply_bow(b: int) -> void:
@@ -118,4 +135,4 @@ func apply_bow(b: int) -> void:
 
 
 func describe() -> String:
-	return "%s · %d cm · envergadura %s" % [SIZE_NAMES[size_class], int(round(height * 100.0)), BOW_NAMES[bow_class]]
+	return "%s · %d cm · envergadura %s · rabiola %s" % [SIZE_NAMES[size_class], int(round(height * 100.0)), BOW_NAMES[bow_class], TAIL_NAMES[tail_class]]

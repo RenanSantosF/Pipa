@@ -21,6 +21,9 @@ var _events: Array = []   # [tempo, ação, valor]
 var _log_from := 5.8
 var _max := {}
 var _hold := 0.7
+var _wsum := 0.0
+var _wn := 0.0
+var _wb := Vector3.ZERO
 var _end_t := 14.0
 
 
@@ -67,6 +70,19 @@ func start(p_main) -> void:
 		"spam":
 			for k in 17:
 				_events.append([6.0 + 0.6 * k, "puxao", 0.0])
+		"taps":
+			# Desbicando para descer: toques alternados a cada 0,6 s.
+			for k in 10:
+				_events.append([6.0 + 0.6 * k, "tap", -1.0 if k % 2 == 0 else 1.0])
+		"tapsame":
+			for k in 8:
+				_events.append([6.0 + 0.5 * k, "tap", 1.0])
+		"hold":
+			_events = [[6.0, "hold", 0.5], [10.0, "hold", -1.0]]
+		"holdfast":
+			_events = [[6.0, "hold", 1.0], [10.0, "hold", -1.0]]
+		"throw":
+			_events = [[6.0, "throw", 1.0], [10.0, "throw", -1.0]]
 		"combo":
 			_events = [[6.0, "desbico", -1.0], [6.45, "solta", 0.0], [6.5, "puxao", 0.0], [9.5, "desbico", 1.0], [9.95, "solta", 0.0], [10.0, "puxao", 0.0]]
 	print("CTRL perfil: ", rig.profile.describe(), " seq=", _seq)
@@ -111,12 +127,16 @@ func _physics_process(delta: float) -> void:
 	_track("rumo_max", absf(rad_to_deg(rig.heading())), false)
 	_track("T_pipa_max", rig.rope.tension_end if rig.rope else 0.0, false)
 	_track("v_max", b.v.length(), false)
+	_wsum += b.w.length_squared()
+	_wn += 1
+	var wb: Vector3 = b.q.inverse() * b.w
+	_wb += Vector3(wb.x * wb.x, wb.y * wb.y, wb.z * wb.z)
 	if fmod(_t, 0.05) < delta:
 		print("CTRL t=%5.2f nariz=%6.1f° rumo=%6.1f° lat=%+6.2f alt=%+6.2f vel=%5.2f escorr=%5.1f° T_pipa=%5.2f T_mão=%5.2f ar=%5.2f aoa=%5.1f mão=%+.2f pegada=%.2f linha=%.1f el=%.0f° cont=%d enr=%s" % [
 			_t, nose_el, rad_to_deg(rig.heading()), rel.dot(_side), rel.y, b.v.length(), slip,
 			rig.rope.tension_end, rig.rope.tension_hand, b.airspeed, rad_to_deg(b.angle_of_attack), rig.stroke, rig.grip, rig.flying_length(), rad_to_deg(asin(clampf(dl.y, -1.0, 1.0))), rig.rope.contact_count(), str(rig.snagged)])
 	if _t > _end_t:
-		print("CTRL resumo: ", _max)
+		print("CTRL resumo: ", _max, " rms_w=%.2f arfagem(x)=%.2f rolagem(y)=%.2f giro_bico(z)=%.2f" % [sqrt(_wsum / maxf(_wn, 1.0)), sqrt(_wb.x / maxf(_wn, 1.0)), sqrt(_wb.y / maxf(_wn, 1.0)), sqrt(_wb.z / maxf(_wn, 1.0))])
 		get_tree().quit(0)
 
 
@@ -129,6 +149,13 @@ func _track(k: String, v: float, is_min: bool) -> void:
 
 func _apply(action: String, value: float) -> void:
 	match action:
+		"tap":
+			it.taps.append(value)
+		"throw":
+			it.throws.append(value)
+		"hold":
+			it.pull_held = value >= 0.0
+			it.pull_rate = maxf(value, 0.0)
 		"desbico":
 			if it.has_method("press_desbico"):
 				it.call("press_desbico", value)

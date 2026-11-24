@@ -23,6 +23,7 @@ var _mat := ShaderMaterial.new()
 var _pts: PackedVector3Array = PackedVector3Array()
 var _smooth: PackedVector3Array = PackedVector3Array()
 var _diameter := 0.0006
+var _px_scale := 1.0
 
 
 func _ready() -> void:
@@ -55,20 +56,24 @@ func _process(_delta: float) -> void:
 	if rope.end_body != null:
 		_pts.append(rope.end_point())
 	var n := _pts.size()
+	_px_scale = 1.5 if GameConfig.quality == GameConfig.Quality.LOW else 1.0
 	var cam_pos := cam.global_position
 	var vp_h := maxf(get_viewport().get_visible_rect().size.y, 1.0)
 	# Ângulo de 1 pixel do buffer 3D (com a escala de renderização do celular).
 	var px := deg_to_rad(cam.fov) / (vp_h * get_viewport().scaling_3d_scale)
 
 	_smooth.resize(0)
+	var kinks := rope.render_kinks
 	for i in n - 1:
 		var p1 := _pts[i]
 		var p2 := _pts[i + 1]
+		if not kinks.is_empty() and _segment_kinks(kinks, i, p1, p2):
+			continue
 		var p0 := _pts[i - 1] if i > 0 else p1 * 2.0 - p2
 		var p3 := _pts[i + 2] if i + 2 < n else p2 * 2.0 - p1
 		var mid := (p1 + p2) * 0.5
 		var seg_px := p1.distance_to(p2) / maxf(mid.distance_to(cam_pos) * px, 1e-5)
-		var sub := clampi(int(seg_px / PX_PER_POINT) + 1, 1, MAX_SUB)
+		var sub := clampi(int(seg_px / (PX_PER_POINT * _px_scale)) + 1, 1, MAX_SUB)
 		for k in sub:
 			_smooth.append(_centripetal(p0, p1, p2, p3, float(k) / float(sub)))
 	_smooth.append(_pts[n - 1])
@@ -96,6 +101,23 @@ func _process(_delta: float) -> void:
 		_im.surface_set_uv(Vector2(1.0, 0.0))
 		_im.surface_add_vertex(p + side)
 	_im.surface_end()
+
+
+## Trecho encostado em outra linha: desenha reto passando pelos pontos de contato
+## (como a física: a linha é reta entre os nós e a outra encosta nessa reta).
+func _segment_kinks(kinks: PackedVector2Array, i: int, p1: Vector3, p2: Vector3) -> bool:
+	var ts: Array[float] = []
+	for k in kinks:
+		if int(k.x) == i:
+			ts.append(k.y)
+	if ts.is_empty():
+		return false
+	ts.sort()
+	_smooth.append(p1)
+	for t in ts:
+		if t > 0.001 and t < 0.999:
+			_smooth.append(p1.lerp(p2, t))
+	return true
 
 
 ## Catmull-Rom centrípeta (Barry–Goldman), t em [0, 1] entre p1 e p2.

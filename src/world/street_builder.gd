@@ -16,9 +16,7 @@ const SURFACES := {
 	"roof": [0.2, 0.55], "laje": [0.15, 0.35], "brick": [0.1, 0.6], "ground": [0.25, 0.3],
 	"dirt": [0.1, 0.18], "grass": [0.15, 0.2], "bark": [0.0, 0.9], "metal": [0.75, 0.6],
 }
-const POLES_PATH := "res://assets/models/poles/modular_electricity_poles_1k.gltf"
 ## Escala 1:1: poste urbano de ~10,5 m (cruzeta a 9,6 m), fios em 9,6 / 7,3 m.
-const POLE_SCALE := 1.7
 const POLE_TOP := 10.4
 const WIRE_HIGH := 9.6
 const WIRE_LOW := 7.25
@@ -62,6 +60,22 @@ var _noise := FastNoiseLite.new()
 var _batches: Dictionary = {}
 var _foliage_batches: Dictionary = {}
 var _body: StaticBody3D
+## Corpos de colisão por célula (24 m): com tudo num corpo só (3,4 mil caixas) o
+## motor de física testava todas as caixas a cada passo do jogador.
+var _cell_bodies: Dictionary = {}
+const COLLISION_CELL := 24.0
+
+
+func _collision_body_at(p: Vector3) -> StaticBody3D:
+	var key := Vector2i(floori(p.x / COLLISION_CELL), floori(p.z / COLLISION_CELL))
+	if not _cell_bodies.has(key):
+		var b := StaticBody3D.new()
+		b.name = "Collision_%d_%d" % [key.x, key.y]
+		b.collision_layer = 1
+		b.collision_mask = 0
+		_body.add_child(b)
+		_cell_bodies[key] = b
+	return _cell_bodies[key]
 var _opaque_material: StandardMaterial3D
 var _wire_points: PackedVector3Array = PackedVector3Array()
 var _houses: HouseBuilder
@@ -140,7 +154,7 @@ func add_collider(xf: Transform3D, size: Vector3) -> void:
 	shape.size = size
 	cs.shape = shape
 	cs.transform = xf
-	_body.add_child(cs)
+	_collision_body_at(xf.origin).add_child(cs)
 	if size.x > 60.0 or size.z > 60.0:
 		return
 	# Obstáculo para a linha: caixa alinhada que envolve a caixa girada.
@@ -656,7 +670,6 @@ func _build_street_trees() -> void:
 # --- Postes e fios -------------------------------------------------------------
 
 func _build_poles() -> void:
-	var templates := _pole_templates(load(POLES_PATH) as PackedScene)
 	for ri in [0, 1, 2, 3]:
 		var road: Array = roads[ri]
 		var pts: PackedVector3Array = road[0]
@@ -678,13 +691,7 @@ func _build_poles() -> void:
 			add_collider(Transform3D(Basis.IDENTITY, base + Vector3(0, POLE_TOP * 0.5, 0)), Vector3(0.3, POLE_TOP, 0.3))
 			obstacles.add_cylinder(base, POLE_TOP, 0.14, "poste")
 			obstacles.add_capsule(base - n * 1.0 + Vector3.UP * (WIRE_HIGH - 0.08), base + n * 1.0 + Vector3.UP * (WIRE_HIGH - 0.08), 0.05, "cruzeta")
-			if templates.size() > 0:
-				var pole: Node3D = templates[k % templates.size()].duplicate()
-				pole.position = base
-				pole.basis = Basis(n, Vector3.UP, n.cross(Vector3.UP)).scaled(Vector3.ONE * POLE_SCALE)
-				if k % 2 == 1:
-					pole.rotate_object_local(Vector3.UP, PI)
-				add_child(pole)
+			_concrete_pole(base, n, k)
 			tops.append(base)
 			k += 1
 			if _rng.randf() < 0.5:
@@ -700,6 +707,31 @@ func _build_poles() -> void:
 			_add_wire(a + Vector3.UP * WIRE_LOW, c + Vector3.UP * WIRE_LOW, 0.6)
 
 
+## Poste de concreto procedural (~150 triângulos, entra no lote da rua: nenhuma
+## chamada de desenho a mais). O modelo importado tinha 26–35 mil triângulos em
+## 13–27 peças POR POSTE — era boa parte do peso da cena no celular.
+func _concrete_pole(base: Vector3, n: Vector3, k: int) -> void:
+	var b := batch_for(base.z, "plain")
+	var concrete := Color(0.66, 0.65, 0.62)
+	var up := Vector3.UP
+	# Fuste afunilado (base enterrada um pouco).
+	b.add_frustum(base - up * 0.2, base + up * POLE_TOP, 0.17, 0.095, 6, concrete.darkened(0.08), concrete)
+	# Cruzeta de cima (madeira escura) com 3 isoladores, e a de baixo (rede secundária).
+	var t := n.cross(up).normalized()
+	var ch := base + up * (WIRE_HIGH - 0.08)
+	b.add_box(Transform3D(Basis(n, up, t), ch), Vector3(2.1, 0.1, 0.09), Color(0.36, 0.3, 0.24))
+	for dx in [-0.9, 0.0, 0.9]:
+		var ip := ch + n * float(dx) + up * 0.05
+		b.add_frustum(ip, ip + up * 0.14, 0.045, 0.03, 5, Color(0.86, 0.86, 0.82))
+	var cl := base + up * (WIRE_LOW - 0.05)
+	b.add_box(Transform3D(Basis(n, up, t), cl + t * 0.12), Vector3(0.5, 0.08, 0.08), Color(0.3, 0.3, 0.3))
+	# Um transformador de vez em quando.
+	if k % 4 == 2:
+		var tp := base + up * (WIRE_LOW + 0.9) + t * 0.42
+		b.add_box(Transform3D(Basis(n, up, t), tp), Vector3(0.55, 0.85, 0.5), Color(0.42, 0.47, 0.44))
+		b.add_box(Transform3D(Basis(n, up, t), tp + up * 0.48), Vector3(0.5, 0.06, 0.45), Color(0.3, 0.33, 0.31))
+
+
 func _pole_cross(pts: PackedVector3Array, p: Vector3) -> Vector3:
 	var best := 0
 	for i in pts.size():
@@ -708,31 +740,6 @@ func _pole_cross(pts: PackedVector3Array, p: Vector3) -> Vector3:
 	var t := pts[mini(best + 1, pts.size() - 1)] - pts[maxi(best - 1, 0)]
 	t.y = 0.0
 	return t.normalized().cross(Vector3.UP).normalized()
-
-
-func _pole_templates(scene: PackedScene) -> Array[Node3D]:
-	var out: Array[Node3D] = []
-	if scene == null:
-		return out
-	var kit := scene.instantiate()
-	for prefix in ["preset_01_", "preset_02_", "preset_03_"]:
-		var root := Node3D.new()
-		var offset := Vector3.ZERO
-		var found := false
-		for child in kit.find_children(prefix + "*", "MeshInstance3D", true, false):
-			if String(child.name).ends_with("pole"):
-				offset = (child as Node3D).position
-				found = true
-		if not found:
-			continue
-		for child in kit.find_children(prefix + "*", "MeshInstance3D", true, false):
-			var mi := (child as MeshInstance3D).duplicate() as MeshInstance3D
-			mi.position -= offset
-			mi.visibility_range_end = 150.0
-			root.add_child(mi)
-		out.append(root)
-	kit.free()
-	return out
 
 
 func _add_wire(a: Vector3, b: Vector3, sag: float) -> void:
@@ -762,6 +769,9 @@ func _commit() -> void:
 		mi.name = "Chunk_" + key.replace("|", "_")
 		mi.mesh = mesh
 		mi.material_override = materials[surface]
+		mi.visibility_range_end = GameConfig.draw_distance()
+		if GameConfig.quality == GameConfig.Quality.LOW:
+			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(mi)
 	var species := FOLIAGE.keys()
 	for key: String in _foliage_batches:
@@ -775,7 +785,7 @@ func _commit() -> void:
 		mi.extra_cull_margin = 1.0
 		if GameConfig.quality < GameConfig.Quality.HIGH:
 			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		mi.visibility_range_end = [110.0, 160.0, 0.0][GameConfig.quality]
+		mi.visibility_range_end = [100.0, 160.0, 0.0][GameConfig.quality]
 		add_child(mi)
 	if _wire_points.size() > 0:
 		var im := ImmediateMesh.new()

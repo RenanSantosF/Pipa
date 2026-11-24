@@ -14,14 +14,16 @@ extends RefCounted
 ##   o bico para lá; depois segue por inércia.
 ##   Soltar o dedo: a mão fecha e o braço volta devagar → a linha estica de novo,
 ##   o cabresto retoma o ângulo e a pipa sai do mergulho e se estabiliza aos poucos.
-##   Toque curto = desbicada curta (folga mínima DESB_MIN). Dois toques = dupla
-##   (o 2º vai para o lado oposto do 1º).
+##   Toque curto = desbicada curta (folga mínima DESB_MIN), também perto do chão.
+##   JOGAR (duplo toque, throw): desbico até o bico apontar para o lado (~0,4 s) e,
+##   ao retomar, dois puxões emendados — a pipa dispara para onde o bico aponta.
 ##
 ## PUXÃO — arranque do braço (0,5 m em ~0,1 s) com a mão fechada: pico de tensão,
 ##   a pipa acelera para onde o NARIZ aponta (é a sustentação que cresce com o
 ##   vento aparente); a outra mão segura a linha enquanto o braço volta (keep_line),
 ##   então a tensão cai sozinha conforme a pipa desacelera. Toques seguidos =
-##   puxões seguidos (mão sobre mão); botão segurado = puxões em série.
+##   puxões seguidos (mão sobre mão); dedo segurado para baixo = puxada contínua
+##   (braçadas em série, ritmo pelo quanto o dedo desceu: recolhe linha, ela sobe).
 
 const DOUBLE_WINDOW := 0.3
 ## Folga mínima de um toque curto (s).
@@ -38,6 +40,11 @@ const PULL_MAX := 0.9
 const PULL_HOLD := 0.04
 const PULL_RETURN := 0.42
 const PULL_REPEAT := 0.3
+## Puxada contínua: intervalo entre braçadas (s) do ritmo lento ao rápido.
+const PULL_REPEAT_SLOW := 0.42
+const PULL_REPEAT_FAST := 0.2
+## Jogar para o lado (duplo toque): tempo de desbico antes do puxão (s).
+const THROW_DESB := 0.38
 ## Abaixo desta linha (m) é lançamento: o tranco deixa a linha correr.
 const LAUNCH_LEN := 18.0
 ## …ou com a pipa ainda baixa (m acima da mão), onde o vento é fraco.
@@ -62,7 +69,9 @@ var kick_gain: float = 0.0
 var kick_hold: float = 0.22
 var kick_end: float = 0.5
 var asym_gain: float = 0.0
-var spin_gain: float = 0.75
+var spin_gain: float = 0.95
+## Ritmo da puxada contínua (0..1), escrito pelo gesto.
+var pull_rate: float = 0.0
 
 var rig: KiteRig
 var stroke: float = 0.0
@@ -83,6 +92,8 @@ var _recover_t: float = -1.0
 var _recover_arm_from: float = 0.0
 var _last_press: float = -10.0
 var _queued_side: float = 0.0
+var _throw_pull: bool = false
+var _desb_min: float = DESB_MIN
 # Puxão.
 var _pulling: bool = false
 # Tranco de soltar da mão (linha curta): folga, tranco puxado de lado (lados
@@ -140,6 +151,23 @@ func tap_desbico(side: float) -> void:
 	_desb_down = false
 
 
+## JOGAR para o lado (duplo toque): desbico forte para `side` até o bico apontar
+## para lá e, ao retomar, um puxão — a pipa dispara para onde o bico aponta.
+## Se já está desbicando para esse lado (1º toque), só estica e emenda o puxão.
+func throw(side: float) -> void:
+	if rig == null or rig.body == null:
+		return
+	if rig.held:
+		rig.release_hold()
+	var s := signf(side) if side != 0.0 else last_side
+	if not (_desb_active and _desb_side == s):
+		_start_desbico(s)
+	_desb_down = false
+	_desb_min = maxf(_desb_t + 0.05, THROW_DESB)
+	desbico_intensity = 1.0
+	_throw_pull = true
+
+
 ## Dupla de uma vez (teclado): começa pelo lado contrário ao último.
 func double_desbico() -> void:
 	var first := -last_side
@@ -189,6 +217,8 @@ func _start_desbico(side: float) -> void:
 	last_side = side
 	_desb_active = true
 	_desb_t = 0.0
+	_desb_min = DESB_MIN
+	_throw_pull = false
 	_desb_arm_from = stroke
 	_recover_t = -1.0
 	_pulling = false          # dar linha cancela o puxão (a mão abriu)
@@ -235,6 +265,14 @@ func _low_factor() -> float:
 	if rig == null or rig.body == null:
 		return 1.0
 	var alt := rig.body.x.y - rig.hand_position().y
+	return clampf(0.7 + (alt - 1.5) / 20.0, 0.7, 1.0)
+
+
+## Tranco de soltar da mão: bem perto do chão o puxão sai quase reto.
+func _launch_low_factor() -> float:
+	if rig == null or rig.body == null:
+		return 1.0
+	var alt := rig.body.x.y - rig.hand_position().y
 	return clampf((alt - 1.5) / 8.0, 0.2, 1.0)
 
 
@@ -258,10 +296,12 @@ func update(delta: float, pull_stroke: float, grip_in: float, reel: float) -> vo
 	var keep_line := true   # o braço voltando deixa a linha com a outra mão
 	var launch_asym := false
 
-	# Botão segurado: puxões em série.
+	# Puxada contínua (segurando para baixo): braçadas em série, mão sobre mão; o
+	# ritmo vem de quanto o dedo desceu. Braçadas mais rápidas que a volta do braço
+	# acumulam curso → a outra mão pega a linha mais à frente (recolhe linha).
 	if _pull_held:
 		_pull_repeat_t += delta
-		if _pull_repeat_t >= PULL_REPEAT:
+		if _pull_repeat_t >= lerpf(PULL_REPEAT_SLOW, PULL_REPEAT_FAST, clampf(pull_rate, 0.0, 1.0)):
 			_pull_repeat_t = 0.0
 			puxao()
 
@@ -278,11 +318,18 @@ func update(delta: float, pull_stroke: float, grip_in: float, reel: float) -> vo
 		spin_target = _desb_side * spin_gain * lerpf(0.55, 1.15, desbico_intensity) * _low_factor()
 		pitch_target = 1.0   # ponto de tração para o nariz: a vela "deita", sustentação cai
 		keep_line = false
-		if not _desb_down and _desb_t >= DESB_MIN:
+		if not _desb_down and _desb_t >= _desb_min:
 			_desb_active = false
 			_recover_t = 0.0
 			_recover_arm_from = stroke
-			if _queued_side != 0.0:
+			if _throw_pull:
+				# Jogar: retoma com um puxão seco (não o tranco de soltar da mão).
+				_throw_pull = false
+				_start_pull()
+				_launch = false
+				_pull_to = minf(_pull_from + 0.75 * strength, PULL_MAX)
+				_pull_pending = 1   # emenda um segundo puxão (mão sobre mão): ela dispara
+			elif _queued_side != 0.0:
 				var q := _queued_side
 				_queued_side = 0.0
 				_start_desbico(q)
@@ -316,7 +363,7 @@ func update(delta: float, pull_stroke: float, grip_in: float, reel: float) -> vo
 			_pulling = false
 			stroke = 0.0
 		keep_line = false
-		kick_target = _launch_side * _smooth(0.0, 0.05, lt) * (1.0 - _smooth(0.2, 0.4, lt)) * _low_factor()
+		kick_target = _launch_side * _smooth(0.0, 0.05, lt) * (1.0 - _smooth(0.2, 0.4, lt)) * _launch_low_factor()
 		launch_asym = true
 	elif _pulling:
 		_pull_t += delta

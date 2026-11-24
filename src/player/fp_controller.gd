@@ -53,6 +53,8 @@ static func desbico_offset(t: float) -> float:
 
 
 func _ready() -> void:
+	camera.far = GameConfig.camera_far()
+	GameConfig.quality_changed.connect(func(_q: int) -> void: camera.far = GameConfig.camera_far())
 	process_physics_priority = -50  # escreve as entradas da pipa antes da simulação
 	_gravity = float(ProjectSettings.get_setting("physics/3d/default_gravity", 9.8))
 	_yaw = rotation.y
@@ -168,7 +170,11 @@ func _drive_rig(delta: float) -> void:
 	for _i in intent.pull_taps:
 		_hand.puxao()
 	intent.pull_taps = 0
+	_hand.pull_rate = intent.pull_rate
 	_hand.set_pull_held(intent.pull_held)
+	for side in intent.throws:
+		_hand.throw(side)
+	intent.throws.clear()
 	for _i in intent.double_taps:
 		_hand.double_desbico()
 	intent.double_taps = 0

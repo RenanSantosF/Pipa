@@ -21,6 +21,9 @@ extends RefCounted
 const RHO := 1.225
 const GRAVITY := Vector3(0.0, -9.8, 0.0)
 static var RELAX_DIHEDRAL := 0.0
+## Amortecimento aerodinâmico de rolagem (adimensional).
+const ROLL_DAMPING := 2.5
+var _roll_k := 0.0
 
 var profile: KiteProfile
 var mass: float = 0.03
@@ -126,7 +129,7 @@ static func _poly_centroid(pts: Array) -> Vector2:
 ## sail_asym > 0: a meia-vela DIREITA fecha (vai para trás), a esquerda abre.
 func half_dihedral(i: int) -> float:
 	# Folga: a vareta relaxa (menos envergada) e fica torta para o lado do desbico.
-	var a := sail_asym - spin_bias * relax * 0.1
+	var a := sail_asym - spin_bias * relax * 0.02
 	var s := a if i == 1 else -a
 	var base := dihedral * (1.0 - RELAX_DIHEDRAL * relax)
 	return clampf(base + (s if s > 0.0 else s * 0.6), 0.0, 0.8)
@@ -255,6 +258,12 @@ func compute_forces() -> void:
 		_torque += (q * Vector3.BACK) * (-spin_bias * profile.spin_coef * qa * relax)
 	var span := profile.width * profile.height * 0.5 * profile.height * profile.height
 	_torque -= w * (profile.rotational_damping * 0.5 * RHO * maxf(airspeed, 1.0) * span)
+	# Rolagem (asas subindo/descendo em volta da vareta): uma placa larga girando
+	# assim empurra muito ar — amortecimento forte. Sem isto o giro do bico no
+	# desbico acoplava (diedro) numa rolagem que parecia a pipa "batendo as asas".
+	# (Aplicado de forma implícita no predict: estável com qualquer passo.)
+	var hw := profile.width * 0.5
+	_roll_k = ROLL_DAMPING * 0.5 * RHO * maxf(airspeed, 2.0) * (_half_area[0] + _half_area[1]) * hw * hw
 
 
 func add_torque(t: Vector3) -> void:
@@ -267,6 +276,10 @@ func predict(h: float) -> void:
 	_q_prev = q
 	v += _force / mass * h
 	w += mul_inv_inertia(_torque) * h
+	if _roll_k > 0.0:
+		var spine: Vector3 = q * Vector3.UP
+		var wr := w.dot(spine)
+		w -= spine * (wr * (1.0 - 1.0 / (1.0 + _roll_k * inv_inertia.y * h)))
 	x += v * h
 	q = (q + Quaternion(w.x, w.y, w.z, 0.0) * q * (0.5 * h)).normalized()
 

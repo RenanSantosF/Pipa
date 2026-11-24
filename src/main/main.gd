@@ -86,6 +86,12 @@ func _spawn_bot(pos: Vector3, i: int) -> void:
 	prof.pattern = (i + 1) % 4
 	prof.apply_size(randi() % 3)
 	prof.apply_bow(randi() % 3)
+	prof.apply_tail(randi() % 3)
+	var tails := [[Color(0.95, 0.95, 0.95), Color(0.85, 0.15, 0.15)], [Color(0.1, 0.1, 0.1), Color(0.98, 0.84, 0.12)],
+		[Color(0.2, 0.45, 0.9), Color(0.95, 0.95, 0.95)], [Color(0.1, 0.6, 0.25), Color(0.98, 0.84, 0.12)]]
+	var tc: Array = tails[i % tails.size()]
+	prof.tail_color_a = tc[0]
+	prof.tail_color_b = tc[1]
 	r.profile = prof
 	r.line_type = load("res://src/physics/lines/%s.tres" % BOT_LINES[randi() % BOT_LINES.size()])
 	r.display_name = "Vizinho %d" % (i + 2)
@@ -123,6 +129,7 @@ func _ready() -> void:
 	input_router.sound_toggle_requested.connect(_toggle_sound)
 	gestures.size_pressed.connect(func() -> void: input_router.intent.size_cycle += 1)
 	gestures.bow_pressed.connect(func() -> void: input_router.intent.bow_cycle += 1)
+	gestures.tail_pressed.connect(func() -> void: input_router.intent.tail_cycle += 1)
 	player_rig.profile = player_rig.profile.duplicate()
 	player_rig.profile.apply_size(KiteProfile.Size.M)
 	if bot_rig.profile:
@@ -165,12 +172,82 @@ func _ready() -> void:
 	if args.has("--autotest"):
 		_attach("res://src/main/autotest.gd")
 		return
+	if args.has("--crossprobe"):
+		_attach("res://src/main/cross_probe.gd")
+		return
 	if args.has("--gestureprobe"):
 		_attach("res://src/main/gesture_probe.gd")
 		return
 	reset_kite()
+	if args.has("--renderstats"):
+		_render_stats()
+		return
 	if args.has("--screenshots"):
 		_attach("res://src/main/screenshot_tour.gd")
+
+
+## Números de renderização da cena (draw calls, triângulos, objetos) — teste de peso.
+func _render_stats() -> void:
+	await get_tree().create_timer(4.0).timeout
+	var cam := get_viewport().get_camera_3d()
+	for yaw in [0.0, 90.0, 180.0, 270.0]:
+		if cam:
+			cam.global_rotation = Vector3(deg_to_rad(-8.0), deg_to_rad(yaw), 0.0)
+		await get_tree().process_frame
+		await get_tree().process_frame
+		await get_tree().process_frame
+		print("RENDER yaw=%3d draw_calls=%d tris=%d objetos=%d mem_video=%.0fMB" % [yaw,
+			RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_DRAW_CALLS_IN_FRAME),
+			RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_PRIMITIVES_IN_FRAME),
+			RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_OBJECTS_IN_FRAME),
+			RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_VIDEO_MEM_USED) / 1048576.0])
+	for a in OS.get_cmdline_user_args():
+		if a == "--nobots":
+			for b in bots:
+				b.set_physics_process(false)
+		elif a == "--noplayer":
+			player.set_physics_process(false)
+		elif a == "--nokites":
+			physics_world.set_physics_process(false)
+		elif a == "--nowind":
+			Wind.set_physics_process(false)
+	var tp := 0.0
+	var tf := 0.0
+	var tk := 0.0
+	for _i in 60:
+		await get_tree().physics_frame
+		tp += Performance.get_monitor(Performance.TIME_PROCESS)
+		tf += Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS)
+		tk += physics_world.frame_ms
+	print("CPU process=%.2fms physics=%.2fms pipas=%.2fms (média de 60 ticks, %d Hz)" % [tp / 60.0 * 1000.0, tf / 60.0 * 1000.0, tk / 60.0, Engine.physics_ticks_per_second])
+	var pp := []
+	for n in get_tree().root.find_children("*", "", true, false):
+		if n.is_physics_processing() or n.is_physics_processing_internal():
+			pp.append("%s%s" % [n.name, "(i)" if n.is_physics_processing_internal() and not n.is_physics_processing() else ""])
+	print("PHYSPROC %d: %s" % [pp.size(), str(pp.slice(0, 40))])
+	print("FISICA3D ativos=%d pares=%d ilhas=%d corpos_estaticos=%d formas=%d" % [Performance.get_monitor(Performance.PHYSICS_3D_ACTIVE_OBJECTS), Performance.get_monitor(Performance.PHYSICS_3D_COLLISION_PAIRS), Performance.get_monitor(Performance.PHYSICS_3D_ISLAND_COUNT), get_tree().root.find_children("*", "StaticBody3D", true, false).size(), get_tree().root.find_children("*", "CollisionShape3D", true, false).size()])
+	if OS.get_cmdline_user_args().has("--meshdump"):
+		var rows := []
+		for gi in get_tree().root.find_children("*", "MeshInstance3D", true, false):
+			var mi := gi as MeshInstance3D
+			if mi.mesh == null or not mi.is_visible_in_tree():
+				continue
+			var tris := 0
+			for si in mi.mesh.get_surface_count():
+				var arr := mi.mesh.surface_get_arrays(si)
+				if arr.is_empty():
+					continue
+				var idx = arr[Mesh.ARRAY_INDEX]
+				tris += (idx.size() / 3) if idx != null and idx.size() > 0 else (arr[Mesh.ARRAY_VERTEX].size() / 3)
+			rows.append([tris, str(mi.get_path()).right(70), mi.mesh.get_surface_count(), mi.visibility_range_end, mi.cast_shadow])
+		rows.sort_custom(func(a, b): return a[0] > b[0])
+		var total := 0
+		for r in rows:
+			total += r[0]
+		print("MESH total=%d instâncias=%d" % [total, rows.size()])
+		for r in rows.slice(0, 25):
+			print("MESH %7d surf=%d vis_end=%.0f sombra=%d %s" % [r[0], r[2], r[3], r[4], r[1]])
+	get_tree().quit()
 
 
 func _attach(path: String) -> void:
@@ -198,16 +275,20 @@ func _cycle_line() -> void:
 
 func _process(_delta: float) -> void:
 	var it := input_router.intent
-	if it.size_cycle > 0 or it.bow_cycle > 0:
+	if it.size_cycle > 0 or it.bow_cycle > 0 or it.tail_cycle > 0:
 		var p := player_rig.profile
 		if it.size_cycle > 0:
 			p.apply_size((p.size_class + it.size_cycle) % 3)
 		if it.bow_cycle > 0:
 			p.apply_bow((p.bow_class + it.bow_cycle) % 3)
+		if it.tail_cycle > 0:
+			p.apply_tail((p.tail_class + it.tail_cycle) % 3)
 		it.size_cycle = 0
 		it.bow_cycle = 0
+		it.tail_cycle = 0
 		gestures.size_label = KiteProfile.SIZE_NAMES[p.size_class]
 		gestures.bow_level = p.bow_class
+		gestures.tail_level = p.tail_class
 		reset_kite()
 		hud.show_message(p.describe(), 1.8)
 

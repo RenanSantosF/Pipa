@@ -21,6 +21,9 @@ func _ready() -> void:
 	EventBus.line_snapped.connect(func(_p: Vector3) -> void: toast("snap", "arrebentou", Color(1, 0.5, 0.4)))
 	EventBus.line_cut.connect(_on_line_cut)
 	EventBus.kite_snagged.connect(_on_snagged)
+	EventBus.line_freed.connect(func(r: Node, _w: String) -> void:
+		if r == rig:
+			toast("snag", "soltou", Color(0.6, 1.0, 0.6), 1.6))
 
 
 func setup(p_rig: KiteRig, p_world: KitePhysicsWorld) -> void:

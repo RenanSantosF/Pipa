@@ -46,7 +46,11 @@ func _ready() -> void:
 		elif a.begins_with("--ropeit="):
 			_ropeit_override = int(a.substr(9))
 	# Celular começa no BAIXO (roda até em aparelho fraco, sem esquentar); o PC no ALTO.
-	apply_quality(Quality.LOW if OS.has_feature("mobile") else Quality.HIGH)
+	var q := Quality.LOW if OS.has_feature("mobile") else Quality.HIGH
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--quality="):
+			q = clampi(int(a.substr(10)), 0, 2)   # testes: igual ao celular desde o início
+	apply_quality(q)
 
 
 ## Qualidade gráfica e de física. Custos medidos no PC (5 pipas):
@@ -56,7 +60,7 @@ func apply_quality(q: int) -> void:
 	var vp := get_viewport()
 	match q:
 		Quality.LOW:
-			vp.scaling_3d_scale = 0.6
+			vp.scaling_3d_scale = 0.55
 			vp.msaa_3d = Viewport.MSAA_DISABLED
 			Engine.max_fps = 30
 			Engine.physics_ticks_per_second = 30
@@ -95,12 +99,12 @@ func tail_points() -> int:
 ## Subpassos XPBD por tick de física (mais = linha mais firme, mais CPU).
 ## BAIXO/MÉDIO rodam a física a 30 Hz: 5–6 subpassos (~6 ms cada, estável).
 func physics_substeps() -> int:
-	return _substeps_override if _substeps_override > 0 else [5, 6, 8][quality]
+	return _substeps_override if _substeps_override > 0 else [4, 5, 8][quality]
 
 
 ## Varreduras do solver da linha por subpasso (física a 30 Hz precisa de ida e volta).
 func rope_iterations() -> int:
-	return _ropeit_override if _ropeit_override > 0 else [2, 2, 1][quality]
+	return _ropeit_override if _ropeit_override > 0 else 1
 
 
 func shadows_enabled() -> bool:
@@ -121,12 +125,21 @@ func rope_max_nodes(local: bool) -> int:
 
 ## Densidade das copas (cartões de folha por aglomerado).
 func foliage_density() -> float:
-	return [0.45, 0.7, 1.0][quality]
+	return [0.32, 0.6, 1.0][quality]
 
 
 ## Subdivisões do desenho da linha entre nós.
 func line_subdivisions() -> int:
 	return [3, 4, 5][quality]
+
+
+## Distância máxima de desenho do cenário (m; 0 = sem limite) e da câmera.
+func draw_distance() -> float:
+	return [150.0, 220.0, 0.0][quality]
+
+
+func camera_far() -> float:
+	return [320.0, 500.0, 700.0][quality]
 
 
 func shadow_distance() -> float:

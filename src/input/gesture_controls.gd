@@ -2,26 +2,28 @@ class_name GestureControls
 extends Control
 ## Controles 100% por GESTOS (sem botões de jogo). Um dedo na área grande da tela:
 ##
-##   TOQUE rápido              → PUXÃO (toques seguidos = puxões seguidos)
-##   Arrastar para o LADO      → DESBICO para aquele lado: enquanto o dedo está fora
-##                               do centro a mão dá linha e o bico vai GIRANDO para
-##                               o lado (quanto mais longe, mais forte). Voltou ao
-##                               centro ou soltou = retoma a linha (ela se firma).
-##                               Desbica até o bico apontar e TOCA: ela vai pra lá.
-##   Arranque para BAIXO       → puxão forte; continuar descendo = braçada (recolhe)
+##   TOQUE rápido              → DESBICO curto para o lado do toque (metade esquerda
+##                               = esquerda, direita = direita); funciona até perto
+##                               do chão. Toques seguidos = vai desbicando (e descendo)
+##   DOIS TOQUES rápidos       → JOGA a pipa para aquele lado (desbico + puxão)
+##   Arrastar para o LADO      → desbico contínuo: enquanto o dedo está fora do centro
+##                               o bico vai girando para o lado (mais longe = mais forte)
+##   Arrastar e SEGURAR p/ BAIXO → puxa a linha sem parar (mão sobre mão): a pipa sobe;
+##                               quanto mais desce o dedo, mais rápido
+##   Esfregar p/ cima e p/ baixo → cada descida rápida é um puxão a mais (ainda mais rápido)
 ##   Arrastar para CIMA        → abrir a mão / dar linha
 ##   CÍRCULOS                  → enrolar na lata
-##   Segundo dedo: TOQUE = puxão (desbica com um polegar, puxa com o outro);
-##                 ARRASTAR = olhar em volta
+##   Segundo dedo: TOQUE = puxão; ARRASTAR = olhar em volta
 ##   Faixa estreita no topo → olhar em volta
 ##   Canto inferior esquerdo   → andar (joystick)
-##   Ícones no canto           → nova pipa · linha · som · tamanho · envergadura
+##   Ícones no canto           → nova pipa · linha · som · tamanho · envergadura · rabiola
 
 signal reset_pressed
 signal menu_pressed
 signal sound_pressed
 signal size_pressed
 signal bow_pressed
+signal tail_pressed
 
 ## Câmera: só a faixa de cima (fração da altura) — o resto é da pipa.
 const LOOK_ZONE := 0.15
@@ -31,6 +33,14 @@ const MOVE_ZONE_Y := 0.6
 ## Classificação do gesto.
 const CLASSIFY_PX := 16.0
 const TAP_TIME := 0.28
+## Dois toques dentro desta janela (s) = jogar para o lado.
+const DOUBLE_WINDOW := 0.32
+## Puxada contínua: dedo abaixo da origem (px) para começar / para o ritmo máximo.
+const PULL_DEAD := 22.0
+const PULL_FULL := 220.0
+## Esfregar: descida mínima (px) e velocidade (px/s) para contar um puxão.
+const SCRUB_PX := 38.0
+const SCRUB_SPEED := 320.0
 const FLICK_SPEED := 650.0     # px/s para baixo = arranque (puxão forte)
 ## Desbico: deslocamento lateral (px) para intensidade máxima.
 const DESBICO_PX := 150.0
@@ -52,6 +62,7 @@ var sound_on: bool = true
 ## Rótulos dos ícones de tamanho/envergadura (atualizados pelo Main).
 var size_label: String = "M"
 var bow_level: int = 1
+var tail_level: int = 1
 
 var _joy_index: int = -1
 var _look_index: int = -1
@@ -59,6 +70,8 @@ var _look_index: int = -1
 var _second_index: int = -1
 var _second_origin := Vector2.ZERO
 var _second_t0: float = 0.0
+var _last_tap_t: float = -10.0
+var _scrub_top: float = 0.0
 var _kite_index: int = -1
 var _icon_down: Dictionary = {}
 # Gesto da pipa (um dedo).
@@ -88,7 +101,7 @@ func _icons() -> Array:
 	var y := ICON_R + 16.0
 	var x := size.x - ICON_R - 16.0
 	return [["reset", Vector2(x, y)], ["line", Vector2(x - ICON_R * 2.5, y)], ["sound", Vector2(x - ICON_R * 5.0, y)],
-		["size", Vector2(x - ICON_R * 7.5, y)], ["bow", Vector2(x - ICON_R * 10.0, y)]]
+		["size", Vector2(x - ICON_R * 7.5, y)], ["bow", Vector2(x - ICON_R * 10.0, y)], ["tail", Vector2(x - ICON_R * 12.5, y)]]
 
 
 func _icon_at(pos: Vector2) -> String:
@@ -175,6 +188,8 @@ func _up(index: int, pos: Vector2) -> void:
 					size_pressed.emit()
 				"bow":
 					bow_pressed.emit()
+				"tail":
+					tail_pressed.emit()
 		_dirty = true
 		return
 	if index == _joy_index:
@@ -191,9 +206,16 @@ func _up(index: int, pos: Vector2) -> void:
 			_dirty = true
 	if index == _kite_index:
 		if _mode == "" and _time - _t0 < TAP_TIME:
-			# Toque rápido = puxão.
-			intent.pull_taps += 1
-			_fx.append([pos, 0.0, Color(1.0, 0.82, 0.35)])
+			# Toque rápido = desbico para o lado do toque; dois toques = jogar.
+			var side := -1.0 if pos.x < size.x * 0.5 else 1.0
+			if _time - _last_tap_t < DOUBLE_WINDOW:
+				intent.throws.append(side)
+				_last_tap_t = -10.0
+				_fx.append([pos, 0.0, Color(1.0, 0.55, 0.25)])
+			else:
+				intent.taps.append(side)
+				_last_tap_t = _time
+				_fx.append([pos, 0.0, Color(0.55, 0.85, 1.0)])
 		elif _mode == "desbico" and _desb_side != 0.0:
 			intent.release_desbico()
 		_kite_index = -1
@@ -201,6 +223,8 @@ func _up(index: int, pos: Vector2) -> void:
 		intent.stroke = 0.0
 		intent.grip = 1.0
 		intent.reel_rate = 0.0
+		intent.pull_held = false
+		intent.pull_rate = 0.0
 		intent.gesture_mode = ""
 		_dirty = true
 
@@ -239,6 +263,7 @@ func _kite_drag(pos: Vector2, velocity: Vector2) -> void:
 			_mode = "desbico"
 		elif d.y > 0.0:
 			_mode = "puxar"
+			_scrub_top = pos.y
 			if velocity.y > FLICK_SPEED or d.y / maxf(_time - _t0, 0.016) > FLICK_SPEED:
 				intent.pull_taps += 1   # arranque para baixo: puxão na hora
 				_fx.append([pos, 0.0, Color(1.0, 0.82, 0.35)])
@@ -257,8 +282,18 @@ func _kite_drag(pos: Vector2, velocity: Vector2) -> void:
 				_desb_side = side
 			intent.desbico_intensity = clampf((absf(off) - DESBICO_DEAD) / (DESBICO_PX - DESBICO_DEAD), 0.25, 1.0)
 		"puxar":
-			intent.stroke = clampf(d.y / STROKE_PX, 0.0, 1.0) * STROKE_MAX
+			# Segurando abaixo da origem: puxada contínua (mão sobre mão).
+			intent.stroke = 0.0
 			intent.grip = 1.0
+			intent.pull_held = d.y > PULL_DEAD
+			intent.pull_rate = clampf((d.y - PULL_DEAD) / (PULL_FULL - PULL_DEAD), 0.0, 1.0)
+			# Esfregando: cada descida rápida desde o último ponto alto = mais um puxão.
+			if pos.y < _scrub_top:
+				_scrub_top = pos.y
+			elif pos.y - _scrub_top > SCRUB_PX and velocity.y > SCRUB_SPEED:
+				intent.pull_taps += 1
+				_scrub_top = pos.y
+				_fx.append([pos, 0.0, Color(1.0, 0.82, 0.35)])
 		"soltar":
 			intent.stroke = 0.0
 			intent.grip = 1.0 - clampf(-d.y / RELEASE_PX, 0.0, 1.0)
@@ -334,15 +369,20 @@ func _draw() -> void:
 				draw_string(ThemeDB.fallback_font, c + Vector2(5, 12), size_label, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Icons.ACCENT)
 			"bow":
 				Icons.bow(self, c, ICON_R * 0.5, bow_level, Icons.INK, 1.8)
-	# Dicas de gesto nos primeiros segundos (só desenhos): toque = puxão,
-	# arrastar para o lado = desbico, cima = dar linha, círculo = enrolar.
+			"tail":
+				Icons.tail(self, c, ICON_R * 0.5, tail_level, Icons.INK)
+	# Dicas de gesto nos primeiros segundos (só desenhos): toque nas duas metades =
+	# desbico para aquele lado, arrastar para o lado = desbico contínuo, para baixo =
+	# puxar, para cima = dar linha, círculo = enrolar.
 	if _time < 9.0:
 		var a := clampf(1.0 - (_time - 6.0) / 3.0, 0.0, 1.0) * 0.8
 		var col := Color(1, 1, 1, a)
 		var base := Vector2(size.x * 0.55, size.y * 0.58)
-		Icons.tap(self, base, 24.0, Color(1.0, 0.82, 0.35, a))
+		Icons.tap(self, Vector2(size.x * 0.25, size.y * 0.5), 22.0, Color(0.55, 0.85, 1.0, a))
+		Icons.tap(self, Vector2(size.x * 0.75, size.y * 0.5), 22.0, Color(0.55, 0.85, 1.0, a))
 		Icons.arrow(self, base + Vector2(-40, 0), base + Vector2(-120, 0), col)
 		Icons.arrow(self, base + Vector2(40, 0), base + Vector2(120, 0), col)
+		Icons.arrow(self, base + Vector2(0, 40), base + Vector2(0, 110), Color(1.0, 0.82, 0.35, a))
 		Icons.arrow(self, base + Vector2(0, -40), base + Vector2(0, -105), Color(0.55, 0.85, 1.0, a))
 		draw_arc(base + Vector2(190, -10), 22.0, 0.0, TAU * 0.8, 20, Color(0.6, 1.0, 0.55, a), 2.5, true)
 		draw_line(Vector2(0, size.y * LOOK_ZONE), Vector2(size.x * 0.6, size.y * LOOK_ZONE), Color(1, 1, 1, a * 0.35), 1.5, true)

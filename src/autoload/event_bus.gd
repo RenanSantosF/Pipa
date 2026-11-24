@@ -11,4 +11,6 @@ signal line_snapped(position: Vector3)
 signal line_cut(winner: Node, loser: Node)
 ## Pipa ou linha enroscou (árvore, poste, fio, telhado).
 signal kite_snagged(rig: Node, what: String)
+## A linha desenroscou (tranco ou linha frouxa).
+signal line_freed(rig: Node, what: String)
 signal reset_requested

@@ -26,15 +26,17 @@ const LINE_RADIUS := 0.0015
 
 enum Kind { CANOPY, CAPSULE, BOX }
 
-## μ, θ para prender (rad), tensão de aperto (N), tempo de aperto (s), quebra mín/máx (N).
+## μ, θ para prender (rad), tensão de aperto (N), tempo de aperto (s), tranco que
+## SOLTA mín/máx (N): no galho fino o galho quebra; no tronco/poste a linha
+## desenrosca com o tranco (puxões fortes, mão sobre mão, ou andar mudando o ângulo).
 const MATERIALS := {
-	"galho": [0.62, 1.7, 5.0, 0.4, 8.0, 24.0],
-	"árvore": [0.65, 2.4, 8.0, 0.6, 1000.0, 1000.0],
-	"coqueiro": [0.5, 2.5, 9.0, 0.7, 1000.0, 1000.0],
-	"poste": [0.42, 2.6, 12.0, 0.8, 1000.0, 1000.0],
-	"cruzeta": [0.5, 2.1, 10.0, 0.6, 1000.0, 1000.0],
+	"galho": [0.62, 1.7, 5.0, 0.4, 8.0, 20.0],
+	"árvore": [0.65, 2.4, 8.0, 0.6, 12.0, 24.0],
+	"coqueiro": [0.5, 2.5, 9.0, 0.7, 12.0, 24.0],
+	"poste": [0.42, 2.6, 12.0, 0.8, 13.0, 24.0],
+	"cruzeta": [0.5, 2.1, 10.0, 0.6, 11.0, 20.0],
 	"fio": [0.15, 99.0, 99.0, 99.0, 1000.0, 1000.0],   # nunca trava: pendura e escorrega ao longo
-	"trave": [0.35, 2.6, 12.0, 0.8, 1000.0, 1000.0],
+	"trave": [0.35, 2.6, 12.0, 0.8, 12.0, 22.0],
 	"telhado": [0.55, 99.0, 10.0, 0.9, 1000.0, 1000.0],
 	"muro": [0.5, 99.0, 11.0, 0.9, 1000.0, 1000.0],
 }
@@ -474,8 +476,13 @@ func _deviation(rope: Rope, i: int) -> float:
 	return PI - acos(clampf(u1.dot(u2), -1.0, 1.0))
 
 
+## Nome do que a linha DESENROSCOU no último quadro ("" se nada) — aviso no HUD.
+var last_freed: String = ""
+
+
 func _update_contacts(rope: Rope, dt: float) -> String:
 	var snagged_now := ""
+	var freed_now := ""
 	var i := rope.pos.size() - 1
 	while i >= 1:
 		var idx := rope.pin_obstacle[i]
@@ -512,12 +519,22 @@ func _update_contacts(rope: Rope, dt: float) -> String:
 				else:
 					slipped_off = off_surface > 0.01
 		if rope.pinned[i] == 1:
-			# ENROSCADO: solta quando endireita ou quando o tranco quebra o galho.
+			# ENROSCADO: solta quando endireita, com um tranco forte (quebra o galho /
+			# desenrosca do tronco) ou dando linha: frouxa, sem dar volta, ela cai fora.
+			if t_max < 0.6 and dev < 1.4:
+				rope.c_hold[i] += dt
+			else:
+				rope.c_hold[i] = maxf(rope.c_hold[i] - dt, 0.0)
 			if dev < 0.05 or slipped_off:
 				rope.unpin_node(i)
 			elif t_max > rope.pin_break[i]:
 				rope.unpin_node(i)
-				rope.c_hold[i] = -2.0   # galho quebrou: não prende de novo logo
+				rope.c_hold[i] = -2.0   # soltou no tranco: não prende de novo logo
+				freed_now = what
+			elif rope.c_hold[i] > 0.35:
+				rope.unpin_node(i)
+				rope.c_hold[i] = -1.5   # caiu fora com a linha frouxa
+				freed_now = what
 			else:
 				_capstan(rope, i, dev, t_hand, t_kite, rope.pin_mu[i], dt)
 				i -= 1

@@ -82,9 +82,12 @@ func _collide_with_world() -> void:
 	var dt := get_physics_process_delta_time()
 	for r in rigs:
 		if r.rope != null:
+			obstacles.last_freed = ""
 			var snag := obstacles.update_rope(r.rope, dt)
 			if snag != "" and r.is_flying():
 				EventBus.kite_snagged.emit(r, snag)
+			if obstacles.last_freed != "" and r.is_flying():
+				EventBus.line_freed.emit(r, obstacles.last_freed)
 		if r.is_flying():
 			r.try_snag(obstacles, dt)
 			r.tail.try_snag(obstacles, r.rope.tension_end, dt)

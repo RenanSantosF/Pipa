@@ -392,8 +392,9 @@ func post_frame(dt: float, h: float) -> void:
 		# Trancos fortes soltam a pipa do galho/fio.
 		if rope.tension_end > snag_strength:
 			_snag_pull += dt
-			if _snag_pull > 0.12:
+			if _snag_pull > 0.08:
 				snagged = false
+				EventBus.line_freed.emit(self, snag_what)
 				snag_cooldown = 1.2
 		else:
 			_snag_pull = maxf(_snag_pull - dt * 0.5, 0.0)

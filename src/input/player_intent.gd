@@ -27,11 +27,16 @@ var pull_taps: int = 0
 var pull_held: bool = false
 ## Desbicadas duplas pedidas de uma vez (teclado).
 var double_taps: int = 0
+## JOGAR para o lado (duplo toque): desbico forte + puxão na hora certa (lado ±1).
+var throws: Array[float] = []
+## Puxada contínua (segurar arrastado para baixo): 0..1 = ritmo da mão sobre mão.
+var pull_rate: float = 0.0
 ## O toque virou arrasto logo no começo: aborta o desbico.
 var cancel_desbico: bool = false
-## Ciclos pedidos no HUD: tamanho da pipa / envergadura.
+## Ciclos pedidos no HUD: tamanho da pipa / envergadura / rabiola.
 var size_cycle: int = 0
 var bow_cycle: int = 0
+var tail_cycle: int = 0
 ## Modo do gesto atual (para feedback visual): "", "puxar", "soltar", "enrolar".
 var gesture_mode: String = ""
 

@@ -45,6 +45,8 @@ class Contact:
 	var age: float = 0.0
 	## A linha de um chegou na pipa do outro e laçou no cabresto.
 	var hooked: bool = false
+	## Qual ponta está laçada: 0 = cabresto da pipa de `a`, 1 = da de `b` (−1 = antigo).
+	var hook_side: int = -1
 
 
 var contacts: Array[Contact] = []
@@ -77,6 +79,8 @@ func detect(rigs: Array[KiteRig]) -> void:
 			if not rb.is_flying():
 				continue
 			_detect_pair(ra, rb)
+			_detect_kite(ra, rb)
+			_detect_kite(rb, ra)
 	_prev_pts.clear()
 	for r in rigs:
 		if r.is_flying():
@@ -84,6 +88,73 @@ func detect(rigs: Array[KiteRig]) -> void:
 			if r.rope.end_body != null:
 				sv.append(0.0)
 			_prev_pts[r] = [_rope_points(r.rope), sv]
+
+
+## A linha de `other` encostou na PIPA de `owner` (vela, varetas ou linhas da
+## cabeça): ela não atravessa o papel — engancha na armação e escorrega até o
+## cabresto (laçou). Vira um contato "laçado" no ponto do cabresto da pipa.
+func _detect_kite(owner: KiteRig, other: KiteRig) -> void:
+	var body := owner.body
+	if body == null or owner.rope == null or owner.rope.end_body != body:
+		return
+	for ex in contacts:
+		if ex.hooked and ((ex.a == owner and ex.b == other) or (ex.a == other and ex.b == owner)):
+			return   # já laçada
+	var pts := _rope_points(other.rope)
+	var reach := owner.profile.height * 0.75
+	var n: Vector3 = body.q * Vector3.BACK
+	var inv := body.q.inverse()
+	var prev: Array = _prev_pts.get(other, [])
+	var prev_pts: PackedVector3Array = prev[0] if not prev.is_empty() else PackedVector3Array()
+	for j in pts.size() - 1:
+		var a := pts[j]
+		var b := pts[j + 1]
+		# Perto da pipa? (distância do centro ao trecho)
+		var ab := b - a
+		var t := clampf((body.x - a).dot(ab) / maxf(ab.length_squared(), 1e-9), 0.0, 1.0)
+		if (a + ab * t).distance_to(body.x) > reach:
+			continue
+		var hit := _segment_hits_sail(body, inv, n, a, b)
+		if not hit and prev_pts.size() == pts.size():
+			# Passou inteira pela vela entre dois ticks: testa a posição anterior também
+			# e o "varrido" (meio do trecho antes → agora).
+			hit = _segment_hits_sail(body, inv, n, prev_pts[j], prev_pts[j + 1]) \
+				or _segment_hits_sail(body, inv, n, (prev_pts[j] + prev_pts[j + 1]) * 0.5, (a + b) * 0.5)
+		if not hit:
+			continue
+		var c := Contact.new()
+		c.a = owner
+		c.b = other
+		c.ia = owner.rope.segment_count() - 1
+		c.ta = 1.0
+		c.ib = j
+		c.tb = t
+		c.hooked = true
+		c.hook_side = 0
+		c.normal = n
+		c.sa_prev = owner.rope.material_at(c.ia, 1.0)
+		c.sb_prev = other.rope.material_at(j, t)
+		c.position = body.x
+		contacts.append(c)
+		return
+
+
+## O trecho a–b atravessa o plano da vela dentro do contorno da pipa?
+static func _segment_hits_sail(body: KiteRigidBody, inv: Quaternion, n: Vector3, a: Vector3, b: Vector3) -> bool:
+	var da := (a - body.x).dot(n)
+	var db := (b - body.x).dot(n)
+	if da * db > 0.0 and minf(absf(da), absf(db)) > 0.02:
+		return false
+	var t := clampf(da / (da - db), 0.0, 1.0) if absf(da - db) > 1e-6 else 0.5
+	var lp: Vector3 = inv * (a.lerp(b, t) - body.x)
+	return Geometry2D.is_point_in_polygon(Vector2(lp.x, lp.y), _outline(body))
+
+
+static func _outline(body: KiteRigidBody) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	for cnr in body.corners:
+		out.append(Vector2(cnr.x, cnr.y))
+	return out
 
 
 func _rope_points(r: Rope) -> PackedVector3Array:
@@ -371,6 +442,35 @@ static func _push(r: Rope, idx: int, corr: Vector3) -> void:
 func _refresh(c: Contact) -> void:
 	var seg_a := c.a.rope.segment_count()
 	var seg_b := c.b.rope.segment_count()
+	if c.hooked and c.hook_side >= 0:
+		# Laçada: uma ponta fica no cabresto; a outra linha escorrega até o ponto
+		# dela mais perto do cabresto.
+		var owner_rope := c.a.rope if c.hook_side == 0 else c.b.rope
+		var other_rope := c.b.rope if c.hook_side == 0 else c.a.rope
+		var pe := owner_rope.end_point()
+		var j := clampi(c.ib if c.hook_side == 0 else c.ia, 0, other_rope.segment_count() - 1)
+		var tt := 0.0
+		for _k in 3:
+			var sp := other_rope.segment_points(j)
+			var ab: Vector3 = sp[1] - sp[0]
+			tt = clampf((pe - sp[0]).dot(ab) / maxf(ab.length_squared(), 1e-9), 0.0, 1.0)
+			if tt <= 0.0 and j > 0:
+				j -= 1
+			elif tt >= 1.0 and j < other_rope.segment_count() - 1:
+				j += 1
+			else:
+				break
+		if c.hook_side == 0:
+			c.ia = seg_a - 1
+			c.ta = 1.0
+			c.ib = j
+			c.tb = tt
+		else:
+			c.ib = seg_b - 1
+			c.tb = 1.0
+			c.ia = j
+			c.ta = tt
+		return
 	c.ia = clampi(c.ia, 0, seg_a - 1)
 	c.ib = clampi(c.ib, 0, seg_b - 1)
 	for _k in 2:
@@ -398,14 +498,29 @@ func _refresh(c: Contact) -> void:
 	if not c.hooked:
 		if c.a.rope.end_body != null and c.ia == seg_a - 1 and c.ta >= 0.999:
 			c.hooked = true
+			c.hook_side = 0
 		elif c.b.rope.end_body != null and c.ib == seg_b - 1 and c.tb >= 0.999:
 			c.hooked = true
+			c.hook_side = 1
 
 
 # --- Desgaste (por tick) -------------------------------------------------------
 
 func post_frame(dt: float, h: float, substeps: int) -> void:
 	cut_requests.clear()
+	# Um laço por par e por ponta basta (contatos que escorregaram até a mesma ponta).
+	var seen := {}
+	for i in range(contacts.size() - 1, -1, -1):
+		var hc := contacts[i]
+		if not hc.hooked:
+			continue
+		var owner: KiteRig = hc.a if hc.hook_side == 0 else hc.b
+		var other: KiteRig = hc.b if hc.hook_side == 0 else hc.a
+		var key := str(owner.get_instance_id()) + ">" + str(other.get_instance_id())
+		if seen.has(key):
+			contacts.remove_at(i)
+		else:
+			seen[key] = true
 	for i in range(contacts.size() - 1, -1, -1):
 		var c := contacts[i]
 		var ra := c.a.rope
@@ -425,12 +540,18 @@ func post_frame(dt: float, h: float, substeps: int) -> void:
 				continue
 		c.age += dt
 		c.position = (pa + pb) * 0.5
+		ra.add_render_kink(c.ia, c.ta)
+		rb.add_render_kink(c.ib, c.tb)
 		c.force = c.impulse / (h * h * float(substeps))
 		c.impulse = 0.0
 		var sa := ra.material_at(c.ia, c.ta)
 		var sb := rb.material_at(c.ib, c.tb)
 		var rel := ra.velocity_at(c.ia, c.ta) - rb.velocity_at(c.ib, c.tb)
 		c.slide = (rel - c.normal * rel.dot(c.normal)).length()
+		if c.hooked:
+			# Laçada: o laço "serra" — as pipas balançam e a linha esfrega no laço
+			# mesmo sem escorregar de verdade (mais tensão = mais esfrega).
+			c.slide = maxf(c.slide, 0.25 + 0.03 * c.force)
 		if c.force > 0.01:
 			var mu := (c.a.line_type.friction + c.b.line_type.friction) * 0.5
 			# Cruzamento em X fechado (perpendicular) corta bem mais que linhas quase paralelas.

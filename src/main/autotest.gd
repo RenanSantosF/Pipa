@@ -45,7 +45,10 @@ func start(p_main) -> void:
 	var size := KiteProfile.Size.M
 	var bow := KiteProfile.Bow.MEDIA
 	var tow := -1.0
+	var tail := 1
 	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--tail="):
+			tail = int(a.substr(7))
 		if a.begins_with("--tow="):
 			tow = float(a.substr(6))
 		if a.begins_with("--size="):
@@ -56,6 +59,7 @@ func start(p_main) -> void:
 		r.profile = r.profile.duplicate()
 		r.profile.apply_size(size)
 		r.profile.apply_bow(bow)
+		r.profile.apply_tail(tail)
 		if tow >= 0.0:
 			r.profile.tow_fraction = tow
 		for a in OS.get_cmdline_user_args():
@@ -192,16 +196,21 @@ func _phase_combat(_delta: float) -> void:
 	rig.grip = 1.0
 	# Sobe a mão até a linha dele apertar a sua por baixo; depois segura a altura.
 	var con := (main.physics_world as KitePhysicsWorld).strongest_contact_for(bot_rig)
-	if _t > 2.0 and (con == null or con.force < 1.5) and _rise < 16.0:
+	if _t > 2.0 and (con == null or con.force < 1.5) and _rise < 22.0:
 		_rise += 1.2 * _delta
 	bot_rig.hand_rest = _hand_b0 + Vector3.UP * _rise
-	_hand_b.update(_delta, 0.0, 0.3 if fmod(_t, 2.0) < 0.8 and _t > 4.0 else 1.0, 0.0)
+	# Dá linha só relando (apertando contra a outra), como no relo de verdade.
+	var relando := con != null and con.force > 0.5
+	_hand_b.update(_delta, 0.0, 0.3 if relando and fmod(_t, 2.0) < 0.8 and _t > 4.0 else 1.0, 0.0)
 	if OS.get_cmdline_user_args().has("--debugcombat") and _t > 0.0:
 		var w2 := main.physics_world as KitePhysicsWorld
 		var c2 := w2.strongest_contact_for(rig)
 		var fs := []
 		for cc in w2.combat.contacts:
-			fs.append("%.1f/%.2f%s a=%s ia=%d/%d ta=%.2f ib=%d/%d tb=%.2f" % [cc.force, cc.slide, "H" if cc.hooked else "", "eu" if cc.a == rig else "bot", cc.ia, cc.a.rope.segment_count(), cc.ta, cc.ib, cc.b.rope.segment_count(), cc.tb])
+			var spa := cc.a.rope.segment_points(cc.ia)
+			var spb := cc.b.rope.segment_points(cc.ib)
+			var dd: Vector3 = spb[0].lerp(spb[1], cc.tb) - spa[0].lerp(spa[1], cc.ta)
+			fs.append("%.1f/%.2f%s a=%s sep=%.3f |d|=%.3f rise=%.1f" % [cc.force, cc.slide, "H" if cc.hooked else "", "eu" if cc.a == rig else "bot", dd.dot(cc.normal), dd.length(), _rise])
 		print("  ", fs)
 		print("COMB t=%.2f n=%d F=%.2f slide=%.2f wear=%.3f/%.3f T=%.1f/%.1f" % [_t, w2.combat.contacts.size(), c2.force if c2 else 0.0, c2.slide if c2 else 0.0, LineCombat.max_wear(rig), LineCombat.max_wear(bot_rig), rig.tension, bot_rig.tension])
 	if _every(1.0):

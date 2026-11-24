@@ -99,6 +99,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		intent.size_cycle += 1
 	elif event.is_action_pressed("kite_bow"):
 		intent.bow_cycle += 1
+	elif event is InputEventKey and event.pressed and not event.echo and (event as InputEventKey).keycode == KEY_J:
+		intent.tail_cycle += 1
 	elif event.is_action_pressed("kite_reset"):
 		EventBus.reset_requested.emit()
 	elif event.is_action_pressed("line_cycle"):
