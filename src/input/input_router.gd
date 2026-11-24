@@ -92,7 +92,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event.is_action_released("kite_puxao"):
 		intent.pull_held = false
 	elif event.is_action_pressed("desbico_double"):
-		intent.double_taps += 1
+		intent.desbico_toques += 1
 	elif event.is_action_pressed("mouse_look"):
 		_toggle_mouse()
 	elif event.is_action_pressed("kite_size"):

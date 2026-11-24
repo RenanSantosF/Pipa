@@ -51,6 +51,21 @@ const LAUNCH_LEN := 18.0
 const LAUNCH_ALT := 14.0
 ## Puxão de recolher: abaixo desta linha (m) ainda é o tranco de soltar da mão.
 const RECOLHER_LAUNCH_LEN := 8.0
+## Desbico por toques: giro de um balanço (rad/s) e quanto tempo ele dura (decaimento),
+## quanto tempo sem toque reinicia a sequência, quanto tempo o rumo fica mantido.
+const SWING_RATE := 2.4
+const SWING_TAU := 0.35
+const TAP_SEQ_RESET := 0.45
+const TAP_HOLD_TIME := 1.6
+## Pulso de tração de cada desbico (braço curto, linha não é recolhida).
+const THRUST_LEN := 0.3
+## Empurrão de cada batida na direção do bico (m/s).
+const DESB_IMPULSE := 4.0
+const DESB_PUSH_TIME := 0.2
+## Coeficiente de empuxo da batida (× pressão dinâmica × área da vela).
+const DESB_THRUST := 0.35
+const THRUST_UP := 0.06
+const THRUST_DOWN := 0.22
 
 ## Força do desbico pedida pelo gesto (0,25..1): quanto mais longe o dedo, mais a
 ## mão abre e mais a vareta relaxa torta (o bico gira mais rápido).
@@ -80,6 +95,22 @@ var _guide_amount := 0.0
 var _guide_slack := 0.0
 ## Puxão de RECOLHER (gesto de arrastar para baixo): a linha puxada fica na mão.
 var _recolher := false
+## DESBICO POR TOQUES (estilo pipa de combate): cada toque = um balanço, lados
+## alternados (1º esquerda, 2º direita, …) e as asas batem. Ritmo constante = os
+## balanços se anulam e ela segue reta para onde aponta (subindo devagar, sem
+## chegar mais perto). Pausa depois de um toque = o último balanço "rende" e ela
+## vira para aquele lado. O rumo é mantido enquanto você desbica.
+var _tap_side := 1.0          # lado do último balanço (+1 dir, −1 esq)
+var _tap_rate := 0.0          # giro do balanço atual (rad/s), decai
+var _tap_clock := -10.0       # quando foi o último toque
+var _hold_heading := 0.0      # rumo mantido (rad, 0 = bico para cima, + = direita)
+var _hold_active := false
+var _flap_t := 10.0
+var _push_t := 10.0
+var _thrust_t := 10.0
+## Puxe: rumo mantido durante a puxada (vai reta para onde aponta).
+var _pull_heading := 0.0
+var _pull_hold := false
 
 var rig: KiteRig
 var stroke: float = 0.0
@@ -213,6 +244,51 @@ func puxao() -> void:
 	_start_pull()
 
 
+## DESBICO de um toque (sem lado: os balanços alternam sozinhos).
+func desbico_toque() -> void:
+	if rig == null or rig.body == null:
+		return
+	if rig.held:
+		rig.release_hold()
+	if _clock - _tap_clock > TAP_SEQ_RESET:
+		_tap_side = 1.0               # sequência nova: o 1º balanço é para a esquerda
+	_tap_side = -_tap_side
+	_tap_rate = _tap_side * SWING_RATE
+	_tap_clock = _clock
+	if not _hold_active:
+		_hold_heading = heading()
+		_hold_active = true
+	_flap_t = 0.0
+	_thrust_t = 0.0
+	# A batida (folga + tranco curto) empurra a pipa um pouco para onde o bico aponta:
+	# no ritmo ela avança devagar nessa direção (sobe, vai de lado ou desce).
+	_push_t = 0.0
+
+
+## Rumo do bico na janela de vento (rad): 0 = para cima, +π/2 = direita do pipeiro.
+func heading() -> float:
+	if rig == null or rig.body == null:
+		return 0.0
+	var b := rig.body
+	var fr := _window_frame()
+	var nose: Vector3 = b.q * Vector3.UP
+	return atan2(nose.dot(fr[1]), nose.dot(fr[0]))
+
+
+## [cima, direita] da janela de vento em volta da pipa.
+func _window_frame() -> Array:
+	var ld: Vector3 = rig.body.line_dir
+	var up_t := Vector3.UP - ld * ld.y
+	up_t = up_t.normalized() if up_t.length() > 0.05 else Vector3.FORWARD
+	var right_t := ld.cross(up_t).normalized()
+	return [up_t, right_t]
+
+
+func _heading_dir(h: float) -> Vector3:
+	var fr := _window_frame()
+	return (fr[0] as Vector3) * cos(h) + (fr[1] as Vector3) * sin(h)
+
+
 ## GUIAR (desbico por toque): o bico vai para `world_dir` (força 0..1). Passar
 ## Vector3.ZERO (ou força 0) solta: a pipa segue por inércia e a rabiola endireita.
 func guide(world_dir: Vector3, amount: float) -> void:
@@ -240,6 +316,9 @@ func recolher(amount: float) -> void:
 	pull_len = lerpf(0.4, 0.9, clampf(amount, 0.0, 1.0))
 	puxao()
 	pull_len = keep
+	if not _pull_hold:
+		_pull_heading = heading()
+		_pull_hold = true
 	# Só o tranco de soltar da mão (em zigue-zague) com a linha bem curta; no ar o
 	# puxão é reto: recolhe sem jogar a pipa para os lados.
 	if _launch and rig.flying_length() > RECOLHER_LAUNCH_LEN:
@@ -456,23 +535,52 @@ func update(delta: float, pull_stroke: float, grip_in: float, reel: float) -> vo
 	# bico para cima: ela sobe, sem girar.
 	var steer_target := Vector3.ZERO
 	var steer_gain := 0.0
+	var steer_ff := 0.0
 	var slack_target := 0.0
-	if _guide_amount > 0.0 and rig.body != null:
+	if rig.body != null and _hold_active:
+		# Desbico por toques: o rumo mantido anda com o balanço atual (que decai).
+		_hold_heading = wrapf(_hold_heading + _tap_rate * delta, -PI, PI)
+		_tap_rate *= exp(-delta / SWING_TAU)
+		steer_target = _heading_dir(_hold_heading)
+		steer_gain = 1.0
+		steer_ff = _tap_rate
+		if _clock - _tap_clock > TAP_HOLD_TIME:
+			_hold_active = false
+	elif _guide_amount > 0.0 and rig.body != null:
 		steer_target = _guide_dir
 		steer_gain = lerpf(0.45, 1.0, _guide_amount)
 		var err := absf(rig.body.steer_error)
 		slack_target = clampf((err - 0.3) / 1.0, 0.0, 1.0) * (0.0 if _pulling else 1.0)
-	elif _pulling and _recolher and rig.body != null and not _launch:
-		var ld: Vector3 = rig.body.line_dir
-		var upt := Vector3.UP - ld * ld.y
-		if upt.length() > 0.05:
-			steer_target = upt.normalized()
-			steer_gain = 0.35
-	_guide_slack = lerpf(_guide_slack, slack_target, 1.0 - exp(-delta / 0.08))
-	if _guide_slack > 0.01 and not _pulling and not _desb_active and _recover_t < 0.0:
-		stroke = move_toward(stroke, -0.2 * _guide_slack, 2.5 * delta)
-		grip = minf(grip, lerpf(1.0, 0.45, _guide_slack))
+	elif _pulling and _recolher and _pull_hold and rig.body != null:
+		# Puxe: vai reta para onde aponta (o rumo do começo da puxada é mantido).
+		steer_target = _heading_dir(_pull_heading)
+		steer_gain = 0.6
+	if not _pulling:
+		_pull_hold = false
+	# Pulso de tração do desbico: braço curto e rápido, a linha volta (não recolhe):
+	# a pipa avança para onde aponta, devagar, sem chegar mais perto.
+	if _thrust_t < THRUST_UP + THRUST_DOWN and not _pulling and not _desb_active:
+		_thrust_t += delta
+		var a := _smooth(0.0, THRUST_UP, _thrust_t) * (1.0 - _smooth(THRUST_UP, THRUST_UP + THRUST_DOWN, _thrust_t))
+		stroke = THRUST_LEN * strength * a
 		keep_line = false
+		grip = maxf(grip, 1.0)
+	# Empurrão da batida, espalhado em DESB_PUSH_TIME (sem salto de velocidade),
+	# sempre na direção ATUAL do bico no plano da janela.
+	var push := Vector3.ZERO
+	if _push_t < DESB_PUSH_TIME and rig.body != null:
+		_push_t += delta
+		var ldp: Vector3 = rig.body.line_dir
+		var nose: Vector3 = rig.body.q * Vector3.UP
+		var nt := nose - ldp * nose.dot(ldp)
+		if nt.length() > 0.1:
+			var shape := sin(PI * clampf(_push_t / DESB_PUSH_TIME, 0.0, 1.0))
+			push = nt.normalized() * (DESB_THRUST * shape * strength)
+	rig.push_accel = push
+	# Asas batendo (visual): fecham rápido e abrem.
+	_flap_t += delta
+	rig.flap = sin(PI * clampf(_flap_t / 0.2, 0.0, 1.0)) if _flap_t < 0.2 else 0.0
+	rig.steer_ff = steer_ff
 	rig.steer_dir = steer_target
 	rig.steer_gain = steer_gain
 

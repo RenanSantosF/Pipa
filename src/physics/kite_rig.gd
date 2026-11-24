@@ -55,6 +55,11 @@ var spin_bias: float = 0.0
 ## Guiar: direção desejada do bico (mundo) e força, escritas pela mão.
 var steer_dir := Vector3.ZERO
 var steer_gain: float = 0.0
+var steer_ff: float = 0.0
+## Batida das asas no desbico (0..1, só visual: as duas meias-velas fecham juntas).
+var flap: float = 0.0
+## Empurrão da batida do desbico (aceleração, m/s²), escrito pela mão.
+var push_accel := Vector3.ZERO
 var _t_steady: float = 5.0
 ## A mão voltando da braçada joga a linha no chão? (falso no desbico: a linha escorrega)
 var shorten_on_return: bool = true
@@ -300,6 +305,8 @@ func pre_frame(dt: float) -> void:
 		body.spin_bias = 0.0 if loose else spin_bias
 		body.steer_dir = Vector3.ZERO if loose or held else steer_dir
 		body.steer_gain = steer_gain
+		body.steer_ff = steer_ff
+		body.push_accel = Vector3.ZERO if loose else push_accel
 		if rope != null and rope.hand_fixed:
 			var ld := body.x - hand_position()
 			if ld.length() > 0.01:

@@ -82,6 +82,31 @@ func start(p_main) -> void:
 		"spam":
 			for k in 17:
 				_events.append([6.0 + 0.6 * k, "puxao", 0.0])
+		"ritmo":
+			# Toques no mesmo ritmo (0,25 s): segue reta para onde aponta.
+			for k in 16:
+				_events.append([6.0 + 0.25 * k, "dtap", 0.0])
+		"dupla":
+			# Dois toques e pausa, 4 vezes: vai virando para a direita.
+			for k in 4:
+				_events.append([6.0 + 0.9 * k, "dtap", 0.0])
+				_events.append([6.2 + 0.9 * k, "dtap", 0.0])
+		"um":
+			# Um toque e pausa, 3 vezes: vira para a esquerda.
+			for k in 3:
+				_events.append([6.0 + 1.0 * k, "dtap", 0.0])
+		"virar_ritmo":
+			# Dois pares (aponta para a direita) e depois ritmo: vai reto para a direita.
+			_events = [[6.0, "dtap", 0.0], [6.2, "dtap", 0.0], [6.9, "dtap", 0.0], [7.1, "dtap", 0.0], [7.8, "dtap", 0.0], [8.0, "dtap", 0.0]]
+			for k in 12:
+				_events.append([8.8 + 0.25 * k, "dtap", 0.0])
+		"virar_puxar":
+			# Vira até apontar para baixo e puxa: ela desce para onde aponta.
+			for k in 5:
+				_events.append([6.0 + 0.6 * k, "dtap", 0.0])
+				_events.append([6.15 + 0.6 * k, "dtap", 0.0])
+			for k in 5:
+				_events.append([9.3 + 0.4 * k, "recolhe", 0.8])
 		"guide":
 			# Esquerda, direita, cima, baixo e uma curva contínua.
 			_events = [[6.0, "g_left", 1.0], [8.0, "g_off", 0.0], [9.0, "g_right", 1.0], [11.0, "g_off", 0.0],
@@ -158,6 +183,7 @@ func _physics_process(delta: float) -> void:
 	_track("rumo_max", absf(rad_to_deg(rig.heading())), false)
 	_track("T_pipa_max", rig.rope.tension_end if rig.rope else 0.0, false)
 	_track("v_max", b.v.length(), false)
+	_track("push_max", b.push_accel.length(), false)
 	_wsum += b.w.length_squared()
 	_wn += 1
 	var wb: Vector3 = b.q.inverse() * b.w
@@ -195,6 +221,8 @@ func _apply(action: String, value: float) -> void:
 			_curving = false
 		"recolhe":
 			it.recolhe.append(value)
+		"dtap":
+			it.desbico_toques += 1
 		"tap":
 			it.taps.append(value)
 		"throw":

@@ -22,13 +22,15 @@ Também ficam disponíveis: o *artifact* `pipa-debug-apk` na execução do workf
 
 | Gesto | O que faz |
 |---|---|
-| **Segurar o dedo** na tela | **guiar (desbico)**: a pipa vira o bico para o dedo, em relação a ela na tela — dedo à esquerda da pipa = vai para a esquerda, à direita = direita, acima = sobe, abaixo = desce. Mais longe = vira mais rápido. Arraste o dedo para fazer curvas. Soltar = segue por inércia e o bico volta para cima |
-| **Arrastar de cima para baixo** | **puxão**: recolhe linha (fica no chão aos seus pés); a pipa sobe e chega mais perto, sem girar. Cada arrastada = uma braçada; esfregar = mais puxões; segurar bem embaixo = continua puxando |
+| **Toque** (em qualquer lugar) | **desbico**: cada toque é um balanço, alternando os lados (1º esquerda, 2º direita, 3º esquerda…) e as asas batem |
+| Toques **no mesmo ritmo** | os balanços se anulam: ela segue reta para onde o bico aponta — para cima sobe devagar, de lado vai de lado, para baixo desce — **sem chegar mais perto** |
+| **Toques e pausa** | o último balanço "rende": **2 toques** e pausa = vira para a **direita**; **1 ou 3** = vira para a **esquerda**. Repetindo, ela vai girando (até de cabeça para baixo) |
+| **Arrastar de cima para baixo** | **puxe**: recolhe linha (fica no chão); ela vai **reta para onde aponta** e chega mais perto. Esfregar = mais braçadas; segurar bem embaixo = continua puxando |
 | Arrastar de baixo para cima | dar linha (abrir a mão) |
-| **2º dedo** com o 1º guiando | arrastar para baixo = puxão junto (guia e puxa ao mesmo tempo); para cima = dar linha; toque = puxão curto |
-| Faixa estreita no topo | olhar em volta (a câmera volta para a pipa como mola) |
+| **2º dedo** | toque = desbico; arrastar para baixo = puxe (combina com o outro dedo) |
+| Faixa estreita no topo | olhar em volta |
 | Joystick (canto inferior esquerdo) | andar |
-| Ícones no canto | nova pipa · trocar linha · som · **tamanho P/M/G** · **envergadura** · **rabiola curta/média/grande** |
+| Ícones no canto | nova pipa · trocar linha · som · tamanho P/M/G · envergadura · rabiola curta/média/grande |
 
 **Linha enroscada**: dê **trancos fortes** (segure para baixo / esfregue) para desenroscar do galho, tronco ou poste, ou **dê linha** para ela ficar frouxa e cair fora. A pipa presa num fio/galho solta com tranco.
 
@@ -38,9 +40,9 @@ A pipa **começa na mão**: arraste para baixo algumas vezes (com a linha bem cu
 
 **Encostar não é enroscar**: a linha que encosta em fio, telhado, poste ou galho **desliza** com atrito (barrida). Ela só **enrosca** quando dá volta, cai por cima de um galho ou aperta forte contra a casca. Solta quando endireita, ou com tranco até o galho quebrar. No fio ela nunca trava: fica pendurada e escorrega ao longo dele. A pipa só prende se o fio/galho entrar no cabresto (ou se cair fundo na copa).
 
-PC (testes): segurar clique esquerdo/← = desbico esquerda · segurar clique direito/→ = desbico direita · F = puxão (segurar = em série) · Espaço = dupla · Tab = olhar com o mouse · E = dar linha · G = braçada lenta · Q = enrolar · R = nova pipa · T = trocar linha · Y = tamanho · U = envergadura · J = rabiola.
+PC (testes): segurar clique esquerdo/← = desbico esquerda · segurar clique direito/→ = desbico direita · F = puxão (segurar = em série) · Espaço = desbico (toque) · Tab = olhar com o mouse · E = dar linha · G = braçada lenta · Q = enrolar · R = nova pipa · T = trocar linha · Y = tamanho · U = envergadura · J = rabiola.
 
-Detalhes do desbico e do puxão: `docs/DESBICO_PUXAO.md`. O que mudou na 0.7 (pipa da foto, gestos, linha fina, desempenho): `docs/V07.md`; na 0.8: `docs/V08.md`; na 0.9 (guiar pelo dedo estilo Pipa Combate, puxão que recolhe linha, auditoria de desempenho): `docs/V09.md`.
+Detalhes do desbico e do puxão: `docs/DESBICO_PUXAO.md`. O que mudou na 0.7 (pipa da foto, gestos, linha fina, desempenho): `docs/V07.md`; na 0.8: `docs/V08.md`; na 0.9: `docs/V09.md`; na 0.10 (desbico por toques com balanço alternado, puxe reto, rabiola de fitas, linha sem atravessar): `docs/V10.md`.
 
 ## Como é a física (resumo)
 

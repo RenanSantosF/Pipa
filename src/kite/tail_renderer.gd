@@ -6,12 +6,14 @@ extends MeshInstance3D
 ## vento ao longo da rabiola), abertas em V e tremulando; cores em blocos.
 
 ## Tirinhas (pipa M; escala com o tamanho): espaçamento, comprimento, largura.
-const KNOT_STEP := 0.075
-const STRIP_LEN := 0.095
-const STRIP_W := 0.022
-## Abertura do V (rad) e tremulação.
-const SPREAD := 0.55
-const FLUTTER := 0.32
+const KNOT_STEP := 0.065
+const STRIP_LEN := 0.14
+const STRIP_W := 0.012
+## Fita: ângulo para o lado (rad) e trechos (para ondular).
+const STRIP_ANGLE := 0.32
+const STRIP_SEGS := 4
+## Ondulação da fita com o vento (rad).
+const FLUTTER := 0.55
 ## Tirinhas da mesma cor seguidas.
 const BLOCK := 4
 
@@ -93,6 +95,7 @@ func _process(_delta: float) -> void:
 		_im.surface_end()
 		return
 	var t_now := Time.get_ticks_msec() / 1000.0
+	var wind := clampf(Wind.get_reference_speed() / 6.0, 0.4, 1.8)
 	var step := KNOT_STEP * k
 	var acc := step * 0.6
 	var knot := 0
@@ -108,26 +111,26 @@ func _process(_delta: float) -> void:
 			var c := a + t * acc
 			var to_cam := (cam_pos - c).normalized()
 			var s := t.cross(to_cam).normalized()
-			# Cada nó amarrado de um jeito: o V gira em volta do barbante (às vezes
-			# de lado, às vezes de frente), abre e tem tamanho diferentes — e rola
-			# devagar com o vento. Nada de "pilha de setas" igualzinha.
-			var h1 := fposmod(sin(float(knot) * 12.9898) * 43758.5453, 1.0)
-			var h2 := fposmod(sin(float(knot) * 78.233) * 12543.137, 1.0)
-			s = s.rotated(t, (h1 - 0.5) * 2.4 + 0.5 * sin(t_now * 2.3 + float(knot)))
 			var color := prof.tail_color_a if (knot / BLOCK) % 2 == 0 else prof.tail_color_b
-			var ph := t_now * 11.0 + float(knot) * 1.37
-			for sd2 in [-1.0, 1.0]:
-				var side: float = sd2
-				# Cada ponta da tirinha: aberta em V para trás, tremulando sozinha.
-				var ang := SPREAD * (0.6 + 0.8 * h2) + FLUTTER * sin(ph + side * 1.9)
-				var dir := (t * cos(ang) + s * (side * sin(ang))).normalized()
-				var len := STRIP_LEN * k * (0.7 + 0.5 * fposmod(h1 + h2 * side, 1.0)) * (0.9 + 0.1 * sin(ph * 0.7 + side))
-				var w := s.cross(dir).cross(dir).normalized() * (STRIP_W * k * 0.5)
-				var tip := c + dir * len
-				# Torcida: a ponta gira um pouco (plástico ao vento).
-				var tw := w.rotated(dir, 0.8 * sin(ph * 1.3 + side * 2.0))
-				_tri(c - w, c + w, tip + tw, color)
-				_tri(c - w, tip + tw, tip - tw, color.darkened(0.12))
+			# Uma fita fina de sacola, amarrada de UM lado do barbante, indo para trás
+			# e ondulando com o vento (a onda corre da amarração para a ponta).
+			var ph := t_now * (9.0 + 5.0 * wind) + float(knot) * 0.9
+			var dir := (t * cos(STRIP_ANGLE) + s * sin(STRIP_ANGLE)).normalized()
+			var seg_len := STRIP_LEN * k / float(STRIP_SEGS)
+			var half_w := STRIP_W * k * 0.5
+			var p0 := c
+			var w0 := s.cross(dir).cross(dir).normalized() * half_w
+			for j in STRIP_SEGS:
+				var bend := FLUTTER * wind * sin(ph - float(j) * 1.6) * (0.4 + float(j) / float(STRIP_SEGS))
+				var dj := dir.rotated(to_cam, bend)
+				var p1 := p0 + dj * seg_len
+				var w1 := s.cross(dj).cross(dj).normalized() * half_w * (1.0 - 0.25 * float(j + 1) / float(STRIP_SEGS))
+				w1 = w1.rotated(dj, 0.6 * sin(ph * 1.3 - float(j)))   # torce um pouco
+				var col := color if j % 2 == 0 else color.darkened(0.1)
+				_tri(p0 - w0, p0 + w0, p1 + w1, col)
+				_tri(p0 - w0, p1 + w1, p1 - w1, col)
+				p0 = p1
+				w0 = w1
 			acc += step
 			knot += 1
 		acc -= l

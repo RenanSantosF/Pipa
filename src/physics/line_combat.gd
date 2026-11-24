@@ -20,7 +20,7 @@ const BIN := 0.1
 const DAMAGE_SCALE := 0.22
 const GROUP := 4
 const HOOK_GAP := 0.03
-const MAX_PER_PAIR := 8
+const MAX_PER_PAIR := 14
 ## Correção máxima por subpasso de um contato atravessado (m).
 const MAX_PUSH := 0.12
 ## Contato do lado errado (atravessado) só é largado se ficar absurdo de longe.
@@ -236,7 +236,7 @@ func _test_segments(ra: KiteRig, rb: KiteRig, pa: PackedVector3Array, pb: Packed
 	for ex in contacts:
 		if ex.a == ra and ex.b == rb:
 			pair_count += 1
-			if (ex.ia == ia and ex.ib == ib) or (absf(ex.sa_prev - sa) < 1.0 and absf(ex.sb_prev - sb) < 1.0):
+			if (ex.ia == ia and ex.ib == ib) or (absf(ex.sa_prev - sa) < 0.5 and absf(ex.sb_prev - sb) < 0.5):
 				return
 	if pair_count >= MAX_PER_PAIR:
 		return  # linhas deitadas uma sobre a outra: poucos contatos bastam
@@ -508,6 +508,22 @@ func _refresh(c: Contact) -> void:
 
 func post_frame(dt: float, h: float, substeps: int) -> void:
 	cut_requests.clear()
+	# Contatos do mesmo par que escorregaram para o mesmo lugar viram um só (senão
+	# esgotam o limite por par e um cruzamento novo ficaria sem contato).
+	for i in range(contacts.size() - 1, 0, -1):
+		var ci := contacts[i]
+		if ci.hooked:
+			continue
+		for j in i:
+			var cj := contacts[j]
+			if cj.hooked or cj.a != ci.a or cj.b != ci.b:
+				continue
+			if absf(cj.sa_prev - ci.sa_prev) < 0.25 and absf(cj.sb_prev - ci.sb_prev) < 0.25:
+				# Fica o que está apertando mais (o outro é cópia velha).
+				if ci.impulse > cj.impulse:
+					contacts[j] = ci
+				contacts.remove_at(i)
+				break
 	# Um laço por par e por ponta basta (contatos que escorregaram até a mesma ponta).
 	var seen := {}
 	for i in range(contacts.size() - 1, -1, -1):

@@ -19,9 +19,9 @@ extends RefCounted
 ## Cada material tem sua regra (MATERIALS): nada de colisão genérica.
 
 const CELL := 8.0
-const MAX_CONTACTS := 8
+const MAX_CONTACTS := 20
 ## Nós de contato por obstáculo (2 bastam para uma volta completa).
-const MAX_PER_OBSTACLE := 2
+const MAX_PER_OBSTACLE := 4
 const LINE_RADIUS := 0.0015
 
 enum Kind { CANOPY, CAPSULE, BOX }
@@ -429,15 +429,28 @@ func _detect(rope: Rope) -> void:
 					var from_side := nc * (1.0 if s_old >= 0.0 else -1.0)
 					if float(res[2]) < r:
 						hit = [t, ap + from_side * (r + 0.001), from_side]
-					elif has_prev and float(res[2]) < 1.5 and t > 0.0 and t < 1.0 and res[1] > 0.0 and res[1] < 1.0 and s_old * s_now < 0.0:
-						# Atravessou entre quadros: volta para o lado de onde veio.
-						hit = [t, ap + from_side * (r + 0.001), from_side]
+					elif has_prev and float(res[2]) < 4.0 and s_old * s_now < 0.0:
+						# Atravessou entre quadros (puxada forte): o cruzamento das RETAS tem
+						# que cair dentro dos dois trechos (com folga nas pontas).
+						var lp := LineCombat._line_params(a, b - a, ca, cb - ca)
+						if lp.x > -0.05 and lp.x < 1.05 and lp.y > -0.02 and lp.y < 1.02:
+							var tt := clampf(lp.x, 0.02, 0.98)
+							var apx := ca.lerp(cb, clampf(lp.y, 0.0, 1.0))
+							hit = [tt, apx + from_side * (r + 0.001), from_side]
 				Kind.BOX:
 					var box: AABB = e[1]
 					if box.size.y > 0.3:
 						var bh := _segment_box(a, b, box.grow(0.01))
 						if not bh.is_empty():
 							hit = bh
+						elif has_prev:
+							# Passou inteira por um muro/telhado entre dois quadros: o meio do
+							# trecho "varreu" a caixa → contato na face por onde entrou.
+							var a0 := rope.frame_pos[i]
+							var b0 := rope.frame_pos[i + 1] if i + 1 < n else rope.frame_end
+							var sw := _segment_box((a0 + b0) * 0.5, (a + b) * 0.5, box.grow(0.01))
+							if not sw.is_empty():
+								hit = [0.5, sw[1], sw[2]]
 			if hit.is_empty():
 				continue
 			var t2: float = hit[0]

@@ -55,6 +55,11 @@ var steer_gain: float = 0.0
 var line_dir := Vector3.UP
 ## Erro de alinhamento atual (rad, com sinal) — a mão usa para afrouxar/esticar.
 var steer_error: float = 0.0
+## Giro antecipado (rad/s, em torno da normal) somado ao servo (balanço do desbico).
+var steer_ff: float = 0.0
+## Batida das asas do desbico: direção × coeficiente de empuxo (adimensional);
+## a força é coeficiente × pressão dinâmica × área (como um pássaro batendo asa).
+var push_accel := Vector3.ZERO
 ## Giro máximo do bico guiando (rad/s), ganho e tempo de resposta.
 const STEER_RATE_MAX := 3.4
 const STEER_KP := 5.5
@@ -268,6 +273,9 @@ func compute_forces() -> void:
 	drag = drag_sum
 	# Vela torta na folga: momento em torno da normal (gira o BICO, sem força lateral).
 	_apply_steer()
+	if push_accel != Vector3.ZERO:
+		var qa_push := 0.5 * RHO * maxf(airspeed, 3.0) * maxf(airspeed, 3.0) * (_half_area[0] + _half_area[1])
+		_force += push_accel * qa_push
 	if spin_bias != 0.0 and relax > 0.0:
 		var qa := 0.5 * RHO * airspeed * airspeed * (_half_area[0] + _half_area[1]) * profile.height
 		_torque += (q * Vector3.BACK) * (-spin_bias * profile.spin_coef * qa * relax)
@@ -311,7 +319,7 @@ func steer_correct(h: float) -> void:
 	var n: Vector3 = q * Vector3.BACK
 	var rate_max := STEER_RATE_MAX * clampf(steer_gain, 0.0, 1.0)
 	var authority := clampf(airspeed / 4.0, 0.3, 1.0)
-	var want := clampf(STEER_KP * steer_error, -rate_max, rate_max) * authority
+	var want := clampf(STEER_KP * steer_error + steer_ff, -rate_max * 1.6, rate_max * 1.6) * authority
 	_steer_rate += (want - _steer_rate) * minf(1.0, h / STEER_TAU)
 	var dq := q * _q_prev.inverse()
 	if dq.w < 0.0:

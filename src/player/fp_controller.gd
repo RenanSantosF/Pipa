@@ -195,6 +195,9 @@ func _drive_rig(delta: float) -> void:
 			_hand.guide(Vector3.ZERO, 0.0)
 	else:
 		_hand.guide(intent.guide_dir, intent.guide_amount)
+	for _i in intent.desbico_toques:
+		_hand.desbico_toque()
+	intent.desbico_toques = 0
 	for a in intent.recolhe:
 		_hand.recolher(a)
 	intent.recolhe.clear()

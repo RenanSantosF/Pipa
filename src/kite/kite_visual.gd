@@ -44,8 +44,10 @@ func _process(_delta: float) -> void:
 		return
 	var b := rig.body
 	global_transform = Transform3D(Basis(b.q), b.x)
-	var dl := b.half_dihedral(0)
-	var dr := b.half_dihedral(1)
+	# Desbico: as asas batem juntas, como um pássaro (as varetas fecham e abrem).
+	var fl := rig.flap * 0.38
+	var dl := b.half_dihedral(0) + fl
+	var dr := b.half_dihedral(1) + fl
 	for m in [_paper, _sticks]:
 		m.set_shader_parameter("dihedral_l", dl)
 		m.set_shader_parameter("dihedral_r", dr)

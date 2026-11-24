@@ -2,17 +2,18 @@ class_name GestureControls
 extends Control
 ## Controles por GESTOS (sem botões de jogo), dois comandos independentes:
 ##
-##   SEGURAR o dedo na tela    → GUIAR (desbico): a pipa vira o bico para o dedo, em
-##                               relação a ela na tela — dedo à esquerda dela = vai
-##                               para a esquerda, acima = sobe, abaixo = desce. Mais
-##                               longe = vira mais rápido. Arraste o dedo para fazer
-##                               curvas. Soltar = ela segue por inércia e endireita.
-##   ARRASTAR DE CIMA P/ BAIXO → PUXÃO: recolhe linha (fica no chão); a pipa sobe e
-##                               chega mais perto, sem girar. Esfregar = mais puxões;
-##                               segurar embaixo = continua puxando.
+##   TOQUE (em qualquer lugar) → DESBICO: cada toque é um balanço, lados alternados
+##                               (1º esquerda, 2º direita, …) e as asas batem.
+##                               Tocando no mesmo ritmo ela segue reta para onde o
+##                               bico aponta (subindo devagar, sem chegar perto).
+##                               Pausa depois de um toque: o último balanço "rende"
+##                               e ela vira para aquele lado (2 toques = direita,
+##                               1 ou 3 = esquerda). Pausa > 0,45 s recomeça pela esquerda.
+##   ARRASTAR DE CIMA P/ BAIXO → PUXE: recolhe linha (fica no chão); a pipa vai reta
+##                               para onde aponta e chega mais perto. Esfregar = mais
+##                               braçadas; segurar bem embaixo = continua puxando.
 ##   Arrastar de baixo p/ CIMA → dar linha (abrir a mão)
-##   2º dedo (com o 1º guiando) → arrastar p/ baixo = puxão (combinação); p/ cima =
-##                               dar linha; toque = puxão curto
+##   2º dedo                   → toque = desbico; arrastar p/ baixo = puxe (combinação)
 ##   Faixa estreita no topo → olhar em volta · Canto inferior esquerdo → andar
 ##   Ícones no canto           → nova pipa · linha · som · tamanho · envergadura · rabiola
 
@@ -172,10 +173,8 @@ func _down(index: int, pos: Vector2) -> void:
 	_finger = pos
 	_t0 = _time
 	_scrub_top = pos.y
-	# Guia na hora (resposta imediata); se virar arrasto vertical rápido, cancela.
-	_mode = "guiar"
-	intent.guide_active = true
-	intent.guide_finger = pos
+	# Ainda não se sabe: toque (desbico, ao soltar) ou arrasto vertical (puxe/linha).
+	_mode = ""
 
 
 func _up(index: int, pos: Vector2) -> void:
@@ -207,14 +206,17 @@ func _up(index: int, pos: Vector2) -> void:
 	if index == _second_index:
 		_second_index = -1
 		if _second_mode == "" and _time - _second_t0 < TAP_TIME:
-			intent.recolhe.append(0.45)   # toque do 2º dedo = puxão curto
-			_fx.append([pos, 0.0, Color(1.0, 0.82, 0.35)])
+			intent.desbico_toques += 1   # toque do 2º dedo = desbico também
+			_fx.append([pos, 0.0, Color(0.55, 0.85, 1.0)])
 		if _second_mode == "soltar":
 			intent.grip = 1.0
 		intent.pull_held = false
 		_second_mode = ""
 		_dirty = true
 	if index == _kite_index:
+		if _mode == "" and _time - _t0 < TAP_TIME and pos.distance_to(_origin) < CLASSIFY_PX * 2.0:
+			intent.desbico_toques += 1   # toque = um desbico (um balanço)
+			_fx.append([pos, 0.0, Color(0.55, 0.85, 1.0)])
 		_kite_index = -1
 		_mode = ""
 		intent.guide_active = false
@@ -243,10 +245,9 @@ func _swipe_kind(origin: Vector2, pos: Vector2, velocity: Vector2, t0: float) ->
 func _kite_drag(pos: Vector2, velocity: Vector2) -> void:
 	_finger = pos
 	_dirty = true
-	if _mode == "guiar":
+	if _mode == "":
 		var k := _swipe_kind(_origin, pos, velocity, _t0)
 		if k == "":
-			intent.guide_finger = pos
 			return
 		_mode = k
 		intent.guide_active = false
@@ -353,15 +354,14 @@ func _draw() -> void:
 				Icons.bow(self, c, ICON_R * 0.5, bow_level, Icons.INK, 1.8)
 			"tail":
 				Icons.tail(self, c, ICON_R * 0.5, tail_level, Icons.INK)
-	# Dicas nos primeiros segundos (só desenhos): segurar = guiar (setas para os 4
-	# lados em volta do dedo), arrastar de cima para baixo = puxar, para cima = linha.
+	# Dicas nos primeiros segundos (só desenhos): toques = desbico, arrastar de cima
+	# para baixo = puxe, de baixo para cima = dar linha.
 	if _time < 9.0:
 		var a := clampf(1.0 - (_time - 6.0) / 3.0, 0.0, 1.0) * 0.8
-		var col := Color(1, 1, 1, a)
 		var g := Vector2(size.x * 0.32, size.y * 0.55)
 		Icons.tap(self, g, 24.0, Color(0.55, 0.85, 1.0, a))
-		for dv in [Vector2(1, 0), Vector2(-1, 0), Vector2(0, 1), Vector2(0, -1)]:
-			Icons.arrow(self, g + dv * 38.0, g + dv * 90.0, col)
+		Icons.tap(self, g + Vector2(46, -10), 18.0, Color(0.55, 0.85, 1.0, a * 0.7))
+		Icons.tap(self, g + Vector2(84, -16), 14.0, Color(0.55, 0.85, 1.0, a * 0.5))
 		var pbase := Vector2(size.x * 0.7, size.y * 0.35)
 		Icons.arrow(self, pbase, pbase + Vector2(0, 150), Color(1.0, 0.82, 0.35, a), 4.0)
 		Icons.arrow(self, pbase + Vector2(70, 150), pbase + Vector2(70, 40), Color(0.55, 0.85, 1.0, a))
