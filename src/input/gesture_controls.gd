@@ -2,20 +2,16 @@ class_name GestureControls
 extends Control
 ## Controles por GESTOS (sem botões de jogo), dois comandos independentes:
 ##
-##   TOQUE (em qualquer lugar) → DESBICO: cada toque é um balanço, lados alternados
-##                               (1º esquerda, 2º direita, …) e as asas batem.
-##                               Tocando no mesmo ritmo ela segue reta para onde o
-##                               bico aponta (subindo devagar, sem chegar perto).
-##                               Pausa depois de um toque: o último balanço "rende"
-##                               e ela vira para aquele lado (2 toques = direita,
-##                               1 ou 3 = esquerda). Pausa > 0,45 s recomeça pela esquerda.
-##   ARRASTAR DE CIMA P/ BAIXO → PUXE: recolhe linha (fica no chão); a pipa vai reta
-##                               para onde aponta e chega mais perto. Esfregar = mais
-##                               braçadas; segurar bem embaixo = continua puxando.
-##   Arrastar de baixo p/ CIMA → dar linha (abrir a mão)
-##   2º dedo                   → toque = desbico; arrastar p/ baixo = puxe (combinação)
+##   SEGURAR e MOVER o dedo    → GUIAR (desbico): o dedo diz para onde a pipa deve ir,
+##                               em relação a ela na tela (à esquerda dela = esquerda,
+##                               acima = sobe, abaixo = desce). Vira um comando de
+##                               cabresto: a pipa inclina, faz a curva e vai para lá,
+##                               com inércia. Soltar = ela segue reta.
+##   ARRASTAR RÁPIDO P/ BAIXO  → PUXÃO: recolhe linha; ela acelera, sobe e chega perto,
+##                               sem mudar de direção. Esfregar = mais braçadas.
+##   Arrastar rápido p/ CIMA   → dar linha (abrir a mão)
+##   2º dedo                   → arrastar p/ baixo = puxão enquanto o 1º guia
 ##   Faixa estreita no topo → olhar em volta · Canto inferior esquerdo → andar
-##   Ícones no canto           → nova pipa · linha · som · tamanho · envergadura · rabiola
 
 signal reset_pressed
 signal menu_pressed
@@ -23,6 +19,9 @@ signal sound_pressed
 signal size_pressed
 signal bow_pressed
 signal tail_pressed
+signal lab_pressed
+## Área da tela ocupada por um painel (os toques ali não comandam a pipa).
+var blocked_rect := Rect2()
 
 ## Câmera: só a faixa de cima (fração da altura) — o resto é da pipa.
 const LOOK_ZONE := 0.15
@@ -110,7 +109,7 @@ func _icons() -> Array:
 	var y := ICON_R + 16.0
 	var x := size.x - ICON_R - 16.0
 	return [["reset", Vector2(x, y)], ["line", Vector2(x - ICON_R * 2.5, y)], ["sound", Vector2(x - ICON_R * 5.0, y)],
-		["size", Vector2(x - ICON_R * 7.5, y)], ["bow", Vector2(x - ICON_R * 10.0, y)], ["tail", Vector2(x - ICON_R * 12.5, y)]]
+		["size", Vector2(x - ICON_R * 7.5, y)], ["bow", Vector2(x - ICON_R * 10.0, y)], ["tail", Vector2(x - ICON_R * 12.5, y)], ["lab", Vector2(x - ICON_R * 15.0, y)]]
 
 
 func _icon_at(pos: Vector2) -> String:
@@ -144,6 +143,8 @@ func _input(event: InputEvent) -> void:
 
 
 func _down(index: int, pos: Vector2) -> void:
+	if blocked_rect.has_point(pos):
+		return
 	var ic := _icon_at(pos)
 	if ic != "":
 		_icon_down[index] = ic
@@ -173,8 +174,11 @@ func _down(index: int, pos: Vector2) -> void:
 	_finger = pos
 	_t0 = _time
 	_scrub_top = pos.y
-	# Ainda não se sabe: toque (desbico, ao soltar) ou arrasto vertical (puxe/linha).
+	# Guia já no toque (resposta imediata); se virar arrasto vertical rápido nos
+	# primeiros instantes, é puxão / dar linha e o guiar é cancelado.
 	_mode = ""
+	intent.guide_active = true
+	intent.guide_finger = pos
 
 
 func _up(index: int, pos: Vector2) -> void:
@@ -195,6 +199,8 @@ func _up(index: int, pos: Vector2) -> void:
 					bow_pressed.emit()
 				"tail":
 					tail_pressed.emit()
+				"lab":
+					lab_pressed.emit()
 		_dirty = true
 		return
 	if index == _joy_index:
@@ -206,18 +212,16 @@ func _up(index: int, pos: Vector2) -> void:
 	if index == _second_index:
 		_second_index = -1
 		if _second_mode == "" and _time - _second_t0 < TAP_TIME:
-			intent.desbico_toques += 1   # toque do 2º dedo = desbico também
-			_fx.append([pos, 0.0, Color(0.55, 0.85, 1.0)])
+			intent.recolhe.append(0.45)   # toque do 2º dedo = puxão curto
+			_fx.append([pos, 0.0, Color(1.0, 0.82, 0.35)])
 		if _second_mode == "soltar":
 			intent.grip = 1.0
 		intent.pull_held = false
 		_second_mode = ""
 		_dirty = true
 	if index == _kite_index:
-		if _mode == "" and _time - _t0 < TAP_TIME and pos.distance_to(_origin) < CLASSIFY_PX * 2.0:
-			intent.desbico_toques += 1   # toque = um desbico (um balanço)
-			_fx.append([pos, 0.0, Color(0.55, 0.85, 1.0)])
 		_kite_index = -1
+		intent.guide_active = false
 		_mode = ""
 		intent.guide_active = false
 		intent.stroke = 0.0
@@ -248,9 +252,11 @@ func _kite_drag(pos: Vector2, velocity: Vector2) -> void:
 	if _mode == "":
 		var k := _swipe_kind(_origin, pos, velocity, _t0)
 		if k == "":
+			intent.guide_finger = pos
 			return
 		_mode = k
 		intent.guide_active = false
+		intent.guide_finger = pos
 		_scrub_top = pos.y
 		if k == "puxar":
 			_pull_from_swipe(pos)
@@ -354,6 +360,13 @@ func _draw() -> void:
 				Icons.bow(self, c, ICON_R * 0.5, bow_level, Icons.INK, 1.8)
 			"tail":
 				Icons.tail(self, c, ICON_R * 0.5, tail_level, Icons.INK)
+			"lab":
+				# Tubo de ensaio (área de testes do voo).
+				draw_line(c + Vector2(-4, -10), c + Vector2(-4, 6), Icons.INK, 2.0, true)
+				draw_line(c + Vector2(4, -10), c + Vector2(4, 6), Icons.INK, 2.0, true)
+				draw_arc(c + Vector2(0, 6), 4.0, 0.0, PI, 10, Icons.INK, 2.0, true)
+				draw_line(c + Vector2(-6, -10), c + Vector2(6, -10), Icons.INK, 2.0, true)
+				draw_rect(Rect2(c + Vector2(-3, 0), Vector2(6, 6)), Icons.ACCENT)
 	# Dicas nos primeiros segundos (só desenhos): toques = desbico, arrastar de cima
 	# para baixo = puxe, de baixo para cima = dar linha.
 	if _time < 9.0:

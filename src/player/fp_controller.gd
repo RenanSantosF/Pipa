@@ -58,10 +58,12 @@ const GUIDE_DEAD_PX := 28.0
 ## que a pipa deve ocupar e zona livre (fração do campo) em que ela anda sem a
 ## câmera ir atrás.
 const BASE_FOV := 72.0
-const MIN_FOV := 24.0
+const MIN_FOV := 52.0
 const KITE_SCREEN_FRACTION := 0.07
 const FREE_ZONE := 0.18
 const GUIDE_FULL_PX := 240.0
+## Erro de rumo (rad) que já pede cabresto todo para um lado.
+const STEER_FULL_ERR := 0.7
 
 
 func _ready() -> void:
@@ -108,17 +110,9 @@ func _process(delta: float) -> void:
 	var dist := to.length()
 	if dist > 0.5:
 		to = to.normalized()
-		# A câmera NÃO cola na pipa: deixa ela andar pela tela (zona livre no meio)
-		# e só acompanha quando ela sai dessa zona — assim dá para ver o balanço e
-		# para onde ela está indo.
-		var want_yaw := atan2(-to.x, -to.z)
-		var want_pitch := maxf(asin(clampf(to.y, -1.0, 1.0)), deg_to_rad(-15.0))
-		var free := deg_to_rad(camera.fov) * FREE_ZONE
-		var dy := wrapf(want_yaw - _base_yaw, -PI, PI)
-		var dp := want_pitch - _base_pitch
 		var k := 1.0 - exp(-follow_rate * delta)
-		_base_yaw += signf(dy) * maxf(absf(dy) - free * 1.4, 0.0) * k + dy * k * 0.12
-		_base_pitch += signf(dp) * maxf(absf(dp) - free, 0.0) * k + dp * k * 0.12
+		_base_yaw = lerp_angle(_base_yaw, atan2(-to.x, -to.z), k)
+		_base_pitch = lerpf(_base_pitch, maxf(asin(clampf(to.y, -1.0, 1.0)), deg_to_rad(-15.0)), k)
 	# ZOOM: aproxima a pipa conforme a distância (de longe ela ficava com ~10 px e o
 	# desbico não aparecia). Perto (soltando da mão) volta ao campo de visão normal.
 	var target_fov := BASE_FOV
@@ -199,26 +193,37 @@ func _drive_rig(delta: float) -> void:
 	for _i in intent.pull_taps:
 		_hand.puxao()
 	intent.pull_taps = 0
-	# GUIAR: o dedo na tela em relação à pipa na tela vira o bico (esq/dir/cima/baixo).
-	if intent.guide_active and camera and rig.body:
+	# CONTROLE (separado da física): o dedo na tela, em relação à pipa na tela, diz
+	# para onde o jogador quer que ela vá. Vira só um COMANDO DE CABRESTO (−1..1)
+	# proporcional ao quanto o bico está fora dessa direção; o modelo de voo faz o
+	# resto (inclina, curva, acelera) com a inércia dele.
+	var wdir := Vector3.ZERO
+	var amount := 0.0
+	if intent.guide_active and camera and rig.body and not camera.is_position_behind(rig.body.x):
 		var ks := camera.unproject_position(rig.body.x)
 		var off := intent.guide_finger - ks
 		var dist := off.length()
-		if dist > GUIDE_DEAD_PX and not camera.is_position_behind(rig.body.x):
-			# Eixos da janela de vento em volta da pipa: "cima" = vertical projetada no
-			# plano da esfera de voo, "lado" = horizontal nesse plano (lado da câmera).
-			var ld: Vector3 = rig.body.line_dir
-			var up_t := Vector3.UP - ld * ld.y
-			up_t = up_t.normalized() if up_t.length() > 0.05 else camera.global_basis.y
+		if dist > GUIDE_DEAD_PX:
+			var ld: Vector3 = (rig.body.x - rig.hand_position()).normalized()
+			var up_t := (Vector3.UP - ld * ld.y).normalized()
 			var right_t := ld.cross(up_t).normalized()
 			if right_t.dot(camera.global_basis.x) < 0.0:
 				right_t = -right_t
-			var wdir := (right_t * off.x - up_t * off.y).normalized()
-			_hand.guide(wdir, clampf((dist - GUIDE_DEAD_PX) / GUIDE_FULL_PX, 0.3, 1.0))
-		else:
-			_hand.guide(Vector3.ZERO, 0.0)
+			wdir = (right_t * off.x - up_t * off.y).normalized()
+			amount = clampf((dist - GUIDE_DEAD_PX) / GUIDE_FULL_PX, 0.35, 1.0)
+	elif intent.guide_amount > 0.0:
+		wdir = intent.guide_dir
+		amount = intent.guide_amount
+	if rig.flight != null:
+		var cmd := 0.0
+		if wdir != Vector3.ZERO:
+			var fr: Array = rig.flight.frame()
+			var target := atan2(wdir.dot(fr[2]), wdir.dot(fr[1]))
+			var err := wrapf(target - rig.flight.heading, -PI, PI)
+			cmd = clampf(err / STEER_FULL_ERR, -1.0, 1.0) * amount
+		rig.flight.steer = cmd
 	else:
-		_hand.guide(intent.guide_dir, intent.guide_amount)
+		_hand.guide(wdir, amount)
 	for _i in intent.desbico_toques:
 		_hand.desbico_toque()
 	intent.desbico_toques = 0

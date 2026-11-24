@@ -20,22 +20,18 @@ func start(p_main) -> void:
 	main.player_rig.launch(main.player.global_position + Vector3(0.2, 1.18, -0.3), 30.0, 55.0, Wind.get_direction())
 	var c := Vector2(640, 420)
 	_steps = [
-		# Um toque = um desbico, 1º balanço para a esquerda.
-		[1.0, "down", 0, c], [1.08, "up", 0, c], [1.12, "check_side", -1.0],
-		# Segundo toque logo depois = balanço para a direita.
-		[1.3, "down", 0, c], [1.38, "up", 0, c], [1.42, "check_side", 1.0],
-		# Pausa > 0,45 s: recomeça pela esquerda.
-		[2.5, "down", 0, c], [2.58, "up", 0, c], [2.62, "check_side", -1.0],
-		# Segurar parado não desbica nem vira.
-		[4.0, "mark_taps"], [4.0, "down", 0, c], [4.8, "up", 0, c], [4.85, "check_taps_same", 0],
-		# Arrastar de cima para baixo = puxe (recolhe linha), sem desbico.
-		[6.0, "mark_taps"], [6.0, "down", 0, c], [6.04, "drag", 0, c + Vector2(0, 60)], [6.08, "drag", 0, c + Vector2(0, 140)],
-		[6.3, "up", 0, c + Vector2(0, 140)], [6.32, "check_taps_same", 0], [7.2, "check_shorter", 0],
-		# 2º dedo tocando enquanto o 1º puxa = desbico junto.
-		[8.0, "down", 0, c], [8.04, "drag", 0, c + Vector2(0, 60)], [8.08, "drag", 0, c + Vector2(0, 140)],
-		[8.2, "mark_taps"], [8.25, "down", 1, Vector2(300, 400)], [8.31, "up", 1, Vector2(300, 400)], [8.35, "check_taps_more", 0],
-		[8.5, "up", 0, c + Vector2(0, 140)],
-		# Arrastar de baixo para cima = dar linha.
+		# Segurar à direita da pipa = cabresto para a direita.
+		[1.0, "down_rel", 0, Vector2(260, 0)], [1.5, "check_steer", 1.0], [2.0, "up", 0, c], [2.1, "check_steer", 0.0],
+		# Segurar à esquerda da pipa = cabresto para a esquerda.
+		[3.0, "down_rel", 0, Vector2(-260, 0)], [3.5, "check_steer", -1.0], [4.0, "up", 0, c],
+		# Arrastar rápido para baixo = puxão (recolhe), sem guiar.
+		[5.0, "down", 0, c], [5.04, "drag", 0, c + Vector2(0, 60)], [5.08, "drag", 0, c + Vector2(0, 140)],
+		[5.12, "check_noguide", 0], [5.3, "up", 0, c + Vector2(0, 140)], [6.2, "check_shorter", 0],
+		# Guiando com um dedo + 2º dedo arrastando para baixo = puxão junto.
+		[7.0, "down_rel", 0, Vector2(240, 0)], [7.3, "down", 1, Vector2(1000, 250)], [7.34, "drag", 1, Vector2(1000, 330)],
+		[7.38, "drag", 1, Vector2(1000, 420)], [7.45, "check_steer", 1.0], [7.6, "up", 1, Vector2(1000, 420)],
+		[8.0, "check_shorter", 0], [8.2, "up", 0, c],
+		# Arrastar rápido para cima = dar linha.
 		[9.0, "down", 0, c], [9.04, "drag", 0, c + Vector2(0, -60)], [9.1, "drag", 0, c + Vector2(0, -140)],
 		[9.2, "check_grip", 0.3], [9.5, "up", 0, c + Vector2(0, -140)],
 		# Faixa do topo = câmera.
@@ -66,6 +62,12 @@ func _physics_process(delta: float) -> void:
 				var cam2 := get_viewport().get_camera_3d()
 				var side_ok := cam2 != null and signf(sd.dot(cam2.global_basis.x)) == float(s[2])
 				_check("guiar para %+.0f (comando %s)" % [s[2], str(sd.snapped(Vector3.ONE * 0.01))], hg != null and bool(hg.call("is_guiding")) and side_ok)
+			"check_steer":
+				var fl = main.player_rig.flight
+				var st: float = fl.steer if fl else 99.0
+				var want: float = s[2]
+				var ok: bool = (absf(st) < 0.01) if want == 0.0 else (signf(st) == want and absf(st) > 0.2)
+				_check("cabresto %s (comando %+.2f)" % ["solto" if want == 0.0 else ("direita" if want > 0.0 else "esquerda"), st], ok)
 			"check_side":
 				var hs = main.player.get("_hand")
 				_check("toque = balanço para %s" % ("a esquerda" if float(s[2]) < 0.0 else "a direita"), hs != null and float(hs.get("_tap_side")) == float(s[2]))

@@ -62,6 +62,8 @@ var flap: float = 0.0
 var push_accel := Vector3.ZERO
 ## Inclinação do desbico (rad, em torno da vareta; + = asa direita para trás).
 var bank: float = 0.0
+## Modelo de voo (pipa do jogador presa na linha); nulo = física de corpo rígido.
+var flight: KiteFlightModel = null
 var _t_steady: float = 5.0
 ## A mão voltando da braçada joga a linha no chão? (falso no desbico: a linha escorrega)
 var shorten_on_return: bool = true
@@ -147,6 +149,10 @@ func launch(hand: Vector3, length: float, elevation_deg: float, direction: Vecto
 	rope.max_nodes = GameConfig.rope_max_nodes(is_local_player)
 	rope.setup(hand, body, body.tow_local, length)
 	tail = TailChain.new(body, profile)
+	flight = null
+	if is_local_player:
+		body.kinematic = true
+		flight = KiteFlightModel.new(self)
 	spool = maxf(spool_capacity - length, 0.0)
 	pile = 0.0
 	feed_speed = 0.0
@@ -364,8 +370,17 @@ func _update_spool(dt: float) -> void:
 
 func predict(h: float) -> void:
 	if body != null:
-		body.compute_forces()
-		body.predict(h)
+		if flight != null and (loose or held or snagged or rope == null or rope.end_body != body):
+			# Cortada/solta: volta a ser corpo rígido livre (cai de verdade).
+			if not held:
+				body.kinematic = false
+				flight = null
+		if flight != null and not held:
+			body.predict(h)   # só guarda a posição anterior
+			flight.step(h)
+		else:
+			body.compute_forces()
+			body.predict(h)
 		tail.predict(h)
 	if rope != null:
 		rope.predict(h)
@@ -402,6 +417,10 @@ func finalize(h: float) -> void:
 func post_frame(dt: float, h: float) -> void:
 	if rope != null:
 		rope.finish_tick(h)
+		if flight != null and rope.end_body == body:
+			# Tração vem do modelo de voo (a pipa é um ponto fixo para a linha).
+			rope.tension_hand = flight.tension
+			rope.tension_end = flight.tension
 		tension = lerpf(tension, rope.tension_hand if rope.hand_fixed else 0.0, 1.0 - exp(-12.0 * dt))
 		# Sobra de linha na mão depois do corte: some quando recolhida.
 		if body == null and rope.length() <= MIN_LENGTH + 0.05:

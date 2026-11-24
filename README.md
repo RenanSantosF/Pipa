@@ -22,15 +22,12 @@ Também ficam disponíveis: o *artifact* `pipa-debug-apk` na execução do workf
 
 | Gesto | O que faz |
 |---|---|
-| **Toque** (em qualquer lugar) | **desbico**: cada toque é um balanço, alternando os lados (1º esquerda, 2º direita, 3º esquerda…): a pipa inclina para o lado do balanço e as asas batem. Pipinha balança rápido e curto; pipão, lento e forte |
-| Toques **no mesmo ritmo** | os balanços se anulam: ela segue reta para onde o bico aponta — para cima sobe devagar, de lado vai de lado, para baixo desce — **sem chegar mais perto** |
-| **Toques e pausa** | o último balanço "rende": **2 toques** e pausa = vira para a **direita**; **1 ou 3** = vira para a **esquerda**. Repetindo, ela vai girando (até de cabeça para baixo) |
-| **Arrastar de cima para baixo** | **puxe**: recolhe linha (fica no chão); ela vai **reta para onde aponta** e chega mais perto. Esfregar = mais braçadas; segurar bem embaixo = continua puxando |
-| Arrastar de baixo para cima | dar linha (abrir a mão) |
-| **2º dedo** | toque = desbico; arrastar para baixo = puxe (combina com o outro dedo) |
+| **Segurar e mover o dedo** | **guiar (desbico)**: o dedo diz para onde a pipa deve ir, em relação a ela na tela (à esquerda dela = esquerda, acima = sobe, abaixo = desce). O cabresto inclina a pipa, ela faz a curva e vai para lá, com inércia. Soltar = segue reta |
+| **Arrastar rápido de cima para baixo** | **puxão**: recolhe linha; ela acelera, sobe e chega mais perto, sem mudar de direção. Esfregar = mais braçadas |
+| Arrastar rápido de baixo para cima | dar linha (ela se afasta) |
+| 2º dedo | arrastar para baixo = puxão enquanto o outro dedo guia |
 | Faixa estreita no topo | olhar em volta |
-| Joystick (canto inferior esquerdo) | andar |
-| Ícones no canto | nova pipa · trocar linha · som · tamanho P/M/G · envergadura · rabiola curta/média/grande |
+| Ícone de tubo de ensaio | **área de testes do voo** (ajustar velocidade, curva, inclinação, inércia, puxão ao vivo) |
 
 **Linha enroscada**: dê **trancos fortes** (segure para baixo / esfregue) para desenroscar do galho, tronco ou poste, ou **dê linha** para ela ficar frouxa e cair fora. A pipa presa num fio/galho solta com tranco.
 
@@ -42,7 +39,7 @@ A pipa **começa na mão**: arraste para baixo algumas vezes (com a linha bem cu
 
 PC (testes): segurar clique esquerdo/← = desbico esquerda · segurar clique direito/→ = desbico direita · F = puxão (segurar = em série) · Espaço = desbico (toque) · Tab = olhar com o mouse · E = dar linha · G = braçada lenta · Q = enrolar · R = nova pipa · T = trocar linha · Y = tamanho · U = envergadura · J = rabiola.
 
-Detalhes do desbico e do puxão: `docs/DESBICO_PUXAO.md`. O que mudou na 0.7 (pipa da foto, gestos, linha fina, desempenho): `docs/V07.md`; na 0.8: `docs/V08.md`; na 0.9: `docs/V09.md`; na 0.10 (desbico por toques com balanço alternado, puxe reto, rabiola de fitas, linha sem atravessar): `docs/V10.md`.
+Detalhes do desbico e do puxão: `docs/DESBICO_PUXAO.md`. O que mudou na 0.7 (pipa da foto, gestos, linha fina, desempenho): `docs/V07.md`; na 0.8: `docs/V08.md`; na 0.9: `docs/V09.md`; na 0.10: `docs/V10.md`; na 0.13 (voo reconstruído: controle separado da física, cabresto → inclinação → curva, área de testes): `docs/V13.md`.
 
 ## Como é a física (resumo)
 

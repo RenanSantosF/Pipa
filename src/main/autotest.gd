@@ -66,7 +66,8 @@ func start(p_main) -> void:
 			if a.begins_with("--prof="):
 				var kv := a.substr(7).split(":")
 				r.profile.set(kv[0], float(kv[1]))
-	rig.launch_in_hand(main.player.global_position + Vector3(0.2, 1.18, -0.3), Wind.get_direction())
+	# Como no jogo: a pipa começa no ar (20 m de linha), voando pelo modelo de voo.
+	rig.launch(main.player.global_position + Vector3(0.2, 1.18, -0.3), 20.0, 50.0, Wind.get_direction())
 	print("AUTOTEST: início (vento %.1f m/s, linha %s)" % [Wind.base_speed, rig.line_type.display_name])
 
 
@@ -102,6 +103,17 @@ func _input_set(stroke: float, grip: float, reel: float) -> void:
 	it.reel_rate = reel
 
 
+var _m := {}
+
+
+## Direção na janela de vento (x = lado, y = cima) em volta da pipa.
+func _window_dir(g: Vector2) -> Vector3:
+	var ld := (rig.body.x - rig.hand_position()).normalized()
+	var up_t := (Vector3.UP - ld * ld.y).normalized()
+	var right_t := ld.cross(up_t).normalized()
+	return (right_t * g.x + up_t * g.y).normalized()
+
+
 func _phase_flight(_delta: float) -> void:
 	if not rig.is_flying():
 		_fail("pipa caiu/arrebentou na fase de voo (t=%.1f)" % _t)
@@ -112,45 +124,55 @@ func _phase_flight(_delta: float) -> void:
 		return
 	_max_tension = maxf(_max_tension, rig.tension)
 	var it := router.intent
-	it.stroke = 0.0
-	it.reel_rate = 0.0
-	if _t < 28.0:
-		# Como um pipeiro levantando a pipa: trancos a cada 0,6 s (soltando da mão
-		# eles saem de lado, em zigue-zague); com ela alta e puxando, de tempos em
-		# tempos abre a mão e deixa correr linha. Firme no alto: para de puxar.
-		var d := rig.body.x - rig.hand_position()
-		var el := d.y / maxf(d.length(), 0.01)
-		if _every(0.6):
-			it.pull_taps += 1
-		it.grip = 0.3 if (fmod(_t, 3.0) > 1.8 and rig.tension > 1.0 and el > 0.48) else 1.0
-	else:
-		it.grip = 1.0
+	var d := b.x - rig.hand_position()
+	var el := rad_to_deg(asin(clampf(d.y / maxf(d.length(), 0.01), -1.0, 1.0)))
+	var side: Vector3 = Wind.get_direction().cross(Vector3.UP).normalized()
+	var lat: float = (b.x - main.player.global_position).dot(side)
+	it.grip = 1.0
+	it.guide_amount = 0.0
+	it.guide_dir = Vector3.ZERO
+	if _t < 6.0:
+		_m["len0"] = rig.flying_length()
+	elif _t < 10.0:
+		it.grip = 0.15                      # dar linha
+		_m["len1"] = rig.flying_length()
+		_m["el1"] = el
+	elif _t < 14.0:
+		if _every(0.4):
+			it.recolhe.append(0.8)          # puxões
+		_m["len2"] = rig.flying_length()
+		_m["el2"] = el
+		_m["lat2"] = lat
+	elif _t < 17.0:
+		it.guide_dir = _window_dir(Vector2(-1, 0))   # guiar para a esquerda
+		it.guide_amount = 1.0
+		_m["lat3"] = lat
+	elif _t < 20.0:
+		it.guide_dir = _window_dir(Vector2(1, 0))    # guiar para a direita
+		it.guide_amount = 1.0
+		_m["lat4"] = lat
 	if _t > 26.0:
-		_alt_sum += b.x.y
+		_alt_sum += b.x.y - main.player.global_position.y
 		_alt_n += 1
-	if OS.get_cmdline_user_args().has("--debugtug") and _t > 0.55 and _t < 1.0:
-		print("TUG t=%.3f stroke=%.3f grip=%.2f Tend=%.2f Thand=%.2f hand=%s kite=%s held=%s len=%.2f" % [_t, rig.stroke, rig.grip, rig.rope.tension_end, rig.rope.tension_hand, str(rig.hand_position().snapped(Vector3.ONE * 0.01)), str(b.x.snapped(Vector3.ONE * 0.01)), str(rig.held), rig.flying_length()])
-	if OS.get_cmdline_user_args().has("--debuglaunch") and _t < 3.0 and _every(0.1):
-		var hp := rig.hand_position()
-		print("LAUNCH t=%.2f aoa=%.0f ar=%.1f lift=%.2f drag=%.2f w=%s kite=%s v=%s hand=%s chão=%.2f T=%.2f grip=%.2f stroke=%.2f nose=%s" % [_t, rad_to_deg(b.angle_of_attack), b.airspeed, b.lift, b.drag, str(b.w.snapped(Vector3.ONE * 0.1)), str(b.x.snapped(Vector3.ONE * 0.01)), str(b.v.snapped(Vector3.ONE * 0.01)), str(hp.snapped(Vector3.ONE * 0.01)), Ground.height_at(b.x.x, b.x.z), rig.tension, rig.grip, rig.stroke, str((b.q * Vector3.UP).snapped(Vector3.ONE * 0.01))])
 	if _every(2.0):
-		print("AUTOTEST voo t=%5.1f alt=%6.2f ar=%5.2f aoa=%5.1f T=%5.2f linha=%5.1f presa=%s enrosc=%s contatos=%d física=%.2fms" % [
-			_t, b.x.y, b.airspeed, rad_to_deg(b.angle_of_attack), rig.tension, rig.flying_length(), str(rig.held), str(rig.snagged), rig.rope.contact_count(),
-			main.physics_world.frame_ms])
-	if _every(4.0) and rig.rope.contact_count() > 0:
-		var obs: WorldObstacles = main.physics_world.obstacles
-		var names := []
-		for i in rig.rope.pos.size():
-			var oi := rig.rope.pin_obstacle[i]
-			if oi >= 0:
-				names.append("%s%s@%.1f" % [obs.entry_name(oi), "*" if rig.rope.pinned[i] == 1 else "", rig.rope.pos[i].y])
-		print("AUTOTEST   contatos: ", names, " T_seg=", rig.rope.seg_tension)
-	if _t >= 34.0:
+		print("AUTOTEST voo t=%5.1f alt=%6.2f el=%4.0f lat=%+6.1f T=%5.2f linha=%5.1f física=%.2fms" % [
+			_t, b.x.y - main.player.global_position.y, el, lat, rig.tension, rig.flying_length(), main.physics_world.frame_ms])
+	if _t >= 30.0:
 		var mean_alt := _alt_sum / maxf(float(_alt_n), 1.0)
-		print("AUTOTEST voo: subiu da mão até %.1f m de altura média, linha %.1f m, tensão máx %.1f N" % [mean_alt, rig.flying_length(), _max_tension])
-		if mean_alt < 7.0:
-			_ok = false
-			print("AUTOTEST FAIL: desbicando e dando linha a pipa não subiu da mão")
+		print("AUTOTEST voo: dar linha %.1f → %.1f m · puxar %.1f → %.1f m (elevação %.0f° → %.0f°) · esquerda %+.1f m · direita %+.1f m · altura final %.1f m" % [
+			_m["len0"], _m["len1"], _m["len1"], _m["len2"], _m["el1"], _m["el2"], _m["lat3"] - _m["lat2"], _m["lat4"] - _m["lat3"], mean_alt])
+		var checks := [
+			[_m["len1"] > _m["len0"] + 2.0, "dar linha não deu linha"],
+			[_m["len2"] < _m["len1"] - 2.0, "puxar não recolheu linha"],
+			[_m["el2"] > _m["el1"] + 2.0, "puxar não fez a pipa subir no céu"],
+			[_m["lat3"] - _m["lat2"] < -3.0, "guiar para a esquerda não levou a pipa para a esquerda"],
+			[_m["lat4"] - _m["lat3"] > 3.0, "guiar para a direita não levou a pipa para a direita"],
+			[mean_alt > 6.0, "a pipa não se manteve no ar"],
+		]
+		for c in checks:
+			if not c[0]:
+				_ok = false
+				print("AUTOTEST FAIL: ", c[1])
 		if OS.get_cmdline_user_args().has("--flightonly"):
 			_finish()
 			return

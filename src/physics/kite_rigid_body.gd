@@ -79,6 +79,9 @@ var airspeed: float = 0.0
 var lift: float = 0.0
 var drag: float = 0.0
 var resting: bool = false
+## Voo pelo KiteFlightModel (pipa do jogador presa na linha): posição e orientação
+## vêm do modelo; para a linha e a rabiola a pipa é um ponto de massa infinita.
+var kinematic: bool = false
 
 var _force := Vector3.ZERO
 var _torque := Vector3.ZERO
@@ -189,12 +192,16 @@ func mul_inv_inertia(vec: Vector3) -> Vector3:
 
 ## Massa inversa generalizada de um ponto (offset r) na direção n.
 func inverse_mass_at(r: Vector3, n: Vector3) -> float:
+	if kinematic:
+		return 0.0
 	var rn := r.cross(n)
 	return 1.0 / mass + rn.dot(mul_inv_inertia(rn))
 
 
 ## Correção posicional XPBD aplicada num ponto do corpo.
 func apply_correction(r: Vector3, corr: Vector3) -> void:
+	if kinematic:
+		return
 	x += corr / mass
 	var dw := mul_inv_inertia(r.cross(corr))
 	q = (q + Quaternion(dw.x, dw.y, dw.z, 0.0) * q * 0.5).normalized()
@@ -338,6 +345,8 @@ func add_torque(t: Vector3) -> void:
 func predict(h: float) -> void:
 	_x_prev = x
 	_q_prev = q
+	if kinematic:
+		return
 	v += _force / mass * h
 	w += mul_inv_inertia(_torque) * h
 	if _roll_k > 0.0:
@@ -350,6 +359,8 @@ func predict(h: float) -> void:
 
 ## Atualiza velocidades a partir das posições corrigidas.
 func finalize(h: float) -> void:
+	if kinematic:
+		return
 	v = (x - _x_prev) / h
 	var dq := q * _q_prev.inverse()
 	var s := 1.0 if dq.w >= 0.0 else -1.0

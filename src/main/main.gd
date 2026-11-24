@@ -130,6 +130,16 @@ func _ready() -> void:
 	gestures.size_pressed.connect(func() -> void: input_router.intent.size_cycle += 1)
 	gestures.bow_pressed.connect(func() -> void: input_router.intent.bow_cycle += 1)
 	gestures.tail_pressed.connect(func() -> void: input_router.intent.tail_cycle += 1)
+	# Área de testes do voo (painel com os parâmetros do modelo de voo).
+	var lab := FlightLab.new()
+	lab.rig = player_rig
+	lab.position = Vector2(16, 70)
+	$UI.add_child(lab)
+	gestures.lab_pressed.connect(func() -> void:
+		lab.visible = not lab.visible
+		gestures.blocked_rect = Rect2(lab.position, lab.size) if lab.visible else Rect2())
+	if OS.get_cmdline_user_args().has("--lab"):
+		lab.visible = true
 	player_rig.profile = player_rig.profile.duplicate()
 	player_rig.profile.apply_size(KiteProfile.Size.M)
 	if bot_rig.profile:
