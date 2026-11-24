@@ -219,6 +219,7 @@ func _render_stats() -> void:
 		tp += Performance.get_monitor(Performance.TIME_PROCESS)
 		tf += Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS)
 		tk += physics_world.frame_ms
+	print("PIPA voando=%s linha=%.1f alt=%.1f" % [str(player_rig.is_flying()), player_rig.flying_length(), player_rig.body.x.y - player.global_position.y if player_rig.body else -1.0])
 	print("CPU process=%.2fms physics=%.2fms pipas=%.2fms (média de 60 ticks, %d Hz)" % [tp / 60.0 * 1000.0, tf / 60.0 * 1000.0, tk / 60.0, Engine.physics_ticks_per_second])
 	var pp := []
 	for n in get_tree().root.find_children("*", "", true, false):
@@ -284,7 +285,9 @@ func _attach(path: String) -> void:
 ## Nova pipa no ar (com a linha atual) e câmera virada para ela.
 func reset_kite() -> void:
 	player.look_at_point(player.global_position + Wind.get_direction() * 10.0 + Vector3.UP * 4.0)
-	player_rig.launch_in_hand(player.global_position + Vector3(0.2, 1.18, -0.3), Wind.get_direction())
+	# Começa já no ar (linha de 22 m): arrastar para baixo é só puxar, sempre — o
+	# tranco de soltar da mão (de lado, em zigue-zague) parecia desbico.
+	player_rig.launch(player.global_position + Vector3(0.2, 1.18, -0.3), 22.0, 50.0, Wind.get_direction())
 	player.look_at_point(player_rig.body.x)
 	EventBus.kite_launched.emit()
 

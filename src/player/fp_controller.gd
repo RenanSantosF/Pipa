@@ -54,6 +54,13 @@ static func desbico_offset(t: float) -> float:
 
 ## Guiar: zona morta em volta da pipa na tela e distância para força máxima (px).
 const GUIDE_DEAD_PX := 28.0
+## Câmera: campo de visão normal, mínimo (zoom máximo), fração da altura da tela
+## que a pipa deve ocupar e zona livre (fração do campo) em que ela anda sem a
+## câmera ir atrás.
+const BASE_FOV := 72.0
+const MIN_FOV := 24.0
+const KITE_SCREEN_FRACTION := 0.07
+const FREE_ZONE := 0.18
 const GUIDE_FULL_PX := 240.0
 
 
@@ -96,12 +103,29 @@ func focus_point() -> Vector3:
 
 func _process(delta: float) -> void:
 	watch_time = maxf(watch_time - delta, 0.0)
-	var to := focus_point() - head.global_position
-	if to.length() > 0.5:
+	var fp := focus_point()
+	var to := fp - head.global_position
+	var dist := to.length()
+	if dist > 0.5:
 		to = to.normalized()
+		# A câmera NÃO cola na pipa: deixa ela andar pela tela (zona livre no meio)
+		# e só acompanha quando ela sai dessa zona — assim dá para ver o balanço e
+		# para onde ela está indo.
+		var want_yaw := atan2(-to.x, -to.z)
+		var want_pitch := maxf(asin(clampf(to.y, -1.0, 1.0)), deg_to_rad(-15.0))
+		var free := deg_to_rad(camera.fov) * FREE_ZONE
+		var dy := wrapf(want_yaw - _base_yaw, -PI, PI)
+		var dp := want_pitch - _base_pitch
 		var k := 1.0 - exp(-follow_rate * delta)
-		_base_yaw = lerp_angle(_base_yaw, atan2(-to.x, -to.z), k)
-		_base_pitch = lerpf(_base_pitch, maxf(asin(clampf(to.y, -1.0, 1.0)), deg_to_rad(-15.0)), k)
+		_base_yaw += signf(dy) * maxf(absf(dy) - free * 1.4, 0.0) * k + dy * k * 0.12
+		_base_pitch += signf(dp) * maxf(absf(dp) - free, 0.0) * k + dp * k * 0.12
+	# ZOOM: aproxima a pipa conforme a distância (de longe ela ficava com ~10 px e o
+	# desbico não aparecia). Perto (soltando da mão) volta ao campo de visão normal.
+	var target_fov := BASE_FOV
+	if rig and rig.body and not rig.held and dist > 8.0 and watch_time <= 0.0:
+		var size := rig.profile.height if rig.profile else 0.65
+		target_fov = clampf(rad_to_deg(2.0 * atan(size / (2.0 * dist * KITE_SCREEN_FRACTION))), MIN_FOV, BASE_FOV)
+	camera.fov = lerpf(camera.fov, target_fov, 1.0 - exp(-1.8 * delta))
 	if input_router:
 		var intent := input_router.intent
 		var look := intent.consume_look()

@@ -15,6 +15,9 @@ extends RefCounted
 const RHO := 1.225
 const GRAVITY := Vector3(0.0, -9.8, 0.0)
 const CD_NORMAL := 1.1
+## Linha mais "mole" no visual: o vento faz barriga (linha de pipa de verdade nunca
+## fica reta como arame). Multiplica o arrasto do vento na linha.
+const LINE_BELLY := 3.0
 const CF_TANGENT := 0.02
 
 var type: LineType
@@ -340,7 +343,7 @@ func compute_forces() -> void:
 		var vrel := Wind.sample((a + b) * 0.5) - vm
 		var vt := t * vrel.dot(t)
 		var vn := vrel - vt
-		var f := vn * (0.5 * RHO * vn.length() * d * l * CD_NORMAL)
+		var f := vn * (0.5 * RHO * vn.length() * d * l * CD_NORMAL * LINE_BELLY)
 		f += vt * (0.5 * RHO * vt.length() * PI * d * l * CF_TANGENT)
 		acc[i] += f * (0.5 * inv_mass[i])
 		if i + 1 < n:

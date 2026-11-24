@@ -50,14 +50,14 @@ const LAUNCH_LEN := 18.0
 ## …ou com a pipa ainda baixa (m acima da mão), onde o vento é fraco.
 const LAUNCH_ALT := 14.0
 ## Puxão de recolher: abaixo desta linha (m) ainda é o tranco de soltar da mão.
-const RECOLHER_LAUNCH_LEN := 8.0
+const RECOLHER_LAUNCH_LEN := 0.0
 ## Desbico por toques: giro de um balanço (rad/s) e quanto tempo ele dura (decaimento),
 ## quanto tempo sem toque reinicia a sequência, quanto tempo o rumo fica mantido.
 ## Por tamanho [P, M, G]: pipinha rápida e curta; pipão lento e forte.
-const SWING_RATE_BY_SIZE := [3.4, 2.4, 1.75]
+const SWING_RATE_BY_SIZE := [4.7, 3.4, 2.45]
 const SWING_TAU_BY_SIZE := [0.2, 0.35, 0.58]
 ## Inclinação (rad) de cada balanço e o tempo de resposta dela, por tamanho.
-const BANK_BY_SIZE := [0.48, 0.58, 0.68]
+const BANK_BY_SIZE := [0.55, 0.68, 0.8]
 const BANK_TAU_BY_SIZE := [0.05, 0.08, 0.13]
 const TAP_SEQ_RESET := 0.45
 const TAP_HOLD_TIME := 1.6
