@@ -52,6 +52,9 @@ var bridle_offset := Vector2.ZERO
 var sail_asym: float = 0.0
 ## Viés da vareta relaxada na folga (−1..1), escrito pela mão no desbico.
 var spin_bias: float = 0.0
+## Guiar: direção desejada do bico (mundo) e força, escritas pela mão.
+var steer_dir := Vector3.ZERO
+var steer_gain: float = 0.0
 var _t_steady: float = 5.0
 ## A mão voltando da braçada joga a linha no chão? (falso no desbico: a linha escorrega)
 var shorten_on_return: bool = true
@@ -295,6 +298,12 @@ func pre_frame(dt: float) -> void:
 		var t_slack := 0.25 * t_full
 		body.relax = clampf((t_full - t_end) / (t_full - t_slack), 0.0, 1.0)
 		body.spin_bias = 0.0 if loose else spin_bias
+		body.steer_dir = Vector3.ZERO if loose or held else steer_dir
+		body.steer_gain = steer_gain
+		if rope != null and rope.hand_fixed:
+			var ld := body.x - hand_position()
+			if ld.length() > 0.01:
+				body.line_dir = ld.normalized()
 		if rope != null and rope.end_body == body:
 			var off := Vector2.ZERO if loose else bridle_offset
 			rope.end_local = body.tow_local + Vector3(off.x, off.y, 0.0)
@@ -312,9 +321,12 @@ func _update_spool(dt: float) -> void:
 		pile += amount
 	_stroke_prev = stroke
 	# Soltar (dar linha): a linha corre quando a tensão vence a pegada.
-	if grip < 0.98 and pile + spool > 0.05:
+	# A mão não segura mais que ~70% do que a linha aguenta: num tranco forte a linha
+	# escorrega na mão em vez de arrebentar (o pipeiro sente e alivia).
+	var f_cap := 0.7 * line_type.break_tension
+	if (grip < 0.98 or rope.tension_hand > f_cap) and pile + spool > 0.05:
 		# Atrito da mão cresce com o quadrado da pegada (mão quase aberta = linha corre fácil).
-		var f_grip := grip * grip * GRIP_MAX
+		var f_grip := minf(grip * grip * GRIP_MAX, f_cap)
 		feed_speed += ((rope.tension_hand - f_grip) / FEED_MASS - FEED_DAMP * feed_speed) * dt
 		feed_speed = maxf(feed_speed, 0.0)
 	else:
@@ -355,6 +367,7 @@ func solve(h: float) -> void:
 		rope.solve(h)
 	if body != null:
 		tail.solve(h)
+		body.steer_correct(h)
 		if snagged:
 			body.x = body.x.lerp(snag_point, 0.6)
 			body.v *= 0.3

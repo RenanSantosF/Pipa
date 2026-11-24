@@ -18,26 +18,22 @@ func start(p_main) -> void:
 	gc.visible = true
 	gc.size = Vector2(1280, 720)
 	main.player_rig.launch(main.player.global_position + Vector3(0.2, 1.18, -0.3), 30.0, 55.0, Wind.get_direction())
-	var c := Vector2(800, 420)
-	var l := Vector2(400, 420)
+	var c := Vector2(640, 420)
 	_steps = [
-		# Toque na metade direita = desbico para a direita.
-		[1.0, "down", 0, c], [1.08, "up", 0, c], [1.15, "check_desb", 1.0],
-		# Toque na metade esquerda = desbico para a esquerda.
-		[2.0, "down", 0, l], [2.08, "up", 0, l], [2.15, "check_desb", -1.0],
-		# Dois toques rápidos na direita = jogar (desbico + puxão na retomada).
-		[3.0, "down", 0, c], [3.06, "up", 0, c], [3.16, "down", 0, c], [3.22, "up", 0, c],
-		[3.3, "check_desb", 1.0], [3.75, "check_pulling", true],
-		# Arrastar para o lado e segurar = desbico; 2º dedo tocando = puxão.
-		[5.0, "down", 0, c], [5.05, "drag", 0, c + Vector2(40, 2)], [5.1, "drag", 0, c + Vector2(110, 4)],
-		[5.2, "check_desb", 1.0], [5.5, "down", 1, Vector2(300, 400)], [5.56, "up", 1, Vector2(300, 400)],
-		[5.6, "check_pull", 1], [5.9, "up", 0, c + Vector2(110, 4)], [6.0, "check_release", 0],
-		# Arrastar e segurar para baixo = puxada contínua (vários puxões).
-		[7.0, "down", 0, c], [7.05, "drag", 0, c + Vector2(0, 30)], [7.1, "drag", 0, c + Vector2(0, 160)],
-		[7.15, "mark_pulls"], [8.4, "check_pulls_since", 3], [8.5, "up", 0, c + Vector2(0, 160)],
-		# Arrastar para cima = dar linha.
-		[9.0, "down", 0, c], [9.1, "drag", 0, c + Vector2(0, -40)], [9.2, "drag", 0, c + Vector2(0, -120)],
-		[9.3, "check_grip", 0.3], [9.5, "up", 0, c + Vector2(0, -120)],
+		# Segurar à direita da pipa = guiar para a direita (bico vai para a direita).
+		[1.0, "down_rel", 0, Vector2(260, 0)], [1.6, "check_guide", 1.0], [2.0, "up", 0, c],
+		# Segurar à esquerda = guiar para a esquerda.
+		[3.0, "down_rel", 0, Vector2(-260, 0)], [3.6, "check_guide", -1.0], [4.0, "up", 0, c],
+		# Arrastar de cima para baixo = puxão (recolhe linha), não guia.
+		[5.0, "down", 0, c], [5.04, "drag", 0, c + Vector2(0, 60)], [5.08, "drag", 0, c + Vector2(0, 140)],
+		[5.12, "check_noguide", 0], [5.3, "up", 0, c + Vector2(0, 140)], [6.2, "check_shorter", 0],
+		# Guiando com um dedo + 2º dedo arrastando para baixo = puxão junto.
+		[7.0, "down_rel", 0, Vector2(240, 0)], [7.3, "down", 1, Vector2(1000, 250)], [7.34, "drag", 1, Vector2(1000, 330)],
+		[7.38, "drag", 1, Vector2(1000, 420)], [7.45, "check_guide", 1.0], [7.6, "up", 1, Vector2(1000, 420)],
+		[8.0, "check_shorter", 0], [8.2, "up", 0, c],
+		# Arrastar de baixo para cima = dar linha.
+		[9.0, "down", 0, c], [9.04, "drag", 0, c + Vector2(0, -60)], [9.1, "drag", 0, c + Vector2(0, -140)],
+		[9.2, "check_grip", 0.3], [9.5, "up", 0, c + Vector2(0, -140)],
 		# Faixa do topo = câmera.
 		[10.0, "down", 0, Vector2(600, 40)], [10.1, "drag", 0, Vector2(650, 40)], [10.15, "check_look", true], [10.3, "up", 0, Vector2(650, 40)],
 		[11.0, "done"],
@@ -50,7 +46,30 @@ func _physics_process(delta: float) -> void:
 	while not _steps.is_empty() and _t >= float(_steps[0][0]):
 		var s: Array = _steps.pop_front()
 		match s[1]:
+			"down_rel":
+				# Toque relativo à pipa na tela.
+				var cam := get_viewport().get_camera_3d()
+				var ks := cam.unproject_position(main.player_rig.body.x) if cam else Vector2(640, 360)
+				var ev0 := InputEventScreenTouch.new()
+				ev0.index = s[2]
+				ev0.position = (ks + s[3]).clamp(Vector2(300, 150), Vector2(1270, 710))
+				ev0.pressed = true
+				gc._input(ev0)
+				_len_mark = main.player_rig.flying_length()
+			"check_guide":
+				var hg = main.player.get("_hand")
+				var sd: Vector3 = main.player_rig.steer_dir
+				var cam2 := get_viewport().get_camera_3d()
+				var side_ok := cam2 != null and signf(sd.dot(cam2.global_basis.x)) == float(s[2])
+				_check("guiar para %+.0f (comando %s)" % [s[2], str(sd.snapped(Vector3.ONE * 0.01))], hg != null and bool(hg.call("is_guiding")) and side_ok)
+			"check_noguide":
+				_check("arrastar para baixo não guia", not main.input_router.intent.guide_active)
+			"check_shorter":
+				_check("puxão recolheu linha (%.2f → %.2f m)" % [_len_mark, main.player_rig.flying_length()], main.player_rig.flying_length() < _len_mark - 0.1)
+				_len_mark = main.player_rig.flying_length()
 			"down", "up":
+				if s[1] == "down" and s[2] == 0:
+					_len_mark = main.player_rig.flying_length()
 				var ev := InputEventScreenTouch.new()
 				ev.index = s[2]
 				ev.position = s[3]
@@ -100,6 +119,7 @@ func _physics_process(delta: float) -> void:
 
 
 var _pulls := 0
+var _len_mark := 0.0
 var _mark := 0
 var _mark_throw := 0
 var _hand_pull_count := 0

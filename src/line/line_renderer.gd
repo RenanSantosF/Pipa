@@ -45,12 +45,17 @@ func bind(p_rope, line_type: LineType) -> void:
 
 
 func _process(_delta: float) -> void:
-	_im.clear_surfaces()
 	if rope == null or rope.pos.size() < 2:
+		_im.clear_surfaces()
 		return
 	var cam := get_viewport().get_camera_3d()
 	if cam == null:
 		return
+	# Linha toda longe (vizinhos): redesenha a cada 2 quadros (metade da CPU).
+	var mid_pt := rope.pos[rope.pos.size() / 2]
+	if cam.global_position.distance_to(mid_pt) > 45.0 and (Engine.get_process_frames() + get_instance_id()) % 2 == 0:
+		return
+	_im.clear_surfaces()
 	_pts.resize(0)
 	_pts.append_array(rope.pos)
 	if rope.end_body != null:

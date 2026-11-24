@@ -48,6 +48,20 @@ var sail_asym: float = 0.0
 ## na vela torta gira a pipa em torno da normal ("a pipa roda / vira o bico").
 var relax: float = 0.0
 var spin_bias: float = 0.0
+## GUIAR (desbico por toque): direção desejada do bico no mundo (zero = solto),
+## força do comando (0..1) e direção da linha (mão → pipa).
+var steer_dir := Vector3.ZERO
+var steer_gain: float = 0.0
+var line_dir := Vector3.UP
+## Erro de alinhamento atual (rad, com sinal) — a mão usa para afrouxar/esticar.
+var steer_error: float = 0.0
+## Giro máximo do bico guiando (rad/s), ganho e tempo de resposta.
+const STEER_RATE_MAX := 3.4
+const STEER_KP := 5.5
+const STEER_TAU := 0.16
+## Quanto do giro pedido o servo impõe por subpasso (o resto fica com a física).
+const STEER_BLEND := 0.55
+var _steer_rate := 0.0
 
 # Meias-velas: [esquerda, direita] — pontos locais planos, área.
 var _half_pts: Array[PackedVector3Array] = []
@@ -253,6 +267,7 @@ func compute_forces() -> void:
 	lift = lift_sum
 	drag = drag_sum
 	# Vela torta na folga: momento em torno da normal (gira o BICO, sem força lateral).
+	_apply_steer()
 	if spin_bias != 0.0 and relax > 0.0:
 		var qa := 0.5 * RHO * airspeed * airspeed * (_half_area[0] + _half_area[1]) * profile.height
 		_torque += (q * Vector3.BACK) * (-spin_bias * profile.spin_coef * qa * relax)
@@ -264,6 +279,47 @@ func compute_forces() -> void:
 	# (Aplicado de forma implícita no predict: estável com qualquer passo.)
 	var hw := profile.width * 0.5
 	_roll_k = ROLL_DAMPING * 0.5 * RHO * maxf(airspeed, 2.0) * (_half_area[0] + _half_area[1]) * hw * hw
+
+
+## Guiar: a mão do pipeiro dosa a linha (folga para virar, estica para seguir) e o
+## bico gira em torno da normal da vela até apontar para onde o dedo pede.
+## Calcula só o erro aqui; o giro é aplicado em steer_correct (depois das
+## restrições de linha e rabiola, que senão anulariam o comando).
+func _apply_steer() -> void:
+	steer_error = 0.0
+	if steer_gain <= 0.0 or steer_dir == Vector3.ZERO:
+		return
+	var n: Vector3 = q * Vector3.BACK
+	var nose: Vector3 = q * Vector3.UP
+	var nt := nose - line_dir * nose.dot(line_dir)
+	var d := steer_dir - line_dir * steer_dir.dot(line_dir)
+	if nt.length() < 0.05 or d.length() < 0.05:
+		return
+	nt = nt.normalized()
+	d = d.normalized()
+	steer_error = atan2(nt.cross(d).dot(n), nt.dot(d))
+
+
+## Servo de VELOCIDADE de giro do bico (por subpasso, depois das restrições): a
+## velocidade de giro desejada ∝ erro (limitada) e segue com tempo de resposta
+## STEER_TAU (inércia: começa e para suave, sem overshoot). Corrige só a diferença
+## entre o giro que a física já deu neste subpasso e o desejado.
+func steer_correct(h: float) -> void:
+	if steer_gain <= 0.0 or steer_dir == Vector3.ZERO:
+		_steer_rate = lerpf(_steer_rate, 0.0, minf(1.0, h / 0.25))
+		return
+	var n: Vector3 = q * Vector3.BACK
+	var rate_max := STEER_RATE_MAX * clampf(steer_gain, 0.0, 1.0)
+	var authority := clampf(airspeed / 4.0, 0.3, 1.0)
+	var want := clampf(STEER_KP * steer_error, -rate_max, rate_max) * authority
+	_steer_rate += (want - _steer_rate) * minf(1.0, h / STEER_TAU)
+	var dq := q * _q_prev.inverse()
+	if dq.w < 0.0:
+		dq = -dq
+	var actual := 2.0 * Vector3(dq.x, dq.y, dq.z).dot(n)
+	var extra := (_steer_rate * h - actual) * STEER_BLEND
+	if absf(extra) > 1e-6:
+		q = (Quaternion(n, extra) * q).normalized()
 
 
 func add_torque(t: Vector3) -> void:

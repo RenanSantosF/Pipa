@@ -225,6 +225,30 @@ func _render_stats() -> void:
 		if n.is_physics_processing() or n.is_physics_processing_internal():
 			pp.append("%s%s" % [n.name, "(i)" if n.is_physics_processing_internal() and not n.is_physics_processing() else ""])
 	print("PHYSPROC %d: %s" % [pp.size(), str(pp.slice(0, 40))])
+	var procs := {}
+	var nodes := get_tree().root.find_children("*", "", true, false)
+	for nd in nodes:
+		if nd.is_processing():
+			var sc: Script = nd.get_script()
+			var key: String = sc.resource_path.get_file() if sc else nd.get_class()
+			procs[key] = int(procs.get(key, 0)) + 1
+	print("NOS total=%d com _process: %s" % [nodes.size(), str(procs)])
+	var mats := {}
+	for gi in get_tree().root.find_children("*", "GeometryInstance3D", true, false):
+		var g := gi as GeometryInstance3D
+		if g.material_override:
+			mats[g.material_override.get_instance_id()] = g.material_override.get_class()
+	print("MATERIAIS distintos (override)=%d" % mats.size())
+	# Colisão do cenário ainda funciona? (raio horizontal a partir do jogador)
+	var ss := player.get_world_3d().direct_space_state
+	var hits := 0
+	for k in 16:
+		var a := float(k) / 16.0 * TAU
+		var from: Vector3 = player.global_position + Vector3.UP * 1.0
+		var q := PhysicsRayQueryParameters3D.create(from, from + Vector3(cos(a), 0, sin(a)) * 40.0)
+		if not ss.intersect_ray(q).is_empty():
+			hits += 1
+	print("COLISAO raios que bateram em algo: %d/16" % hits)
 	print("FISICA3D ativos=%d pares=%d ilhas=%d corpos_estaticos=%d formas=%d" % [Performance.get_monitor(Performance.PHYSICS_3D_ACTIVE_OBJECTS), Performance.get_monitor(Performance.PHYSICS_3D_COLLISION_PAIRS), Performance.get_monitor(Performance.PHYSICS_3D_ISLAND_COUNT), get_tree().root.find_children("*", "StaticBody3D", true, false).size(), get_tree().root.find_children("*", "CollisionShape3D", true, false).size()])
 	if OS.get_cmdline_user_args().has("--meshdump"):
 		var rows := []

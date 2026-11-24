@@ -41,15 +41,17 @@ func bind(p_rig: KiteRig) -> void:
 
 
 func _process(_delta: float) -> void:
-	_im.clear_surfaces()
-	if rig == null or rig.tail == null:
+	if rig == null or rig.tail == null or rig.tail.pos.size() < 1:
+		_im.clear_surfaces()
 		return
 	var cam := get_viewport().get_camera_3d()
 	if cam == null:
 		return
 	var tail := rig.tail
-	if tail.pos.size() < 1:
+	# Longe: redesenha a cada 2 quadros.
+	if cam.global_position.distance_to(tail.pos[0]) > 45.0 and (Engine.get_process_frames() + get_instance_id()) % 2 == 0:
 		return
+	_im.clear_surfaces()
 	var cam_pos := cam.global_position
 	var prof := rig.profile
 	var k := prof.height / 0.65

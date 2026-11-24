@@ -63,19 +63,32 @@ var _body: StaticBody3D
 ## Corpos de colisão por célula (24 m): com tudo num corpo só (3,4 mil caixas) o
 ## motor de física testava todas as caixas a cada passo do jogador.
 var _cell_bodies: Dictionary = {}
+var _shape_rids: Array[RID] = []
 const COLLISION_CELL := 24.0
 
 
-func _collision_body_at(p: Vector3) -> StaticBody3D:
+## Corpo estático da célula, direto no servidor de física (sem nós na cena: eram
+## 3,4 mil CollisionShape3D só ocupando memória e tempo de carga).
+func _collision_body_at(p: Vector3) -> RID:
 	var key := Vector2i(floori(p.x / COLLISION_CELL), floori(p.z / COLLISION_CELL))
 	if not _cell_bodies.has(key):
-		var b := StaticBody3D.new()
-		b.name = "Collision_%d_%d" % [key.x, key.y]
-		b.collision_layer = 1
-		b.collision_mask = 0
-		_body.add_child(b)
+		var b := PhysicsServer3D.body_create()
+		PhysicsServer3D.body_set_mode(b, PhysicsServer3D.BODY_MODE_STATIC)
+		PhysicsServer3D.body_set_collision_layer(b, 1)
+		PhysicsServer3D.body_set_collision_mask(b, 0)
+		PhysicsServer3D.body_set_space(b, get_world_3d().space)
+		PhysicsServer3D.body_attach_object_instance_id(b, _body.get_instance_id())
 		_cell_bodies[key] = b
 	return _cell_bodies[key]
+
+
+func _exit_tree() -> void:
+	for b in _cell_bodies.values():
+		PhysicsServer3D.free_rid(b)
+	_cell_bodies.clear()
+	for sh in _shape_rids:
+		PhysicsServer3D.free_rid(sh)
+	_shape_rids.clear()
 var _opaque_material: StandardMaterial3D
 var _wire_points: PackedVector3Array = PackedVector3Array()
 var _houses: HouseBuilder
@@ -149,12 +162,10 @@ func foliage_batch(z: float, species: String) -> MeshBatch:
 
 
 func add_collider(xf: Transform3D, size: Vector3) -> void:
-	var cs := CollisionShape3D.new()
-	var shape := BoxShape3D.new()
-	shape.size = size
-	cs.shape = shape
-	cs.transform = xf
-	_collision_body_at(xf.origin).add_child(cs)
+	var shape := PhysicsServer3D.box_shape_create()
+	PhysicsServer3D.shape_set_data(shape, size * 0.5)
+	_shape_rids.append(shape)
+	PhysicsServer3D.body_add_shape(_collision_body_at(xf.origin), shape, xf)
 	if size.x > 60.0 or size.z > 60.0:
 		return
 	# Obstáculo para a linha: caixa alinhada que envolve a caixa girada.
@@ -832,13 +843,17 @@ func _surface_material(surface: String) -> Material:
 	m.albedo_texture = load(base + "diff.jpg")
 	m.vertex_color_use_as_albedo = true
 	m.vertex_color_is_srgb = true
-	m.normal_enabled = true
-	m.normal_texture = load(base + "nor.jpg")
-	m.roughness_texture = load(base + "arm.jpg")
-	m.roughness_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_GREEN
-	m.roughness = 1.0
+	var low := GameConfig.quality == GameConfig.Quality.LOW
+	# Qualidade baixa: só a cor (sem mapa de normal nem de rugosidade = 2 leituras
+	# de textura a menos por pixel em toda parede/chão; de longe quase não se nota).
+	m.normal_enabled = not low
+	if not low:
+		m.normal_texture = load(base + "nor.jpg")
+		m.roughness_texture = load(base + "arm.jpg")
+		m.roughness_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_GREEN
+	m.roughness = 1.0 if not low else 0.85
 	m.metallic_specular = 0.3
 	var sc: float = SURFACES[surface][1]
 	m.uv1_scale = Vector3(sc, sc, 1.0)
-	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS if low else BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
 	return m

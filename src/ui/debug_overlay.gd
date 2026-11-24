@@ -18,6 +18,8 @@ func _ready() -> void:
 
 func _refresh_visibility() -> void:
 	visible = GameConfig.show_debug
+	set_process(visible)
+	visibility_changed.connect(func() -> void: set_process(visible))
 
 
 func _process(delta: float) -> void:

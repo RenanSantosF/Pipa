@@ -18,27 +18,21 @@ Cada push gera um APK automaticamente (GitHub Actions):
 
 Também ficam disponíveis: o *artifact* `pipa-debug-apk` na execução do workflow e a branch `apk-builds`.
 
-## Controles (só gestos — sem botões)
-
-Quase a tela inteira é da pipa; um dedo controla tudo:
+## Controles (só gestos — dois comandos independentes)
 
 | Gesto | O que faz |
 |---|---|
-| **Toque** na metade esquerda / direita | **desbico** para aquele lado (o bico gira e ela mergulha um pouco); funciona até perto do chão. Vá tocando para ir **desbicando e descendo** a pipa |
-| **Dois toques rápidos** | **joga a pipa** para aquele lado (desbico até o bico apontar + puxão: ela dispara para lá) |
-| **Arrastar para o lado** e segurar | desbico contínuo: o bico vai girando enquanto o dedo está fora do centro (mais longe = mais rápido); voltar ao centro ou soltar = retoma |
-| **Arrastar e segurar para baixo** | **puxa a linha sem parar** (mão sobre mão): a pipa sobe; quanto mais desce o dedo, mais rápido |
-| **Esfregar** para cima e para baixo | cada descida rápida é um puxão a mais: puxa ainda mais rápido |
-| Arrastar **para cima** | abrir a mão / **dar linha** |
-| **Círculos** | enrolar na lata |
-| Segundo dedo | **toque** = puxão (desbica com um polegar e puxa com o outro) · **arrastar** = olhar em volta |
+| **Segurar o dedo** na tela | **guiar (desbico)**: a pipa vira o bico para o dedo, em relação a ela na tela — dedo à esquerda da pipa = vai para a esquerda, à direita = direita, acima = sobe, abaixo = desce. Mais longe = vira mais rápido. Arraste o dedo para fazer curvas. Soltar = segue por inércia e o bico volta para cima |
+| **Arrastar de cima para baixo** | **puxão**: recolhe linha (fica no chão aos seus pés); a pipa sobe e chega mais perto, sem girar. Cada arrastada = uma braçada; esfregar = mais puxões; segurar bem embaixo = continua puxando |
+| Arrastar de baixo para cima | dar linha (abrir a mão) |
+| **2º dedo** com o 1º guiando | arrastar para baixo = puxão junto (guia e puxa ao mesmo tempo); para cima = dar linha; toque = puxão curto |
 | Faixa estreita no topo | olhar em volta (a câmera volta para a pipa como mola) |
 | Joystick (canto inferior esquerdo) | andar |
 | Ícones no canto | nova pipa · trocar linha · som · **tamanho P/M/G** · **envergadura** · **rabiola curta/média/grande** |
 
 **Linha enroscada**: dê **trancos fortes** (segure para baixo / esfregue) para desenroscar do galho, tronco ou poste, ou **dê linha** para ela ficar frouxa e cair fora. A pipa presa num fio/galho solta com tranco.
 
-A pipa **começa na mão**: segure arrastado para baixo (puxões — perto do chão eles saem de lado, em zigue-zague) e, com ela subindo, arraste para cima para dar linha.
+A pipa **começa na mão**: arraste para baixo algumas vezes (com a linha bem curta o tranco sai de lado, em zigue-zague, para ela pegar vento) e, com ela subindo, arraste para cima para dar linha.
 **Rabiola**: curta = pipa arisca (desbica fácil, mais difícil de segurar); grande = estável e mais lenta.
 **Envergadura** (quanto a travessa é arqueada) muda tudo: muita envergadura = pipa estável, desbico **fino e curto**; pouca = desbico **longo**, pipa arisca.
 
@@ -46,7 +40,7 @@ A pipa **começa na mão**: segure arrastado para baixo (puxões — perto do ch
 
 PC (testes): segurar clique esquerdo/← = desbico esquerda · segurar clique direito/→ = desbico direita · F = puxão (segurar = em série) · Espaço = dupla · Tab = olhar com o mouse · E = dar linha · G = braçada lenta · Q = enrolar · R = nova pipa · T = trocar linha · Y = tamanho · U = envergadura · J = rabiola.
 
-Detalhes do desbico e do puxão: `docs/DESBICO_PUXAO.md`. O que mudou na 0.7 (pipa da foto, gestos, linha fina, desempenho): `docs/V07.md`; na 0.8 (toque = desbico, jogar, puxar segurando, rabiola, desenroscar, mais leve): `docs/V08.md`.
+Detalhes do desbico e do puxão: `docs/DESBICO_PUXAO.md`. O que mudou na 0.7 (pipa da foto, gestos, linha fina, desempenho): `docs/V07.md`; na 0.8: `docs/V08.md`; na 0.9 (guiar pelo dedo estilo Pipa Combate, puxão que recolhe linha, auditoria de desempenho): `docs/V09.md`.
 
 ## Como é a física (resumo)
 

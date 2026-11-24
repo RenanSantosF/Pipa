@@ -49,6 +49,8 @@ const THROW_DESB := 0.38
 const LAUNCH_LEN := 18.0
 ## …ou com a pipa ainda baixa (m acima da mão), onde o vento é fraco.
 const LAUNCH_ALT := 14.0
+## Puxão de recolher: abaixo desta linha (m) ainda é o tranco de soltar da mão.
+const RECOLHER_LAUNCH_LEN := 8.0
 
 ## Força do desbico pedida pelo gesto (0,25..1): quanto mais longe o dedo, mais a
 ## mão abre e mais a vareta relaxa torta (o bico gira mais rápido).
@@ -72,6 +74,12 @@ var asym_gain: float = 0.0
 var spin_gain: float = 0.95
 ## Ritmo da puxada contínua (0..1), escrito pelo gesto.
 var pull_rate: float = 0.0
+## GUIAR: direção pedida pelo dedo (mundo) e força 0..1 (zero = sem guiar).
+var _guide_dir := Vector3.ZERO
+var _guide_amount := 0.0
+var _guide_slack := 0.0
+## Puxão de RECOLHER (gesto de arrastar para baixo): a linha puxada fica na mão.
+var _recolher := false
 
 var rig: KiteRig
 var stroke: float = 0.0
@@ -196,6 +204,7 @@ func cancel() -> void:
 func puxao() -> void:
 	if rig == null or rig.body == null:
 		return
+	_recolher = false
 	if rig.held:
 		rig.release_hold()
 	if _pulling and _pull_t < (windup_time if _wu > 0.0 else 0.0) + pull_time:
@@ -204,10 +213,43 @@ func puxao() -> void:
 	_start_pull()
 
 
+## GUIAR (desbico por toque): o bico vai para `world_dir` (força 0..1). Passar
+## Vector3.ZERO (ou força 0) solta: a pipa segue por inércia e a rabiola endireita.
+func guide(world_dir: Vector3, amount: float) -> void:
+	if rig == null or rig.body == null:
+		return
+	if amount > 0.0 and world_dir != Vector3.ZERO and rig.held:
+		rig.release_hold()
+	_guide_dir = world_dir
+	_guide_amount = clampf(amount, 0.0, 1.0) if world_dir != Vector3.ZERO else 0.0
+	if _guide_amount > 0.0 and _desb_active:
+		_desb_active = false   # guiar substitui o desbico de toque antigo
+
+
+func is_guiding() -> bool:
+	return _guide_amount > 0.0
+
+
+## PUXÃO de recolher (arrastar de cima para baixo): braçada com a mão fechada e a
+## linha puxada FICA (vai para o chão aos pés): a pipa sobe e chega mais perto.
+## `amount` 0..1 = tamanho do arrasto (braçada de 0,4 a 0,9 m).
+func recolher(amount: float) -> void:
+	if rig == null or rig.body == null:
+		return
+	var keep := pull_len
+	pull_len = lerpf(0.4, 0.9, clampf(amount, 0.0, 1.0))
+	puxao()
+	pull_len = keep
+	# Só o tranco de soltar da mão (em zigue-zague) com a linha bem curta; no ar o
+	# puxão é reto: recolhe sem jogar a pipa para os lados.
+	if _launch and rig.flying_length() > RECOLHER_LAUNCH_LEN:
+		_launch = false
+	_recolher = not _launch
+
+
 ## Botão de puxar segurado: puxões em série enquanto segura.
 func set_pull_held(held: bool) -> void:
 	if held and not _pull_held:
-		puxao()
 		_pull_repeat_t = 0.0
 	_pull_held = held
 
@@ -303,7 +345,7 @@ func update(delta: float, pull_stroke: float, grip_in: float, reel: float) -> vo
 		_pull_repeat_t += delta
 		if _pull_repeat_t >= lerpf(PULL_REPEAT_SLOW, PULL_REPEAT_FAST, clampf(pull_rate, 0.0, 1.0)):
 			_pull_repeat_t = 0.0
-			puxao()
+			recolher(0.75)
 
 	if _desb_active:
 		_desb_t += delta
@@ -381,7 +423,7 @@ func update(delta: float, pull_stroke: float, grip_in: float, reel: float) -> vo
 		elif _pull_t < t1:
 			# Arranque: o braço puxa a linha (ease-in-out, pico ~10 m/s).
 			stroke = lerpf(_pull_from - _wu, _pull_to, _smooth(t0, t1, _pull_t))
-			pitch_target = -1.0   # a tração vem de baixo: a vela "morde" o vento
+			pitch_target = -0.35 if _recolher else -1.0   # a tração vem de baixo: a vela "morde" o vento
 			keep_line = false
 			var el := line_elevation()
 			if (auto_feed or rig.flying_length() < LAUNCH_LEN) and el > 0.5:
@@ -393,12 +435,13 @@ func update(delta: float, pull_stroke: float, grip_in: float, reel: float) -> vo
 			_start_pull()
 		elif _pull_t < t2:
 			stroke = _pull_to
-			pitch_target = -0.5
+			pitch_target = -0.2 if _recolher else -0.5
 		elif _pull_t < t3:
 			# O braço devolve devagar (tranco): a linha volta para a pipa e a tensão cai
 			# aos poucos. Nada é recolhido (recolher é mão sobre mão / enrolar).
 			stroke = lerpf(_pull_to, 0.0, _smooth(t2, t3, _pull_t))
-			keep_line = false
+			# Recolher: a outra mão segura e o braço volta sem devolver a linha.
+			keep_line = _recolher
 		else:
 			_pulling = false
 			stroke = 0.0
@@ -406,6 +449,32 @@ func update(delta: float, pull_stroke: float, grip_in: float, reel: float) -> vo
 		stroke = move_toward(stroke, pull_stroke, 6.0 * delta)
 		if pull_stroke > 0.05 and rig.held:
 			rig.release_hold()
+
+	# GUIAR: o bico vai para o dedo. Mão de pipeiro de combate: desalinhada, ela
+	# afrouxa um pouco (a pipa fica instável e vira); alinhada, estica (estável:
+	# voa reto pelo bico e acelera). Puxando sem guiar, a linha esticada mantém o
+	# bico para cima: ela sobe, sem girar.
+	var steer_target := Vector3.ZERO
+	var steer_gain := 0.0
+	var slack_target := 0.0
+	if _guide_amount > 0.0 and rig.body != null:
+		steer_target = _guide_dir
+		steer_gain = lerpf(0.45, 1.0, _guide_amount)
+		var err := absf(rig.body.steer_error)
+		slack_target = clampf((err - 0.3) / 1.0, 0.0, 1.0) * (0.0 if _pulling else 1.0)
+	elif _pulling and _recolher and rig.body != null and not _launch:
+		var ld: Vector3 = rig.body.line_dir
+		var upt := Vector3.UP - ld * ld.y
+		if upt.length() > 0.05:
+			steer_target = upt.normalized()
+			steer_gain = 0.35
+	_guide_slack = lerpf(_guide_slack, slack_target, 1.0 - exp(-delta / 0.08))
+	if _guide_slack > 0.01 and not _pulling and not _desb_active and _recover_t < 0.0:
+		stroke = move_toward(stroke, -0.2 * _guide_slack, 2.5 * delta)
+		grip = minf(grip, lerpf(1.0, 0.45, _guide_slack))
+		keep_line = false
+	rig.steer_dir = steer_target
+	rig.steer_gain = steer_gain
 
 	# Atuadores suaves (nada muda de uma vez: constante de tempo ~60–80 ms).
 	if launch_asym:

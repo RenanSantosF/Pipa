@@ -29,6 +29,14 @@ var pull_held: bool = false
 var double_taps: int = 0
 ## JOGAR para o lado (duplo toque): desbico forte + puxão na hora certa (lado ±1).
 var throws: Array[float] = []
+## GUIAR (dedo segurado): posição do dedo na tela (a pipa vira o bico para ele).
+var guide_active: bool = false
+var guide_finger := Vector2.ZERO
+## Guiar por direção no mundo (testes/teclado): usado se guide_active for falso.
+var guide_dir := Vector3.ZERO
+var guide_amount: float = 0.0
+## PUXÕES de recolher (arrastar de cima para baixo): tamanho de cada arrasto 0..1.
+var recolhe: Array[float] = []
 ## Puxada contínua (segurar arrastado para baixo): 0..1 = ritmo da mão sobre mão.
 var pull_rate: float = 0.0
 ## O toque virou arrasto logo no começo: aborta o desbico.

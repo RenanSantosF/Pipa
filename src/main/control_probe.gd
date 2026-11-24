@@ -21,6 +21,18 @@ var _events: Array = []   # [tempo, ação, valor]
 var _log_from := 5.8
 var _max := {}
 var _hold := 0.7
+var _curving := false
+var _gdir := Vector2.ZERO
+
+
+## Direção na janela de vento (x = lado, y = cima), como o dedo no jogo.
+func _window_dir(g: Vector2) -> Vector3:
+	var ld: Vector3 = rig.body.line_dir
+	var up_t := (Vector3.UP - ld * ld.y).normalized()
+	var right_t := ld.cross(up_t).normalized()
+	if right_t.dot(_side) < 0.0:
+		right_t = -right_t
+	return (right_t * g.x + up_t * g.y).normalized()
 var _wsum := 0.0
 var _wn := 0.0
 var _wb := Vector3.ZERO
@@ -70,6 +82,19 @@ func start(p_main) -> void:
 		"spam":
 			for k in 17:
 				_events.append([6.0 + 0.6 * k, "puxao", 0.0])
+		"guide":
+			# Esquerda, direita, cima, baixo e uma curva contínua.
+			_events = [[6.0, "g_left", 1.0], [8.0, "g_off", 0.0], [9.0, "g_right", 1.0], [11.0, "g_off", 0.0],
+				[12.0, "g_up", 1.0], [13.5, "g_down", 0.7], [14.5, "g_off", 0.0], [15.0, "g_curve", 1.0], [19.0, "g_off", 0.0]]
+		"recolher":
+			for k in 8:
+				_events.append([6.0 + 0.45 * k, "recolhe", 0.8])
+		"guidepull":
+			# Guiando para a direita e puxando ao mesmo tempo (combinação).
+			_events = [[6.0, "g_right", 1.0]]
+			for k in 6:
+				_events.append([6.6 + 0.4 * k, "recolhe", 0.8])
+			_events.append([9.5, "g_off", 0.0])
 		"taps":
 			# Desbicando para descer: toques alternados a cada 0,6 s.
 			for k in 10:
@@ -105,6 +130,12 @@ func _physics_process(delta: float) -> void:
 		var ev: Array = _events.pop_front()
 		print("CTRL ── t=%.2f %s %s" % [_t, ev[1], str(ev[2])])
 		_apply(ev[1], float(ev[2]))
+	if _curving:
+		# Alvo girando devagar (90°/s): a pipa faz curvas/círculos.
+		var ang := (_t - 15.0) * PI * 0.5
+		_gdir = Vector2(cos(ang), sin(ang))
+	if _gdir != Vector2.ZERO and it.guide_amount > 0.0:
+		it.guide_dir = _window_dir(_gdir)
 	if absf(_t - _log_from) < delta * 0.5:
 		_ref = rig.body.x
 	if _t < _log_from or rig.body == null:
@@ -149,6 +180,21 @@ func _track(k: String, v: float, is_min: bool) -> void:
 
 func _apply(action: String, value: float) -> void:
 	match action:
+		"g_left", "g_right", "g_up", "g_down":
+			_gdir = {"g_left": Vector2(-1, 0), "g_right": Vector2(1, 0), "g_up": Vector2(0, 1), "g_down": Vector2(0, -1)}[action]
+			it.guide_dir = _window_dir(_gdir)
+			it.guide_amount = value
+			_curving = false
+		"g_curve":
+			_curving = true
+			it.guide_amount = value
+		"g_off":
+			_gdir = Vector2.ZERO
+			it.guide_dir = Vector3.ZERO
+			it.guide_amount = 0.0
+			_curving = false
+		"recolhe":
+			it.recolhe.append(value)
 		"tap":
 			it.taps.append(value)
 		"throw":

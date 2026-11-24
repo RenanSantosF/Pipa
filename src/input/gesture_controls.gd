@@ -1,21 +1,19 @@
 class_name GestureControls
 extends Control
-## Controles 100% por GESTOS (sem botões de jogo). Um dedo na área grande da tela:
+## Controles por GESTOS (sem botões de jogo), dois comandos independentes:
 ##
-##   TOQUE rápido              → DESBICO curto para o lado do toque (metade esquerda
-##                               = esquerda, direita = direita); funciona até perto
-##                               do chão. Toques seguidos = vai desbicando (e descendo)
-##   DOIS TOQUES rápidos       → JOGA a pipa para aquele lado (desbico + puxão)
-##   Arrastar para o LADO      → desbico contínuo: enquanto o dedo está fora do centro
-##                               o bico vai girando para o lado (mais longe = mais forte)
-##   Arrastar e SEGURAR p/ BAIXO → puxa a linha sem parar (mão sobre mão): a pipa sobe;
-##                               quanto mais desce o dedo, mais rápido
-##   Esfregar p/ cima e p/ baixo → cada descida rápida é um puxão a mais (ainda mais rápido)
-##   Arrastar para CIMA        → abrir a mão / dar linha
-##   CÍRCULOS                  → enrolar na lata
-##   Segundo dedo: TOQUE = puxão; ARRASTAR = olhar em volta
-##   Faixa estreita no topo → olhar em volta
-##   Canto inferior esquerdo   → andar (joystick)
+##   SEGURAR o dedo na tela    → GUIAR (desbico): a pipa vira o bico para o dedo, em
+##                               relação a ela na tela — dedo à esquerda dela = vai
+##                               para a esquerda, acima = sobe, abaixo = desce. Mais
+##                               longe = vira mais rápido. Arraste o dedo para fazer
+##                               curvas. Soltar = ela segue por inércia e endireita.
+##   ARRASTAR DE CIMA P/ BAIXO → PUXÃO: recolhe linha (fica no chão); a pipa sobe e
+##                               chega mais perto, sem girar. Esfregar = mais puxões;
+##                               segurar embaixo = continua puxando.
+##   Arrastar de baixo p/ CIMA → dar linha (abrir a mão)
+##   2º dedo (com o 1º guiando) → arrastar p/ baixo = puxão (combinação); p/ cima =
+##                               dar linha; toque = puxão curto
+##   Faixa estreita no topo → olhar em volta · Canto inferior esquerdo → andar
 ##   Ícones no canto           → nova pipa · linha · som · tamanho · envergadura · rabiola
 
 signal reset_pressed
@@ -41,6 +39,16 @@ const PULL_FULL := 220.0
 ## Esfregar: descida mínima (px) e velocidade (px/s) para contar um puxão.
 const SCRUB_PX := 38.0
 const SCRUB_SPEED := 320.0
+## Arrasto vertical que vira PUXÃO / DAR LINHA (e não guiar): distância e velocidade
+## mínimas, e tempo máximo desde o toque para decidir.
+const SWIPE_PX := 34.0
+const SWIPE_SPEED := 420.0
+const SWIPE_DECIDE := 0.22
+## Esfregar no puxão: descida mínima para mais um puxão.
+const SCRUB_PULL_PX := 55.0
+var _second_mode: String = ""
+var _second_index_last: int = -1
+var _second_top: float = 0.0
 const FLICK_SPEED := 650.0     # px/s para baixo = arranque (puxão forte)
 ## Desbico: deslocamento lateral (px) para intensidade máxima.
 const DESBICO_PX := 150.0
@@ -127,10 +135,9 @@ func _input(event: InputEvent) -> void:
 		elif sd.index == _look_index:
 			intent.look_delta += sd.relative * GameConfig.touch_sensitivity
 			intent.look_active = true
-		elif sd.index == _second_index and sd.position.distance_to(_second_origin) > CLASSIFY_PX:
-			_second_index = -1
-			if _look_index == -1:
-				_look_index = sd.index
+		elif sd.index == _second_index:
+			_second_index_last = sd.index
+			_second_drag(sd.position, sd.velocity)
 		elif sd.index == _kite_index:
 			_kite_drag(sd.position, sd.velocity)
 
@@ -151,25 +158,24 @@ func _down(index: int, pos: Vector2) -> void:
 		if _look_index == -1:
 			_look_index = index
 		return
-	# Segundo dedo com o primeiro na pipa: toque rápido = PUXÃO (desbica com um
-	# polegar e puxa com o outro); se arrastar, vira câmera.
+	# Segundo dedo com o primeiro na tela: puxão / dar linha (combinação).
 	if _kite_index != -1:
-		if _second_index == -1 and _look_index == -1:
+		if _second_index == -1:
 			_second_index = index
 			_second_origin = pos
 			_second_t0 = _time
+			_second_mode = ""
+			_second_top = pos.y
 		return
 	_kite_index = index
 	_origin = pos
 	_finger = pos
 	_t0 = _time
-	_mode = ""
-	_desb_side = 0.0
-	_samples.clear()
-	_sample_times.clear()
-	_turn_accum = 0.0
-	_last_dir = Vector2.ZERO
-	_reel_omega = 0.0
+	_scrub_top = pos.y
+	# Guia na hora (resposta imediata); se virar arrasto vertical rápido, cancela.
+	_mode = "guiar"
+	intent.guide_active = true
+	intent.guide_finger = pos
 
 
 func _up(index: int, pos: Vector2) -> void:
@@ -200,26 +206,18 @@ func _up(index: int, pos: Vector2) -> void:
 		intent.look_active = false
 	if index == _second_index:
 		_second_index = -1
-		if _time - _second_t0 < TAP_TIME and pos.distance_to(_second_origin) < CLASSIFY_PX:
-			intent.pull_taps += 1
+		if _second_mode == "" and _time - _second_t0 < TAP_TIME:
+			intent.recolhe.append(0.45)   # toque do 2º dedo = puxão curto
 			_fx.append([pos, 0.0, Color(1.0, 0.82, 0.35)])
-			_dirty = true
+		if _second_mode == "soltar":
+			intent.grip = 1.0
+		intent.pull_held = false
+		_second_mode = ""
+		_dirty = true
 	if index == _kite_index:
-		if _mode == "" and _time - _t0 < TAP_TIME:
-			# Toque rápido = desbico para o lado do toque; dois toques = jogar.
-			var side := -1.0 if pos.x < size.x * 0.5 else 1.0
-			if _time - _last_tap_t < DOUBLE_WINDOW:
-				intent.throws.append(side)
-				_last_tap_t = -10.0
-				_fx.append([pos, 0.0, Color(1.0, 0.55, 0.25)])
-			else:
-				intent.taps.append(side)
-				_last_tap_t = _time
-				_fx.append([pos, 0.0, Color(0.55, 0.85, 1.0)])
-		elif _mode == "desbico" and _desb_side != 0.0:
-			intent.release_desbico()
 		_kite_index = -1
 		_mode = ""
+		intent.guide_active = false
 		intent.stroke = 0.0
 		intent.grip = 1.0
 		intent.reel_rate = 0.0
@@ -229,104 +227,88 @@ func _up(index: int, pos: Vector2) -> void:
 		_dirty = true
 
 
+## Arrasto vertical rápido logo no começo = puxão (para baixo) ou dar linha (cima).
+func _swipe_kind(origin: Vector2, pos: Vector2, velocity: Vector2, t0: float) -> String:
+	var d := pos - origin
+	if _time - t0 > SWIPE_DECIDE:
+		return ""
+	if absf(d.y) < SWIPE_PX or absf(d.y) < absf(d.x) * 1.4:
+		return ""
+	var spd := maxf(absf(velocity.y), absf(d.y) / maxf(_time - t0, 0.016))
+	if spd < SWIPE_SPEED:
+		return ""
+	return "puxar" if d.y > 0.0 else "soltar"
+
+
 func _kite_drag(pos: Vector2, velocity: Vector2) -> void:
 	_finger = pos
-	_samples.append(pos)
-	_sample_times.append(_time)
-	while _samples.size() > 24 or (_sample_times.size() > 0 and _time - _sample_times[0] > 1.0):
-		_samples.remove_at(0)
-		_sample_times.remove_at(0)
-	var d := pos - _origin
-	var move := pos - (_samples[_samples.size() - 2] if _samples.size() > 1 else _origin)
-	if move.length() > 2.0:
-		var dir := move.normalized()
-		if _last_dir != Vector2.ZERO:
-			_turn_accum += _last_dir.angle_to(dir)
-		_last_dir = dir
 	_dirty = true
-	# Círculos viram "enrolar" de qualquer modo.
-	if _mode != "enrolar" and absf(_turn_accum) > TAU * 0.8 and _path_extent() > 60.0:
-		if _mode == "desbico" and _desb_side != 0.0:
-			intent.release_desbico()
-		_mode = "enrolar"
-		_reel_angle = _angle_around_center(pos)
-	if _mode == "enrolar":
-		var ang := _angle_around_center(pos)
-		var da := wrapf(ang - _reel_angle, -PI, PI)
-		_reel_angle = ang
-		_reel_omega = lerpf(_reel_omega, absf(da) / maxf(get_process_delta_time(), 0.001), 0.3)
-		return
-	if _mode == "":
-		if d.length() < CLASSIFY_PX:
+	if _mode == "guiar":
+		var k := _swipe_kind(_origin, pos, velocity, _t0)
+		if k == "":
+			intent.guide_finger = pos
 			return
-		if absf(d.x) > absf(d.y) * 0.9:
-			_mode = "desbico"
-		elif d.y > 0.0:
-			_mode = "puxar"
-			_scrub_top = pos.y
-			if velocity.y > FLICK_SPEED or d.y / maxf(_time - _t0, 0.016) > FLICK_SPEED:
-				intent.pull_taps += 1   # arranque para baixo: puxão na hora
-				_fx.append([pos, 0.0, Color(1.0, 0.82, 0.35)])
+		_mode = k
+		intent.guide_active = false
+		_scrub_top = pos.y
+		if k == "puxar":
+			_pull_from_swipe(pos)
+		return
+	_vertical(pos, _origin, true)
+
+
+## Puxar / dar linha com o dedo `pos` (comum ao 1º e ao 2º dedo).
+func _vertical(pos: Vector2, origin: Vector2, first: bool) -> void:
+	var mode := _mode if first else _second_mode
+	var d := pos - origin
+	if mode == "puxar":
+		# Esfregar: cada nova descida grande = mais um puxão.
+		var top := _scrub_top if first else _second_top
+		if pos.y < top:
+			top = pos.y
+		elif pos.y - top > SCRUB_PULL_PX:
+			intent.recolhe.append(clampf((pos.y - top) / 200.0, 0.3, 1.0))
+			_fx.append([pos, 0.0, Color(1.0, 0.82, 0.35)])
+			top = pos.y
+		if first:
+			_scrub_top = top
 		else:
-			_mode = "soltar"
-	match _mode:
-		"desbico":
-			# Lado e força pela distância do centro; volta ao centro = retoma.
-			var off := d.x
-			var side := signf(off) if absf(off) > DESBICO_DEAD else 0.0
-			if side != _desb_side:
-				if _desb_side != 0.0:
-					intent.release_desbico()
-				if side != 0.0:
-					intent.press_desbico(side)
-				_desb_side = side
-			intent.desbico_intensity = clampf((absf(off) - DESBICO_DEAD) / (DESBICO_PX - DESBICO_DEAD), 0.25, 1.0)
-		"puxar":
-			# Segurando abaixo da origem: puxada contínua (mão sobre mão).
-			intent.stroke = 0.0
-			intent.grip = 1.0
-			intent.pull_held = d.y > PULL_DEAD
-			intent.pull_rate = clampf((d.y - PULL_DEAD) / (PULL_FULL - PULL_DEAD), 0.0, 1.0)
-			# Esfregando: cada descida rápida desde o último ponto alto = mais um puxão.
-			if pos.y < _scrub_top:
-				_scrub_top = pos.y
-			elif pos.y - _scrub_top > SCRUB_PX and velocity.y > SCRUB_SPEED:
-				intent.pull_taps += 1
-				_scrub_top = pos.y
-				_fx.append([pos, 0.0, Color(1.0, 0.82, 0.35)])
-		"soltar":
-			intent.stroke = 0.0
-			intent.grip = 1.0 - clampf(-d.y / RELEASE_PX, 0.0, 1.0)
+			_second_top = top
+		# Segurando bem embaixo: continua puxando (mão sobre mão).
+		intent.pull_held = d.y > PULL_FULL
+		intent.pull_rate = clampf((d.y - PULL_FULL) / PULL_FULL, 0.0, 1.0)
+	elif mode == "soltar":
+		intent.grip = 1.0 - clampf(-d.y / RELEASE_PX, 0.0, 1.0)
 
 
-func _path_extent() -> float:
-	if _samples.size() < 4:
-		return 0.0
-	var mn := _samples[0]
-	var mx := _samples[0]
-	for p in _samples:
-		mn = Vector2(minf(mn.x, p.x), minf(mn.y, p.y))
-		mx = Vector2(maxf(mx.x, p.x), maxf(mx.y, p.y))
-	return (mx - mn).length()
+func _pull_from_swipe(pos: Vector2) -> void:
+	intent.recolhe.append(clampf((pos.y - _origin.y) / 200.0, 0.4, 1.0))
+	_fx.append([pos, 0.0, Color(1.0, 0.82, 0.35)])
 
 
-func _angle_around_center(pos: Vector2) -> float:
-	var c := Vector2.ZERO
-	for p in _samples:
-		c += p
-	c /= maxf(float(_samples.size()), 1.0)
-	return (pos - c).angle()
+func _second_drag(pos: Vector2, velocity: Vector2) -> void:
+	if _second_mode == "":
+		var k := _swipe_kind(_second_origin, pos, velocity, _second_t0)
+		if k == "":
+			if _time - _second_t0 > SWIPE_DECIDE and pos.distance_to(_second_origin) > CLASSIFY_PX * 2.0:
+				# Arrasto lento do 2º dedo = olhar em volta.
+				_second_index = -1
+				if _look_index == -1:
+					_look_index = _second_index_last
+			return
+		_second_mode = k
+		_second_top = _second_origin.y
+		if k == "puxar":
+			intent.recolhe.append(clampf((pos.y - _second_origin.y) / 200.0, 0.4, 1.0))
+			_fx.append([pos, 0.0, Color(1.0, 0.82, 0.35)])
+			_second_top = pos.y
+	_vertical(pos, _second_origin, false)
 
 
 func _process(delta: float) -> void:
 	_time += delta
 	if intent == null:
 		return
-	if _kite_index != -1 and _mode == "enrolar":
-		_reel_omega = lerpf(_reel_omega, 0.0, 1.0 - exp(-3.0 * delta))
-		intent.reel_rate = clampf(_reel_omega * SPOOL_RADIUS * REEL_GAIN, 0.0, REEL_MAX)
-		intent.stroke = 0.0
-		intent.grip = 1.0
 	intent.gesture_mode = _mode if _kite_index != -1 else ""
 	for fx in _fx:
 		fx[1] += delta
@@ -345,7 +327,7 @@ func get_move() -> Vector2:
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_APPLICATION_PAUSED:
-		for idx in [_joy_index, _look_index, _kite_index]:
+		for idx in [_joy_index, _look_index, _kite_index, _second_index]:
 			if idx != -1:
 				_up(idx, Vector2(-999, -999))
 
@@ -371,20 +353,18 @@ func _draw() -> void:
 				Icons.bow(self, c, ICON_R * 0.5, bow_level, Icons.INK, 1.8)
 			"tail":
 				Icons.tail(self, c, ICON_R * 0.5, tail_level, Icons.INK)
-	# Dicas de gesto nos primeiros segundos (só desenhos): toque nas duas metades =
-	# desbico para aquele lado, arrastar para o lado = desbico contínuo, para baixo =
-	# puxar, para cima = dar linha, círculo = enrolar.
+	# Dicas nos primeiros segundos (só desenhos): segurar = guiar (setas para os 4
+	# lados em volta do dedo), arrastar de cima para baixo = puxar, para cima = linha.
 	if _time < 9.0:
 		var a := clampf(1.0 - (_time - 6.0) / 3.0, 0.0, 1.0) * 0.8
 		var col := Color(1, 1, 1, a)
-		var base := Vector2(size.x * 0.55, size.y * 0.58)
-		Icons.tap(self, Vector2(size.x * 0.25, size.y * 0.5), 22.0, Color(0.55, 0.85, 1.0, a))
-		Icons.tap(self, Vector2(size.x * 0.75, size.y * 0.5), 22.0, Color(0.55, 0.85, 1.0, a))
-		Icons.arrow(self, base + Vector2(-40, 0), base + Vector2(-120, 0), col)
-		Icons.arrow(self, base + Vector2(40, 0), base + Vector2(120, 0), col)
-		Icons.arrow(self, base + Vector2(0, 40), base + Vector2(0, 110), Color(1.0, 0.82, 0.35, a))
-		Icons.arrow(self, base + Vector2(0, -40), base + Vector2(0, -105), Color(0.55, 0.85, 1.0, a))
-		draw_arc(base + Vector2(190, -10), 22.0, 0.0, TAU * 0.8, 20, Color(0.6, 1.0, 0.55, a), 2.5, true)
+		var g := Vector2(size.x * 0.32, size.y * 0.55)
+		Icons.tap(self, g, 24.0, Color(0.55, 0.85, 1.0, a))
+		for dv in [Vector2(1, 0), Vector2(-1, 0), Vector2(0, 1), Vector2(0, -1)]:
+			Icons.arrow(self, g + dv * 38.0, g + dv * 90.0, col)
+		var pbase := Vector2(size.x * 0.7, size.y * 0.35)
+		Icons.arrow(self, pbase, pbase + Vector2(0, 150), Color(1.0, 0.82, 0.35, a), 4.0)
+		Icons.arrow(self, pbase + Vector2(70, 150), pbase + Vector2(70, 40), Color(0.55, 0.85, 1.0, a))
 		draw_line(Vector2(0, size.y * LOOK_ZONE), Vector2(size.x * 0.6, size.y * LOOK_ZONE), Color(1, 1, 1, a * 0.35), 1.5, true)
 	for fx in _fx:
 		var t: float = fx[1] / 0.35
@@ -394,7 +374,7 @@ func _draw() -> void:
 		return
 	var colm := Color(1, 1, 1, 0.5)
 	match _mode:
-		"desbico":
+		"guiar":
 			colm = Color(1, 1, 1, 0.75)
 		"puxar":
 			colm = Color(1.0, 0.82, 0.35, 0.7)

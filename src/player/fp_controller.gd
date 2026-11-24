@@ -52,6 +52,11 @@ static func desbico_offset(t: float) -> float:
 	return 0.0
 
 
+## Guiar: zona morta em volta da pipa na tela e distância para força máxima (px).
+const GUIDE_DEAD_PX := 28.0
+const GUIDE_FULL_PX := 240.0
+
+
 func _ready() -> void:
 	camera.far = GameConfig.camera_far()
 	GameConfig.quality_changed.connect(func(_q: int) -> void: camera.far = GameConfig.camera_far())
@@ -170,6 +175,29 @@ func _drive_rig(delta: float) -> void:
 	for _i in intent.pull_taps:
 		_hand.puxao()
 	intent.pull_taps = 0
+	# GUIAR: o dedo na tela em relação à pipa na tela vira o bico (esq/dir/cima/baixo).
+	if intent.guide_active and camera and rig.body:
+		var ks := camera.unproject_position(rig.body.x)
+		var off := intent.guide_finger - ks
+		var dist := off.length()
+		if dist > GUIDE_DEAD_PX and not camera.is_position_behind(rig.body.x):
+			# Eixos da janela de vento em volta da pipa: "cima" = vertical projetada no
+			# plano da esfera de voo, "lado" = horizontal nesse plano (lado da câmera).
+			var ld: Vector3 = rig.body.line_dir
+			var up_t := Vector3.UP - ld * ld.y
+			up_t = up_t.normalized() if up_t.length() > 0.05 else camera.global_basis.y
+			var right_t := ld.cross(up_t).normalized()
+			if right_t.dot(camera.global_basis.x) < 0.0:
+				right_t = -right_t
+			var wdir := (right_t * off.x - up_t * off.y).normalized()
+			_hand.guide(wdir, clampf((dist - GUIDE_DEAD_PX) / GUIDE_FULL_PX, 0.3, 1.0))
+		else:
+			_hand.guide(Vector3.ZERO, 0.0)
+	else:
+		_hand.guide(intent.guide_dir, intent.guide_amount)
+	for a in intent.recolhe:
+		_hand.recolher(a)
+	intent.recolhe.clear()
 	_hand.pull_rate = intent.pull_rate
 	_hand.set_pull_held(intent.pull_held)
 	for side in intent.throws:
