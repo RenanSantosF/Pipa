@@ -110,11 +110,13 @@ func _ready() -> void:
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--seed="):
 			seed(int(a.substr(7)))
+		elif a.begins_with("--quality="):
+			GameConfig.apply_quality(int(a.substr(10)))
 	var street: StreetBuilder = $World/StreetBuilder
 	player.global_position = street.spawn_point
 	var z0 := street.spawn_point.z
 	# Vizinhos em leque contra o vento, dos dois lados, em cima das lajes quando houver.
-	var spots := _bot_spots(street, street.spawn_point, 4)
+	var spots := _bot_spots(street, street.spawn_point, GameConfig.bot_count())
 	bot.global_position = spots[0]
 	input_router.set_gesture_controls(gestures)
 	input_router.line_cycle_requested.connect(_cycle_line)
@@ -162,6 +164,9 @@ func _ready() -> void:
 		return
 	if args.has("--autotest"):
 		_attach("res://src/main/autotest.gd")
+		return
+	if args.has("--gestureprobe"):
+		_attach("res://src/main/gesture_probe.gd")
 		return
 	reset_kite()
 	if args.has("--screenshots"):

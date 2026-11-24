@@ -72,21 +72,42 @@ func _init(p: KiteProfile) -> void:
 	# Losango: a maior parte da massa está nas varetas (espinha + 2 travessas).
 	inertia = Vector3(mass * h * h / 18.0 + 0.00008, mass * wd * wd / 16.0 + 0.00008, mass * (h * h / 18.0 + wd * wd / 16.0) + 0.0001)
 	inv_inertia = Vector3(1.0 / inertia.x, 1.0 / inertia.y, 1.0 / inertia.z)
+	# Pipa brasileira (foto de referência): a vareta passa ACIMA do papel (cabeça),
+	# a travessa envergada é a borda de cima do papel, os lados descem quase retos
+	# até os "ombros" e fecham em V na ponta de baixo. Da cabeça saem linhas até as
+	# pontas da travessa (sem papel no triângulo de cima).
+	#   cantos: 0 cabeça · 1 travessa dir · 2 ombro dir · 3 ponta · 4 ombro esq · 5 travessa esq
 	var yc := -p.cross_at * h
-	var raw := [Vector2(0, 0), Vector2(wd * 0.5, yc), Vector2(0, -h), Vector2(-wd * 0.5, yc)]
-	var cen := _poly_centroid(raw)
+	var ys := -p.lower_at * h
+	var ws := wd * 0.5 * p.shoulder
+	var raw := [Vector2(0, 0), Vector2(wd * 0.5, yc), Vector2(ws, ys), Vector2(0, -h), Vector2(-ws, ys), Vector2(-wd * 0.5, yc)]
+	# Centro de massa: papel (pentágono) + a cabeça da vareta acima dele.
+	var paper := [raw[5], raw[1], raw[2], raw[3], raw[4]]
+	var cen: Vector2 = _poly_centroid(paper) * 0.88 + Vector2(0, yc * 0.5) * 0.12
 	corners = PackedVector3Array()
 	for v2 in raw:
 		corners.append(Vector3(v2.x - cen.x, v2.y - cen.y, 0.0))
+	var top_paper_y := corners[1].y
 	tow_local = Vector3(0, corners[0].y - p.tow_fraction * h, p.bridle_length)
-	tail_local = corners[2]
+	tail_local = corners[3]
 	dihedral = p.dihedral()
 	for side in [-1.0, 1.0]:
-		var pts := PackedVector3Array([corners[0], corners[3] if side < 0.0 else corners[1], corners[2]])
-		_half_pts.append(pts)
-		var area := 0.5 * (pts[1] - pts[0]).cross(pts[2] - pts[0]).length()
+		var top_mid := Vector3(0, top_paper_y, 0)
+		var pts := PackedVector3Array([top_mid, corners[5], corners[4], corners[3]]) if side < 0.0 \
+			else PackedVector3Array([top_mid, corners[1], corners[2], corners[3]])
+		# Contorno da meia-vela para o centro de pressão: inclui a cabeça (vareta +
+		# linhas da cabeça às pontas da travessa formam a borda de ataque da armação).
+		var outline := pts.duplicate()
+		outline.append(corners[0])
+		_half_pts.append(outline)
+		var area := 0.0
+		var c := Vector3.ZERO
+		for k in range(1, pts.size() - 1):
+			var ta := 0.5 * (pts[k] - pts[0]).cross(pts[k + 1] - pts[0]).length()
+			area += ta
+			c += (pts[0] + pts[k] + pts[k + 1]) / 3.0 * ta
 		_half_area.append(area)
-		_half_center_flat.append((pts[0] + pts[1] + pts[2]) / 3.0)
+		_half_center_flat.append(c / maxf(area, 1e-6))
 
 
 static func _poly_centroid(pts: Array) -> Vector2:

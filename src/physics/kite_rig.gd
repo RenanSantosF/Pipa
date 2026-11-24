@@ -52,6 +52,7 @@ var bridle_offset := Vector2.ZERO
 var sail_asym: float = 0.0
 ## Viés da vareta relaxada na folga (−1..1), escrito pela mão no desbico.
 var spin_bias: float = 0.0
+var _t_steady: float = 5.0
 ## A mão voltando da braçada joga a linha no chão? (falso no desbico: a linha escorrega)
 var shorten_on_return: bool = true
 ## Pipa ainda segura na mão (antes do primeiro desbico).
@@ -122,6 +123,9 @@ func has_rope() -> bool:
 
 ## Coloca a pipa no ar, a favor de `direction`, com a linha quase esticada.
 func launch(hand: Vector3, length: float, elevation_deg: float, direction: Vector3) -> void:
+	if not is_local_player:
+		# Vizinhos: rabiola com menos nós (mesma física, menos custo).
+		profile.tail_nodes = mini(profile.tail_nodes, [6, 8, 10][GameConfig.quality])
 	body = KiteRigidBody.new(profile)
 	var el := deg_to_rad(elevation_deg)
 	var dir_h := Vector3(direction.x, 0.0, direction.z).normalized()
@@ -130,6 +134,7 @@ func launch(hand: Vector3, length: float, elevation_deg: float, direction: Vecto
 	var tow := hand + d * (length * 0.995)
 	body.x = tow - body.q * body.tow_local
 	rope = Rope.new(line_type)
+	rope.max_nodes = GameConfig.rope_max_nodes(is_local_player)
 	rope.setup(hand, body, body.tow_local, length)
 	tail = TailChain.new(body, profile)
 	spool = maxf(spool_capacity - length, 0.0)
@@ -172,9 +177,9 @@ func try_snag(obstacles: WorldObstacles, dt: float) -> void:
 	var c := body.corners
 	var h := profile.height
 	var anchors := PackedVector3Array([
-		body.world_point(c[0] + Vector3(0, -0.07 * h, 0)),
-		body.world_point(Vector3(c[3].x * 0.75, c[0].y - profile.lower_at * h, 0)),
-		body.world_point(Vector3(c[1].x * 0.75, c[0].y - profile.lower_at * h, 0))])
+		body.world_point(Vector3(0, c[1].y, 0)),
+		body.world_point(c[4]),
+		body.world_point(c[2])])
 	var hit := obstacles.kite_contact(body, knot, anchors, dt)
 	if obstacles.kite_in_canopy and not _in_leaves:
 		_impact(body.v.length(), "folhas")
@@ -279,10 +284,15 @@ func pre_frame(dt: float) -> void:
 		body.sail_asym = 0.0 if loose else sail_asym
 		# Relaxação da vareta pela tensão REAL no cabresto (linha esticada = vareta
 		# carregada e simétrica; frouxa = relaxa).
+		# A vareta está "carregada" com a tensão normal desta pipa nesta linha (média
+		# lenta fora do desbico); relaxa quando a tensão cai bem abaixo disso. Assim o
+		# bico gira igual com linha curta ou comprida (linha longa segura mais tensão).
 		var m := profile.mass + profile.tail_mass
-		var t_full := 75.0 * m       # vareta toda carregada (pipa M: ~5 N)
-		var t_slack := 15.0 * m      # vareta solta (~1 N)
 		var t_end := rope.tension_end if rope != null and rope.end_body == body else 0.0
+		if spin_bias == 0.0:
+			_t_steady = lerpf(_t_steady, t_end, 1.0 - exp(-dt / 3.0))
+		var t_full := maxf(75.0 * m, 0.75 * _t_steady)
+		var t_slack := 0.25 * t_full
 		body.relax = clampf((t_full - t_end) / (t_full - t_slack), 0.0, 1.0)
 		body.spin_bias = 0.0 if loose else spin_bias
 		if rope != null and rope.end_body == body:

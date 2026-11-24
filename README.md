@@ -18,34 +18,34 @@ Cada push gera um APK automaticamente (GitHub Actions):
 
 Também ficam disponíveis: o *artifact* `pipa-debug-apk` na execução do workflow e a branch `apk-builds`.
 
-## Controles (gestos)
+## Controles (só gestos — sem botões)
+
+Quase a tela inteira é da pipa; um dedo controla tudo:
 
 | Gesto | O que faz |
 |---|---|
-| **Segurar na metade esquerda** | **desbico para a esquerda**: dá linha, o bico gira e a pipa mergulha na diagonal; **soltar** = retoma a linha e ela se recupera |
-| **Segurar na metade direita** | **desbico para a direita** |
-| **Dois toques rápidos** | **desbicada dupla** (lado do 1º toque → oposto) |
-| **Botão PUXAR** (canto inferior direito) | **puxão** no instante do toque: a pipa dispara para onde o bico aponta; toques seguidos = puxões seguidos (mão sobre mão); segurar = em série |
-| Desbica e puxa | a jogada básica: desbica até o bico apontar para onde você quer e puxa |
-| Arrastar **para cima** (lado direito) | abrir a mão / **dar linha** |
-| Arrastar **para baixo** (lado direito) | braçada longa (a linha puxada vai para o chão) |
-| **Círculos** (lado direito) | enrolar na lata |
-| Arrastar na faixa de cima | olhar em volta (a câmera volta para a pipa como mola) |
-| Joystick (canto inferior esquerdo) | andar |
+| **Arrastar para o lado** (esquerda/direita) | **desbico** para aquele lado: enquanto o dedo está fora do centro a mão dá linha e o **bico vai girando** para o lado — quanto mais longe o dedo, mais rápido gira. Voltar ao centro ou soltar = retoma a linha e ela se firma |
+| **Toque rápido** | **puxão**: a pipa dispara para onde o bico aponta; toques seguidos = puxões seguidos (mão sobre mão) |
+| Desbica e toca | a jogada básica: desbica até o bico apontar para onde você quer e toca |
+| **Arranque para baixo** | puxão forte; continuar descendo = braçada (a linha puxada vai para o chão) |
+| Arrastar **para cima** | abrir a mão / **dar linha** |
+| **Círculos** | enrolar na lata |
+| Faixa estreita no topo, ou **dois dedos** | olhar em volta (a câmera volta para a pipa como mola) |
+| Canto inferior esquerdo | andar (joystick) |
 | Ícones no canto | nova pipa · trocar linha · som · **tamanho P/M/G** · **envergadura** |
 
-A pipa **começa na mão**: vá dando puxões (perto do chão eles saem de lado, em zigue-zague) e, com ela subindo, dê linha.
+A pipa **começa na mão**: vá dando toques (puxões — perto do chão eles saem de lado, em zigue-zague) e, com ela subindo, arraste para cima para dar linha.
 **Envergadura** (quanto a travessa é arqueada) muda tudo: muita envergadura = pipa estável, desbico **fino e curto**; pouca = desbico **longo**, pipa arisca.
 
 **Encostar não é enroscar**: a linha que encosta em fio, telhado, poste ou galho **desliza** com atrito (barrida). Ela só **enrosca** quando dá volta, cai por cima de um galho ou aperta forte contra a casca. Solta quando endireita, ou com tranco até o galho quebrar. No fio ela nunca trava: fica pendurada e escorrega ao longo dele. A pipa só prende se o fio/galho entrar no cabresto (ou se cair fundo na copa).
 
 PC (testes): segurar clique esquerdo/← = desbico esquerda · segurar clique direito/→ = desbico direita · F = puxão · Espaço = dupla · Tab = olhar com o mouse · E = dar linha · G = braçada lenta · Q = enrolar · R = nova pipa · T = trocar linha · Y = tamanho · U = envergadura.
 
-Detalhes do desbico e do puxão (medições antes/depois): `docs/DESBICO_PUXAO.md`.
+Detalhes do desbico e do puxão: `docs/DESBICO_PUXAO.md`. O que mudou na 0.7 (pipa da foto, gestos, linha fina, desempenho): `docs/V07.md`.
 
 ## Como é a física (resumo)
 
-- A pipa é um **corpo rígido** com aerodinâmica de asa de baixo alongamento (sustentação e arrasto explícitos, estol tardio); cada meia-vela tem o diedro da envergadura. O **desbico** não gira a pipa: a mão afrouxa, carrega uma perna do cabresto e dá o tranco — a tensão da linha e a sustentação deslocada fazem a pipa disparar para o lado, e a rabiola (pêndulo) traz o bico de volta. Detalhes em `docs/REVISAO_V5.md`.
+- A pipa é a **pipa brasileira** de duas varetas: vareta passando acima do papel (cabeça), travessa envergada na borda de cima, papel em pentágono e linhas da cabeça às pontas da travessa. É um **corpo rígido** com aerodinâmica de asa de baixo alongamento (sustentação e arrasto explícitos, estol tardio); cada meia-vela tem o diedro da envergadura. No **desbico** a mão dá linha, a vareta descarregada relaxa torta e o vento gira o bico; a tensão que sobra leva a pipa para onde o bico aponta.
 - A **linha** é simulada nó a nó: faz **barriga** com o vento, estica, afrouxa, ondula com a braçada.
 - **Combate**: quando as linhas cruzam, o cerol desgasta a outra linha. Quem **dá linha** ou **puxa rápido** espalha o próprio desgaste; quem fica parado é cortado. Chilena > cerol fino > cerol > rapinha >> pura. Uma linha que chega na outra pipa **laça no cabresto**.
 - Sons em 3D: papel da pipa, linha "cantando" (tom sobe com a tensão), chiado do cerol relando, estalo do corte, catraca da lata.

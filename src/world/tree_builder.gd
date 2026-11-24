@@ -124,7 +124,10 @@ func _cluster(fb: MeshBatch, center: Vector3, r: float, tint: Color, base: Vecto
 	r = maxf(r, 0.6)
 	var height_frac := clampf((center.y - base.y - fork_h) / maxf(h - fork_h, 0.5), 0.0, 1.0)
 	var col := tint.darkened(0.28 * (1.0 - height_frac))
-	var count := clampi(int(r * r * 8.0), 6, 34)
+	# Menos cartões (maiores) no celular: mesma silhueta, bem menos sobreposição.
+	var dens := GameConfig.foliage_density()
+	var count := clampi(int(r * r * 8.0 * dens), 4, 34)
+	var grow := 1.0 / sqrt(maxf(dens, 0.2)) * 0.85 + 0.15
 	for _i in count:
 		var d := Vector3(_rng.randf_range(-1, 1), _rng.randf_range(-0.55, 1.0), _rng.randf_range(-1, 1)).normalized()
 		var depth := _rng.randf_range(0.3, 1.0)
@@ -138,5 +141,5 @@ func _cluster(fb: MeshBatch, center: Vector3, r: float, tint: Color, base: Vecto
 		# Cartões do miolo mais escuros (luz que não chega lá dentro).
 		var shade := col.darkened(0.22 * (1.0 - depth)).lightened(_rng.randf_range(0.0, 0.1))
 		var sway := Vector2(0.12 + 0.25 * height_frac * depth, phase)
-		fb.add_card(pos, right, upv, r * _rng.randf_range(0.75, 1.1), out, shade, sway)
+		fb.add_card(pos, right, upv, r * _rng.randf_range(0.75, 1.1) * grow, out, shade, sway)
 	_sb.obstacles.add_canopy(center, r * 0.85)

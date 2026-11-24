@@ -49,21 +49,26 @@ func attach_point() -> Vector3:
 	return body.world_point(body.tail_local)
 
 
+## Vento no começo do tick (o arrasto em si é resolvido a cada subpasso, abaixo).
+var _wind := Vector3.ZERO
+
+
 func compute_forces() -> void:
-	var wind := Wind.sample(attach_point())
-	for i in pos.size():
-		var vrel := wind - vel[i]
-		var f := vrel * (0.5 * RHO * vrel.length() * profile.tail_cd * node_area)
-		var a := GRAVITY + f * inv_m
-		var al := a.length()
-		acc[i] = a / al * 400.0 if al > 400.0 else a
+	_wind = Wind.sample(attach_point())
 
 
+## Arrasto SEMI-IMPLÍCITO a cada subpasso: v' = (v + g·h + k·h·vento)/(1 + k·h),
+## k = ½ρ·Cd·A·|v_rel|/m. Estável e igual com física a 30 ou 60 Hz (o arrasto
+## explícito por tick fazia a rabiola puxar diferente conforme a taxa de física).
 func predict(h: float) -> void:
+	var c := 0.5 * RHO * profile.tail_cd * node_area * inv_m
 	for i in pos.size():
 		prev[i] = pos[i]
-		vel[i] += acc[i] * h
-		pos[i] += vel[i] * h
+		var v := vel[i]
+		var k := c * (_wind - v).length() * h
+		v = (v + GRAVITY * h + _wind * k) / (1.0 + k)
+		vel[i] = v
+		pos[i] += v * h
 
 
 func solve(_h: float) -> void:

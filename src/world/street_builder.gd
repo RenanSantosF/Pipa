@@ -773,6 +773,9 @@ func _commit() -> void:
 		mi.mesh = mesh
 		mi.material_override = foliage_materials[species.find(key.get_slice("|", 0))]
 		mi.extra_cull_margin = 1.0
+		if GameConfig.quality < GameConfig.Quality.HIGH:
+			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		mi.visibility_range_end = [110.0, 160.0, 0.0][GameConfig.quality]
 		add_child(mi)
 	if _wire_points.size() > 0:
 		var im := ImmediateMesh.new()

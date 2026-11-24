@@ -18,6 +18,8 @@ var reel_rate: float = 0.0
 var desbico_press: Array[float] = []
 ## … e quantas vezes soltou (retoma a linha).
 var desbico_release: int = 0
+## Força do desbico pedida pelo gesto (0..1; teclado = 1).
+var desbico_intensity: float = 1.0
 ## Desbicos de toque completo (teclado/compatibilidade): lado de cada um.
 var taps: Array[float] = []
 ## PUXÃO: toques no botão desde a última leitura e se o botão está segurado.

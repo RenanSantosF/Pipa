@@ -18,6 +18,8 @@ const CD_NORMAL := 1.1
 const CF_TANGENT := 0.02
 
 var type: LineType
+## Varreduras do solver por subpasso (alternando o sentido).
+var iterations: int = 1
 var pos: PackedVector3Array = PackedVector3Array()
 var prev: PackedVector3Array = PackedVector3Array()
 var vel: PackedVector3Array = PackedVector3Array()
@@ -51,6 +53,12 @@ var end_local := Vector3.ZERO
 ## Nó 0 preso à mão?
 var hand_fixed: bool = true
 var hand_position := Vector3.ZERO
+var _hand_from := Vector3.ZERO
+## Restrição de alcance mão→pipa (comprimento total da linha) e seu multiplicador.
+var _rest_total := 0.0
+var _lam_tether := 0.0
+var _hand_k := 0
+var _hand_subs := 1
 
 var segment_target: float = 3.0
 var max_nodes: int = 40
@@ -66,6 +74,7 @@ var _substeps_done: int = 0
 
 func _init(line_type: LineType) -> void:
 	type = line_type
+	iterations = GameConfig.rope_iterations()
 
 
 func node_count() -> int:
@@ -156,6 +165,15 @@ func clear_contact(i: int) -> void:
 func snapshot_frame() -> void:
 	frame_pos = pos.duplicate()
 	frame_end = end_point()
+	# A mão anda suave DENTRO do tick (subpasso a subpasso), não aos saltos: com a
+	# física a 30 Hz um salto de 20 cm num subpasso só era absorvido pelos nós leves
+	# da linha e o tranco não chegava na pipa.
+	_hand_from = pos[0] if pos.size() > 0 else hand_position
+	_hand_k = 0
+	_hand_subs = GameConfig.physics_substeps()
+	_rest_total = 0.0
+	for r in rest:
+		_rest_total += r
 
 
 ## Insere um nó no índice i (entre i-1 e o antigo i). Mantém todos os arrays.
@@ -335,11 +353,14 @@ func predict(h: float) -> void:
 			vel[i] += acc[i] * h
 			pos[i] += vel[i] * h
 	if hand_fixed and n > 0:
-		pos[0] = hand_position
+		_hand_k += 1
+		var f := clampf(float(_hand_k) / float(maxi(_hand_subs, 1)), 0.0, 1.0)
+		pos[0] = _hand_from.lerp(hand_position, f)
 	for i in n:
 		if pinned[i] == 1:
 			pos[i] = pin_pos[i]
 	lam.fill(0.0)
+	_lam_tether = 0.0
 
 
 func solve(h: float) -> void:
@@ -347,35 +368,33 @@ func solve(h: float) -> void:
 	var seg_n := segment_count()
 	var inv_h2 := 1.0 / (h * h)
 	var ea := type.axial_stiffness
-	for i in seg_n:
-		var alpha := rest[i] / ea * inv_h2
-		if i + 1 < n:
-			var d := pos[i + 1] - pos[i]
-			var l := d.length()
-			var c := l - rest[i]
-			if c <= 0.0:
-				continue
-			var wsum := inv_mass[i] + inv_mass[i + 1]
-			if wsum <= 0.0:
-				continue
-			var nrm := d / l
-			var dl := (-c - alpha * lam[i]) / (wsum + alpha)
-			lam[i] += dl
-			pos[i] -= nrm * (dl * inv_mass[i])
-			pos[i + 1] += nrm * (dl * inv_mass[i + 1])
+	# Varredura mão→pipa e, com física mais lenta (30 Hz), também pipa→mão: os nós
+	# da linha são muito mais leves que a pipa, e uma varredura só deixa o tranco da
+	# mão "morrer" na linha (a linha estica em vez de puxar a pipa).
+	for it in iterations:
+		if it % 2 == 0:
+			for i in seg_n:
+				_solve_segment(i, n, inv_h2, ea)
 		else:
-			var r := end_body.q * end_local
-			var a := end_body.x + r
-			var d := a - pos[i]
-			var l := d.length()
-			var c := l - rest[i]
-			if c <= 0.0 or l < 0.00001:
-				continue
+			for i in range(seg_n - 1, -1, -1):
+				_solve_segment(i, n, inv_h2, ea)
+	# Alcance (long-range attachment): a pipa nunca fica mais longe da mão do que o
+	# comprimento da linha (+ elasticidade). Os nós da linha são ~80× mais leves que
+	# a pipa e o solver em cadeia converge devagar: sem isto a linha "esticava" 20–30%
+	# num tranco e o puxão não chegava na pipa. A distância reta é sempre ≤ ao
+	# caminho da linha, então isto só age com a linha esticada (nunca atrapalha
+	# linha com barriga ou apoiada em fio/galho).
+	if hand_fixed and end_body != null and n > 0 and _rest_total > 0.0:
+		var r := end_body.q * end_local
+		var d := end_body.x + r - pos[0]
+		var l := d.length()
+		var c := l - _rest_total
+		if c > 0.0 and l > 0.00001:
 			var nrm := d / l
-			var wsum := inv_mass[i] + end_body.inverse_mass_at(r, nrm)
-			var dl := (-c - alpha * lam[i]) / (wsum + alpha)
-			lam[i] += dl
-			pos[i] -= nrm * (dl * inv_mass[i])
+			var w := end_body.inverse_mass_at(r, nrm)
+			var alpha_t := _rest_total / ea * inv_h2
+			var dl := (-c - alpha_t * _lam_tether) / (w + alpha_t)
+			_lam_tether += dl
 			end_body.apply_correction(r, nrm * dl)
 	# Chão.
 	for i in n:
@@ -387,16 +406,48 @@ func solve(h: float) -> void:
 			var pv := prev[i]
 			prev[i] = Vector3(lerpf(pv.x, p.x, 0.3), pv.y, lerpf(pv.z, p.z, 0.3))
 	if seg_n > 0:
-		_lam_hand_sum += lam[0]
-		_lam_end_sum += lam[seg_n - 1]
+		_lam_hand_sum += lam[0] + _lam_tether
+		_lam_end_sum += lam[seg_n - 1] + _lam_tether
 	if obstacles != null:
 		obstacles.solve_contacts(self)
 	if _lam_sum.size() != seg_n:
 		_lam_sum.resize(seg_n)
 		_lam_sum.fill(0.0)
 	for i in seg_n:
-		_lam_sum[i] += lam[i]
+		_lam_sum[i] += lam[i] + _lam_tether
 	_substeps_done += 1
+
+
+func _solve_segment(i: int, n: int, inv_h2: float, ea: float) -> void:
+	var alpha := rest[i] / ea * inv_h2
+	if i + 1 < n:
+		var d := pos[i + 1] - pos[i]
+		var l := d.length()
+		var c := l - rest[i]
+		if c <= 0.0:
+			return
+		var wsum := inv_mass[i] + inv_mass[i + 1]
+		if wsum <= 0.0:
+			return
+		var nrm := d / l
+		var dl := (-c - alpha * lam[i]) / (wsum + alpha)
+		lam[i] += dl
+		pos[i] -= nrm * (dl * inv_mass[i])
+		pos[i + 1] += nrm * (dl * inv_mass[i + 1])
+	else:
+		var r := end_body.q * end_local
+		var a := end_body.x + r
+		var d := a - pos[i]
+		var l := d.length()
+		var c := l - rest[i]
+		if c <= 0.0 or l < 0.00001:
+			return
+		var nrm := d / l
+		var wsum := inv_mass[i] + end_body.inverse_mass_at(r, nrm)
+		var dl := (-c - alpha * lam[i]) / (wsum + alpha)
+		lam[i] += dl
+		pos[i] -= nrm * (dl * inv_mass[i])
+		end_body.apply_correction(r, nrm * dl)
 
 
 func finalize(h: float) -> void:

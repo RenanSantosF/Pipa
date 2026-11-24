@@ -1,16 +1,28 @@
 class_name LineRenderer
 extends MeshInstance3D
-## Desenha uma linha simulada (Rope) como fita voltada para a câmera, com
-## largura mínima em pixels e curva suavizada (Catmull-Rom entre os nós).
+## Desenha uma linha simulada (Rope) como fita fina voltada para a câmera.
+## * Curva: Catmull-Rom CENTRÍPETA entre os nós (sem bicos nem laços quando os
+##   trechos têm tamanhos diferentes), subdividida conforme o tamanho na tela —
+##   perto da câmera a curva é bem fina e contínua; longe, poucos pontos bastam.
+## * Espessura: ~1 px com bordas suaves (shader), mais opaca perto e esmaecendo
+##   com a distância — linha de pipa é mais fina que um pixel a dezenas de metros.
 ## A forma é 100% a da simulação: barriga, ondas da braçada, linha caindo.
 
-@export var subdivisions: int = 3
+const SHADER := preload("res://src/line/line.gdshader")
+## Pixels de tela entre pontos da curva desenhada.
+const PX_PER_POINT := 10.0
+const MAX_SUB := 10
+## Esmaecimento: opaca até NEAR m, mínimo FAR_ALPHA a partir de FAR m.
+const NEAR := 6.0
+const FAR := 70.0
+const FAR_ALPHA := 0.28
 
 var rope: Rope
 var _im := ImmediateMesh.new()
-var _mat := StandardMaterial3D.new()
+var _mat := ShaderMaterial.new()
 var _pts: PackedVector3Array = PackedVector3Array()
 var _smooth: PackedVector3Array = PackedVector3Array()
+var _diameter := 0.0006
 
 
 func _ready() -> void:
@@ -19,13 +31,16 @@ func _ready() -> void:
 	mesh = _im
 	cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	extra_cull_margin = 200.0
-	_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	_mat.shader = SHADER
 
 
 func bind(p_rope, line_type: LineType) -> void:
 	rope = p_rope
-	_mat.albedo_color = line_type.color if line_type else Color(0.96, 0.95, 0.9)
+	var c := line_type.color if line_type else Color(0.96, 0.95, 0.9)
+	_mat.set_shader_parameter("line_color", c)
+	_diameter = line_type.diameter if line_type else 0.0006
+	if rope == null:
+		_im.clear_surfaces()
 
 
 func _process(_delta: float) -> void:
@@ -40,37 +55,59 @@ func _process(_delta: float) -> void:
 	if rope.end_body != null:
 		_pts.append(rope.end_point())
 	var n := _pts.size()
-	var sub := maxi(1, subdivisions if GameConfig.quality > 0 else 1)
+	var cam_pos := cam.global_position
+	var vp_h := maxf(get_viewport().get_visible_rect().size.y, 1.0)
+	# Ângulo de 1 pixel do buffer 3D (com a escala de renderização do celular).
+	var px := deg_to_rad(cam.fov) / (vp_h * get_viewport().scaling_3d_scale)
+
 	_smooth.resize(0)
 	for i in n - 1:
-		var p0 := _pts[maxi(i - 1, 0)]
 		var p1 := _pts[i]
 		var p2 := _pts[i + 1]
-		var p3 := _pts[mini(i + 2, n - 1)]
+		var p0 := _pts[i - 1] if i > 0 else p1 * 2.0 - p2
+		var p3 := _pts[i + 2] if i + 2 < n else p2 * 2.0 - p1
+		var mid := (p1 + p2) * 0.5
+		var seg_px := p1.distance_to(p2) / maxf(mid.distance_to(cam_pos) * px, 1e-5)
+		var sub := clampi(int(seg_px / PX_PER_POINT) + 1, 1, MAX_SUB)
 		for k in sub:
-			var t := float(k) / float(sub)
-			_smooth.append(_catmull(p0, p1, p2, p3, t))
+			_smooth.append(_centripetal(p0, p1, p2, p3, float(k) / float(sub)))
 	_smooth.append(_pts[n - 1])
 
-	var cam_pos := cam.global_position
-	var px := deg_to_rad(cam.fov) / maxf(get_viewport().get_visible_rect().size.y, 1.0)
 	var m := _smooth.size()
+	var vis_d := maxf(_diameter * 1.6, 0.001)
 	_im.surface_begin(Mesh.PRIMITIVE_TRIANGLE_STRIP, _mat)
 	for i in m:
 		var p := _smooth[i]
 		var tangent := _smooth[mini(i + 1, m - 1)] - _smooth[maxi(i - 1, 0)]
 		var to_cam := cam_pos - p
+		var dist := to_cam.length()
 		var side := tangent.cross(to_cam)
 		if side.length_squared() < 1e-12:
 			side = cam.global_basis.x
-		var half := maxf(0.0005, to_cam.length() * px * 0.6)
+		# Fita de 2 px (perfil triangular no shader = 1 px); perto da mão, a largura real.
+		var half := maxf(dist * px, vis_d * 0.5)
 		side = side.normalized() * half
+		var fade := clampf(1.0 - (dist - NEAR) / (FAR - NEAR), 0.0, 1.0)
+		var col := Color(1, 1, 1, lerpf(FAR_ALPHA, 1.0, fade * fade))
+		_im.surface_set_color(col)
+		_im.surface_set_uv(Vector2(-1.0, 0.0))
 		_im.surface_add_vertex(p - side)
+		_im.surface_set_color(col)
+		_im.surface_set_uv(Vector2(1.0, 0.0))
 		_im.surface_add_vertex(p + side)
 	_im.surface_end()
 
 
-static func _catmull(p0: Vector3, p1: Vector3, p2: Vector3, p3: Vector3, t: float) -> Vector3:
-	var t2 := t * t
-	var t3 := t2 * t
-	return 0.5 * ((2.0 * p1) + (-p0 + p2) * t + (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * t2 + (-p0 + 3.0 * p1 - 3.0 * p2 + p3) * t3)
+## Catmull-Rom centrípeta (Barry–Goldman), t em [0, 1] entre p1 e p2.
+static func _centripetal(p0: Vector3, p1: Vector3, p2: Vector3, p3: Vector3, u: float) -> Vector3:
+	var t0 := 0.0
+	var t1 := t0 + maxf(sqrt(p0.distance_to(p1)), 1e-4)
+	var t2 := t1 + maxf(sqrt(p1.distance_to(p2)), 1e-4)
+	var t3 := t2 + maxf(sqrt(p2.distance_to(p3)), 1e-4)
+	var t := lerpf(t1, t2, u)
+	var a1 := p0 * ((t1 - t) / (t1 - t0)) + p1 * ((t - t0) / (t1 - t0))
+	var a2 := p1 * ((t2 - t) / (t2 - t1)) + p2 * ((t - t1) / (t2 - t1))
+	var a3 := p2 * ((t3 - t) / (t3 - t2)) + p3 * ((t - t2) / (t3 - t2))
+	var b1 := a1 * ((t2 - t) / (t2 - t0)) + a2 * ((t - t0) / (t2 - t0))
+	var b2 := a2 * ((t3 - t) / (t3 - t1)) + a3 * ((t - t1) / (t3 - t1))
+	return b1 * ((t2 - t) / (t2 - t1)) + b2 * ((t - t1) / (t2 - t1))

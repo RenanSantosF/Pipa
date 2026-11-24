@@ -54,9 +54,16 @@ func show_message(text: String, duration: float = 2.0) -> void:
 	toast("", text, Color.WHITE, duration)
 
 
+var _redraw_t: float = 0.0
+
+
 func _process(delta: float) -> void:
 	_toast_time = maxf(_toast_time - delta, 0.0)
-	queue_redraw()
+	# Redesenha a ~12 Hz (o HUD é só leitura; redesenhar todo quadro pesa no celular).
+	_redraw_t -= delta
+	if _redraw_t <= 0.0:
+		_redraw_t = 0.08
+		queue_redraw()
 
 
 func _draw() -> void:

@@ -21,6 +21,10 @@ const DAMAGE_SCALE := 0.22
 const GROUP := 4
 const HOOK_GAP := 0.03
 const MAX_PER_PAIR := 8
+## Correção máxima por subpasso de um contato atravessado (m).
+const MAX_PUSH := 0.12
+## Contato do lado errado (atravessado) só é largado se ficar absurdo de longe.
+const GIVE_UP_DISTANCE := 4.0
 
 
 class Contact:
@@ -124,15 +128,37 @@ func _test_segments(ra: KiteRig, rb: KiteRig, pa: PackedVector3Array, pb: Packed
 	var tb: float = res[1]
 	var crossed_normal := Vector3.ZERO
 	if dist > DETECT_RADIUS:
-		# Atravessou entre quadros? (o lado de uma linha em relação à outra trocou)
-		if dist > CROSS_RADIUS or prev_a.is_empty() or prev_b.is_empty() or ta <= 0.0 or ta >= 1.0 or tb <= 0.0 or tb >= 1.0:
+		# Atravessou entre quadros? Mede o LADO de uma linha em relação à outra pela
+		# normal comum (ea × eb): deslizar ao longo de qualquer uma das linhas (dar
+		# linha, recolher, escorregar no relo) não muda esse lado — só atravessar muda.
+		if dist > CROSS_RADIUS or prev_a.is_empty() or prev_b.is_empty():
 			return
-		var now_d := pb[ib].lerp(pb[ib + 1], tb) - pa[ia].lerp(pa[ia + 1], ta)
+		var ea := pa[ia + 1] - pa[ia]
+		var eb := pb[ib + 1] - pb[ib]
+		var cr := ea.cross(eb)
+		var crl := cr.length()
+		if crl < 0.2 * ea.length() * eb.length():
+			return  # quase paralelas: o lado não é bem definido
+		var n := cr / crl
+		# Pontos de cruzamento das RETAS (sem limitar ao segmento): o cruzamento tem
+		# que cair dentro dos dois trechos.
+		var lp := _line_params(pa[ia], ea, pb[ib], eb)
+		if lp.x < -0.02 or lp.x > 1.02 or lp.y < -0.02 or lp.y > 1.02:
+			return
+		# Bem na ponta do trecho: o par vizinho pega (e não "laça" no cabresto à toa).
+		lp = lp.clamp(Vector2(0.01, 0.01), Vector2(0.99, 0.99))
+		var qa := pa[ia] + ea * lp.x
+		var qb := pb[ib] + eb * lp.y
+		var side_now := (qb - qa).dot(n)
 		# Mesmo ponto do MATERIAL no quadro anterior (funciona mesmo dando linha).
-		var old_d := _point_at_s(prev_b, rb.rope.material_at(ib, tb)) - _point_at_s(prev_a, ra.rope.material_at(ia, ta))
-		if old_d.dot(now_d) >= 0.0 or old_d.length() > CROSS_RADIUS:
+		var oa := _point_at_s(prev_a, ra.rope.material_at(ia, lp.x))
+		var ob := _point_at_s(prev_b, rb.rope.material_at(ib, lp.y))
+		var side_old := (ob - oa).dot(n)
+		if side_old * side_now >= 0.0 or absf(side_old) > CROSS_RADIUS:
 			return
-		crossed_normal = old_d.normalized()
+		crossed_normal = n * signf(side_old)
+		ta = lp.x
+		tb = lp.y
 	var sa := ra.rope.material_at(ia, ta)
 	var sb := rb.rope.material_at(ib, tb)
 	var pair_count := 0
@@ -163,6 +189,20 @@ func _test_segments(ra: KiteRig, rb: KiteRig, pa: PackedVector3Array, pb: Packed
 	c.sb_prev = sb
 	c.position = (p_a + p_b) * 0.5
 	contacts.append(c)
+
+
+## Parâmetros (s, t) dos pontos mais próximos entre as RETAS p1 + s·d1 e p2 + t·d2.
+static func _line_params(p1: Vector3, d1: Vector3, p2: Vector3, d2: Vector3) -> Vector2:
+	var r := p1 - p2
+	var a := d1.dot(d1)
+	var b := d1.dot(d2)
+	var c := d1.dot(r)
+	var e := d2.dot(d2)
+	var f := d2.dot(r)
+	var den := a * e - b * b
+	if absf(den) < 1e-12:
+		return Vector2(-1.0, -1.0)
+	return Vector2((b * f - c * e) / den, (a * f - b * c) / den)
 
 
 ## Posição de um ponto do material da linha (s) nas posições guardadas [pontos, s].
@@ -237,6 +277,17 @@ func solve(h: float) -> void:
 		var pa := pa_pts[0].lerp(pa_pts[1], c.ta)
 		var pb := pb_pts[0].lerp(pb_pts[1], c.tb)
 		var d := pb - pa
+		if not c.hooked:
+			# Normal = normal comum das duas linhas (ea × eb), mantendo o LADO do
+			# contato: deslizar ou girar não troca o lado; só a física pode (e o
+			# contato não deixa). Quase paralelas: segue a separação, sem inverter.
+			var ea := pa_pts[1] - pa_pts[0]
+			var eb := pb_pts[1] - pb_pts[0]
+			var cr := ea.cross(eb)
+			var crl := cr.length()
+			if crl > 0.25 * sqrt(ea.length_squared() * eb.length_squared()):
+				var n := cr / crl
+				c.normal = n if n.dot(c.normal) >= 0.0 else -n
 		var nrm := c.normal
 		var violation := 0.0
 		if c.hooked:
@@ -249,10 +300,11 @@ func solve(h: float) -> void:
 			var sep := d.dot(nrm)
 			if sep >= CONTACT_GAP:
 				var dl2 := d.length()
-				if dl2 > 0.00001:
+				if dl2 > 0.00001 and d.dot(nrm) > 0.7 * dl2:
 					c.normal = d / dl2
 				continue
-			violation = CONTACT_GAP - sep
+			# Atravessou muito (puxada forte): volta em alguns subpassos, sem explodir.
+			violation = minf(CONTACT_GAP - sep, MAX_PUSH)
 		# Pesos generalizados (nós da linha ou corpo rígido da pipa na ponta).
 		var ua := 1.0 - c.ta
 		var ub := 1.0 - c.tb
@@ -362,9 +414,15 @@ func post_frame(dt: float, h: float, substeps: int) -> void:
 		var pb_pts := rb.segment_points(c.ib)
 		var pa := pa_pts[0].lerp(pa_pts[1], c.ta)
 		var pb := pb_pts[0].lerp(pb_pts[1], c.tb)
-		if not c.hooked and pa.distance_to(pb) > RELEASE_DISTANCE:
-			contacts.remove_at(i)
-			continue
+		if not c.hooked:
+			# Só larga o contato com as linhas SEPARADAS do lado certo (ou uma escapou
+			# pela ponta da mão); do lado errado o contato continua empurrando de volta.
+			var dd := pb - pa
+			var dl := dd.length()
+			var at_end := (c.ia == 0 and c.ta <= 0.0) or (c.ib == 0 and c.tb <= 0.0)
+			if dl > RELEASE_DISTANCE and (dd.dot(c.normal) > 0.0 or at_end or dl > GIVE_UP_DISTANCE):
+				contacts.remove_at(i)
+				continue
 		c.age += dt
 		c.position = (pa + pb) * 0.5
 		c.force = c.impulse / (h * h * float(substeps))

@@ -21,6 +21,7 @@ var _events: Array = []   # [tempo, ação, valor]
 var _log_from := 5.8
 var _max := {}
 var _hold := 0.7
+var _end_t := 14.0
 
 
 func start(p_main) -> void:
@@ -45,9 +46,18 @@ func start(p_main) -> void:
 			rig.profile.tail_length = float(a.substr(10))
 		elif a.begins_with("--spin="):
 			rig.profile.spin_coef = float(a.substr(7))
+		elif a.begins_with("--end="):
+			_end_t = float(a.substr(6))
 		elif a.begins_with("--hold="):
 			_hold = float(a.substr(7))
-	rig.launch(main.player.global_position + Vector3(0.2, 1.18, -0.3), 25.0, 55.0, Wind.get_direction())
+	var length := 25.0
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--len="):
+			length = float(a.substr(6))
+		elif a.begins_with("--prof="):
+			var kv := a.substr(7).split(":")
+			rig.profile.set(kv[0], float(kv[1]))
+	rig.launch(main.player.global_position + Vector3(0.2, 1.18, -0.3), length, 55.0, Wind.get_direction())
 	_side = Wind.get_direction().cross(Vector3.UP).normalized()  # direita de quem empina
 	match _seq:
 		"desbico":
@@ -102,10 +112,10 @@ func _physics_process(delta: float) -> void:
 	_track("T_pipa_max", rig.rope.tension_end if rig.rope else 0.0, false)
 	_track("v_max", b.v.length(), false)
 	if fmod(_t, 0.05) < delta:
-		print("CTRL t=%5.2f nariz=%6.1f° rumo=%6.1f° lat=%+6.2f alt=%+6.2f vel=%5.2f escorr=%5.1f° T_pipa=%5.2f T_mão=%5.2f ar=%5.2f aoa=%5.1f mão=%+.2f pegada=%.2f linha=%.1f" % [
+		print("CTRL t=%5.2f nariz=%6.1f° rumo=%6.1f° lat=%+6.2f alt=%+6.2f vel=%5.2f escorr=%5.1f° T_pipa=%5.2f T_mão=%5.2f ar=%5.2f aoa=%5.1f mão=%+.2f pegada=%.2f linha=%.1f el=%.0f° cont=%d enr=%s" % [
 			_t, nose_el, rad_to_deg(rig.heading()), rel.dot(_side), rel.y, b.v.length(), slip,
-			rig.rope.tension_end, rig.rope.tension_hand, b.airspeed, rad_to_deg(b.angle_of_attack), rig.stroke, rig.grip, rig.flying_length()])
-	if _t > 14.0:
+			rig.rope.tension_end, rig.rope.tension_hand, b.airspeed, rad_to_deg(b.angle_of_attack), rig.stroke, rig.grip, rig.flying_length(), rad_to_deg(asin(clampf(dl.y, -1.0, 1.0))), rig.rope.contact_count(), str(rig.snagged)])
+	if _t > _end_t:
 		print("CTRL resumo: ", _max)
 		get_tree().quit(0)
 

@@ -24,11 +24,14 @@ const BOW_NAMES := ["pouca", "média", "muita"]
 @export_group("Vela")
 ## Altura (nariz → ponta de baixo) e largura (m).
 @export var height: float = 0.65
-@export var width: float = 0.55
-## Ponto mais largo (travessa principal), fração da altura a partir do NARIZ.
-@export_range(0.15, 0.5) var cross_at: float = 0.32
-## Travessa inferior, fração da altura a partir do nariz.
-@export_range(0.5, 0.85) var lower_at: float = 0.66
+@export var width: float = 0.5
+## Travessa envergada = borda de cima do papel, fração da altura a partir da
+## CABEÇA (ponta de cima da vareta, que fica acima do papel).
+@export_range(0.15, 0.5) var cross_at: float = 0.31
+## "Ombros" (onde os lados retos viram o V de baixo) e a vareta de baixo.
+@export_range(0.4, 0.85) var lower_at: float = 0.63
+## Meia-largura nos ombros / meia-largura da travessa.
+@export_range(0.6, 1.0) var shoulder: float = 0.92
 ## Envergadura: quanto as pontas da travessa principal vão para trás (m).
 @export var bow: float = 0.051
 ## Massa (kg): papel de seda + 3 varetas de bambu + cola + cabresto.
@@ -52,9 +55,9 @@ const BOW_NAMES := ["pouca", "média", "muita"]
 @export var spin_coef: float = 0.11
 
 @export_group("Cabresto")
-## Posição do nó do cabresto ao longo da espinha, a partir do nariz (fração da altura).
-## Mais perto do nariz = pipa mais "deitada" (sobe mais, puxa menos).
-@export_range(0.05, 0.6) var tow_fraction: float = 0.24
+## Posição do nó do cabresto ao longo da vareta, a partir da CABEÇA (fração da
+## altura). Mais para cima = pipa mais "deitada" (sobe mais, puxa menos).
+@export_range(0.0, 0.6) var tow_fraction: float = 0.18
 ## Distância do nó do cabresto até a vela (m).
 @export var bridle_length: float = 0.24
 ## Quanto a perna do cabresto carregada no desbico desloca o ponto de tração (fração da largura).
@@ -70,12 +73,14 @@ const BOW_NAMES := ["pouca", "média", "muita"]
 @export var tail_abrasion: float = 0.0
 
 @export_group("Visual")
-@export var color_a: Color = Color(0.95, 0.78, 0.15)
-@export var color_b: Color = Color(0.88, 0.2, 0.18)
+@export var color_a: Color = Color(0.08, 0.52, 0.24)
+@export var color_b: Color = Color(0.07, 0.07, 0.07)
 @export var tail_color_a: Color = Color(0.95, 0.95, 0.95)
 @export var tail_color_b: Color = Color(0.2, 0.45, 0.9)
-## Desenho da vela: 0 = dividida na diagonal, 1 = faixas, 2 = olho (círculo), 3 = xadrez.
-@export_range(0, 3) var pattern: int = 0
+## Desenho do papel: 0 = metades, 1 = faixas, 2 = olho, 3 = xis (estilo Jamaica).
+@export_range(0, 3) var pattern: int = 3
+## Terceira cor (o xis / detalhes).
+@export var color_c: Color = Color(0.98, 0.84, 0.12)
 
 var size_class: int = Size.M
 var bow_class: int = Bow.MEDIA
@@ -91,7 +96,9 @@ func apply_size(s: int) -> void:
 	size_class = clampi(s, 0, 2)
 	var h0 := height
 	height = SIZE_HEIGHT[size_class]
-	width = height * 0.85
+	width = height * 0.77
+	# Cabresto um pouco mais alto na pequena (rabiola pesa mais para ela).
+	tow_fraction = [0.145, 0.18, 0.18][size_class]
 	var k := height / h0
 	# Área cresce com h²; varetas com h (mais grossas na grande): ≈ h^2,2.
 	mass *= pow(k, 2.2)

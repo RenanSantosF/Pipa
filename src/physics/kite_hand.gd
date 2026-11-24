@@ -43,6 +43,9 @@ const LAUNCH_LEN := 18.0
 ## …ou com a pipa ainda baixa (m acima da mão), onde o vento é fraco.
 const LAUNCH_ALT := 14.0
 
+## Força do desbico pedida pelo gesto (0,25..1): quanto mais longe o dedo, mais a
+## mão abre e mais a vareta relaxa torta (o bico gira mais rápido).
+var desbico_intensity: float = 1.0
 ## Ajustes do desbico (pegada entreaberta, impulso lateral).
 var desb_grip: float = 0.27
 ## Puxão: curso do braço (m) e tempo do arranque (s).
@@ -59,7 +62,7 @@ var kick_gain: float = 0.0
 var kick_hold: float = 0.22
 var kick_end: float = 0.5
 var asym_gain: float = 0.0
-var spin_gain: float = 1.0
+var spin_gain: float = 0.75
 
 var rig: KiteRig
 var stroke: float = 0.0
@@ -121,8 +124,6 @@ func press_desbico(side: float) -> void:
 	if rig.held:
 		rig.release_hold()
 	var s := signf(side) if side != 0.0 else -last_side
-	if _clock - _last_press < DOUBLE_WINDOW:
-		s = -_desb_side if _desb_side != 0.0 else s   # desbicada dupla: lado oposto
 	_last_press = _clock
 	_start_desbico(s)
 	_desb_down = true
@@ -268,12 +269,13 @@ func update(delta: float, pull_stroke: float, grip_in: float, reel: float) -> vo
 		_desb_t += delta
 		# Braço vai à frente e a mão abre: a linha corre e a tensão some.
 		stroke = lerpf(_desb_arm_from, DESB_ARM, _smooth(0.0, DESB_ARM_TIME, _desb_t))
-		grip = minf(grip, lerpf(1.0, desb_grip, _smooth(0.0, 0.06, _desb_t)))
+		var open_grip := lerpf(desb_grip + 0.1, desb_grip - 0.05, desbico_intensity)
+		grip = minf(grip, lerpf(1.0, open_grip, _smooth(0.0, 0.06, _desb_t)))
 		# Puxada leve para o lado só no começo (ainda há tensão para girar o bico).
 		kick_target = _desb_side * kick_gain * _smooth(0.0, 0.08, _desb_t) * (1.0 - _smooth(kick_hold, kick_end, _desb_t))
 		# Enquanto dá linha, a vareta relaxa torta para o lado escolhido. Com a pipa
 		# baixa o pipeiro solta reto (sem torcer), senão ela vira e vai ao chão.
-		spin_target = _desb_side * spin_gain * _low_factor()
+		spin_target = _desb_side * spin_gain * lerpf(0.55, 1.15, desbico_intensity) * _low_factor()
 		pitch_target = 1.0   # ponto de tração para o nariz: a vela "deita", sustentação cai
 		keep_line = false
 		if not _desb_down and _desb_t >= DESB_MIN:

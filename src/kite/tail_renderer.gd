@@ -56,7 +56,19 @@ func _process(_delta: float) -> void:
 		for v in [a - side, a + side, b + side, a - side, b + side, b - side]:
 			_im.surface_set_color(Color(0.9, 0.88, 0.82))
 			_im.surface_add_vertex(v)
-	# Laços de plástico ("bandeirinhas") a cada BOW_STEP ao longo do barbante.
+	# Laços de plástico ("bandeirinhas") a cada BOW_STEP ao longo do barbante
+	# (longe não dá para ver os laços: desenha só uma fita colorida, bem mais barato).
+	if cam_pos.distance_to(pts[0]) > 45.0:
+		for i in pts.size() - 1:
+			var a0 := pts[i]
+			var b0 := pts[i + 1]
+			var sd := (b0 - a0).cross(cam_pos - a0).normalized() * BOW_HALF_W * k * 0.6
+			var col := prof.tail_color_a if i % 2 == 0 else prof.tail_color_b
+			for v in [a0 - sd, a0 + sd, b0 + sd, a0 - sd, b0 + sd, b0 - sd]:
+				_im.surface_set_color(col)
+				_im.surface_add_vertex(v)
+		_im.surface_end()
+		return
 	var acc := BOW_STEP * 0.5
 	var bow_i := 0
 	for i in pts.size() - 1:

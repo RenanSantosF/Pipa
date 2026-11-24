@@ -155,6 +155,7 @@ func _drive_rig(delta: float) -> void:
 	# Desbico/puxar/dar linha pela "mão do pipeiro" (mesma lógica dos vizinhos).
 	if _hand == null or _hand.rig != rig:
 		_hand = KiteHand.new(rig)
+	_hand.desbico_intensity = intent.desbico_intensity
 	for side in intent.desbico_press:
 		_hand.press_desbico(side)
 	intent.desbico_press.clear()

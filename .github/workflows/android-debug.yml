@@ -105,6 +105,12 @@ jobs:
             exit 1
           fi
           grep -q "AUTOTEST PASS" autotest.log || { echo "::error::Autotest falhou"; exit 1; }
+          # Mesmo teste com a física do celular (qualidade BAIXA: 30 Hz).
+          timeout 600 ~/godot/godot --headless --path . --fixed-fps 60 -- --autotest --quality=0 2>&1 | tee autotest_low.log || true
+          grep -q "AUTOTEST PASS" autotest_low.log || { echo "::error::Autotest (qualidade baixa) falhou"; exit 1; }
+          # Gestos (toques sintéticos).
+          timeout 120 ~/godot/godot --headless --path . --fixed-fps 60 -- --gestureprobe 2>&1 | tee gestures.log || true
+          grep -q "GESTOS OK" gestures.log || { echo "::error::Teste de gestos falhou"; exit 1; }
 
       - name: Capturas de tela renderizadas (Vulkan por software)
         run: |

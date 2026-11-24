@@ -79,6 +79,9 @@ do bico com pouca tensão — o natural para uma placa leve) contra 70–108° a
 
 ## 4. Controles no celular
 
+> **v0.7:** os botões saíram — agora é tudo por gestos (arrastar para o lado =
+> desbico, toque = puxão). Ver `docs/V07.md`. O texto abaixo descreve a v0.6.
+
 * **Botão PUXAR** (círculo grande no canto inferior direito): o puxão sai **no
   instante do toque** (não espera soltar). Toques seguidos = puxões seguidos;
   segurar = puxões em série (a cada 0,3 s). Anel pulsa a cada puxão.

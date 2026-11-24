@@ -70,6 +70,8 @@ func _build(body: KiteRigidBody, profile: KiteProfile) -> void:
 	_paper.set_shader_parameter("kite_h", h)
 	_paper.set_shader_parameter("cross_at", profile.cross_at)
 	_paper.set_shader_parameter("lower_at", profile.lower_at)
+	_paper.set_shader_parameter("shoulder", profile.shoulder)
+	_paper.set_shader_parameter("color_c", profile.color_c)
 	_paper.set_shader_parameter("color_a", profile.color_a)
 	_paper.set_shader_parameter("color_b", profile.color_b)
 	_paper.set_shader_parameter("pattern", profile.pattern)
@@ -81,17 +83,16 @@ func _build(body: KiteRigidBody, profile: KiteProfile) -> void:
 	# Vela: grade sobre o losango (linhas ao longo da espinha, colunas na largura).
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	# Só a parte de papel: da travessa até a ponta de baixo (a cabeça é só vareta).
 	var rows: Array[float] = []
 	for i in GRID_V + 1:
-		rows.append(float(i) / float(GRID_V))
-	# Garante linhas exatamente nas travessas (dobra limpa).
-	rows.append(profile.cross_at)
+		rows.append(lerpf(profile.cross_at, 1.0, float(i) / float(GRID_V)))
 	rows.append(profile.lower_at)
 	rows.sort()
 	var verts: Array = []
 	for v in rows:
 		var yn := v * h
-		var rw := _row_half_w(yn, hw, h, profile.cross_at)
+		var rw := _row_half_w(yn, hw, h, profile)
 		var row := []
 		for j in GRID_U + 1:
 			var u := float(j) / float(GRID_U) * 2.0 - 1.0
@@ -117,11 +118,11 @@ func _build(body: KiteRigidBody, profile: KiteProfile) -> void:
 	var r_spine := 0.0028 * h / 0.65
 	var r_cross := 0.0022 * h / 0.65
 	var back := -0.004
-	_tube(sk, nose + Vector3(0, 0.004, back), _corners[2] + Vector3(0, -0.004, back), r_spine, 2, BAMBOO)
+	_tube(sk, nose + Vector3(0, 0.006, back), _corners[3] + Vector3(0, -0.004, back), r_spine, 2, BAMBOO)
 	var yc := nose.y - profile.cross_at * h
 	_tube(sk, Vector3(-hw - 0.006, yc, back - r_spine * 2.0), Vector3(hw + 0.006, yc, back - r_spine * 2.0), r_cross, 14, BAMBOO)
 	var yl := nose.y - profile.lower_at * h
-	var lw := _row_half_w(profile.lower_at * h, hw, h, profile.cross_at)
+	var lw := _row_half_w(profile.lower_at * h, hw, h, profile)
 	_tube(sk, Vector3(-lw, yl, back - r_spine * 2.0), Vector3(lw, yl, back - r_spine * 2.0), r_cross * 0.9, 10, BAMBOO.darkened(0.05))
 	# Amarração (linha) no cruzamento das varetas.
 	for yy in [yc, yl]:
@@ -151,21 +152,33 @@ func _update_bridle(dl: float, dr: float) -> void:
 	var h := _profile.height
 	var hw := _profile.width * 0.5
 	var nose := _corners[0]
+	var yc := nose.y - _profile.cross_at * h
 	var yl := nose.y - _profile.lower_at * h
-	var lw := _row_half_w(_profile.lower_at * h, hw, h, _profile.cross_at)
 	var knot := rig.body.tow_local + Vector3(rig.bridle_offset.x, rig.bridle_offset.y, 0.0) if rig and not rig.loose else rig.body.tow_local
-	var anchors := [nose + Vector3(0, -0.07 * h, 0), Vector3(-lw, yl, _bow_z(-lw, dl, dr)), Vector3(lw, yl, _bow_z(lw, dl, dr))]
+	# Cabresto de 2 pernas: no cruzamento da travessa e mais abaixo na vareta.
+	var low_y := lerpf(yl, _corners[3].y, 0.35)
+	var anchors := [Vector3(0, yc - 0.01, 0), Vector3(0, low_y, 0)]
 	_bridle.clear_surfaces()
 	_bridle.surface_begin(Mesh.PRIMITIVE_LINES, _bridle_mat)
 	for a in anchors:
 		_bridle.surface_add_vertex(knot)
 		_bridle.surface_add_vertex(a)
+	# Linha de contorno de cima: da cabeça às pontas (envergadas) da travessa.
+	for sx in [-1.0, 1.0]:
+		var tip := Vector3(sx * hw, yc, _bow_z(sx * hw, dl, dr))
+		_bridle.surface_add_vertex(nose + Vector3(0, -0.005, 0))
+		_bridle.surface_add_vertex(tip)
 	_bridle.surface_end()
 
 
-static func _row_half_w(yn: float, hw: float, h: float, cross_at: float) -> float:
-	var c := cross_at * h
-	return hw * yn / maxf(c, 0.001) if yn < c else hw * (h - yn) / maxf(h - c, 0.001)
+static func _row_half_w(yn: float, hw: float, h: float, p: KiteProfile) -> float:
+	var c := p.cross_at * h
+	var l := p.lower_at * h
+	if yn < c:
+		return 0.0
+	if yn < l:
+		return lerpf(hw, hw * p.shoulder, (yn - c) / maxf(l - c, 0.001))
+	return hw * p.shoulder * (h - yn) / maxf(h - l, 0.001)
 
 
 func _quad(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, d: Vector3, v0: float, v1: float) -> void:

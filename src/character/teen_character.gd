@@ -150,7 +150,25 @@ func set_locomotion(speed: float) -> void:
 	_speed = speed
 
 
+var _lod_t: float = 0.0
+var _far: bool = false
+
+
 func _process(delta: float) -> void:
+	# Longe da câmera: congela animação e IK (no celular cada esqueleto custa caro).
+	_lod_t -= delta
+	if _lod_t <= 0.0:
+		_lod_t = 0.5
+		var cam := get_viewport().get_camera_3d()
+		var far := cam != null and cam.global_position.distance_to(global_position) > 30.0
+		if far != _far:
+			_far = far
+			if anim:
+				anim.active = not far
+			if _ik:
+				_ik.active = not far
+	if _far:
+		return
 	if anim:
 		if _speed > 0.25:
 			_play(&"walk")

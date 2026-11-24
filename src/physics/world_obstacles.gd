@@ -102,6 +102,22 @@ func query(p: Vector3) -> PackedInt32Array:
 	return _grid.get(key, PackedInt32Array())
 
 
+## Obstáculos das células tocadas pelo trecho a–b (um trecho longo de linha pode
+## atravessar a divisa de células: só o meio não basta).
+func query_segment(a: Vector3, b: Vector3) -> PackedInt32Array:
+	var ka := Vector2i(floori(a.x / CELL), floori(a.z / CELL))
+	var kb := Vector2i(floori(b.x / CELL), floori(b.z / CELL))
+	if ka == kb:
+		return _grid.get(ka, PackedInt32Array())
+	var out := PackedInt32Array()
+	for gx in range(mini(ka.x, kb.x), maxi(ka.x, kb.x) + 1):
+		for gz in range(mini(ka.y, kb.y), maxi(ka.y, kb.y) + 1):
+			for idx in _grid.get(Vector2i(gx, gz), PackedInt32Array()):
+				if not out.has(idx):
+					out.append(idx)
+	return out
+
+
 ## Altura do topo do que houver em (x, z): laje/telhado (caixas) ou o chão.
 func top_at(x: float, z: float) -> float:
 	var y := Ground.height_at(x, z)
@@ -184,6 +200,21 @@ static func _segment_box(a: Vector3, b: Vector3, box: AABB) -> Array:
 	return [t0, a + d * t0 + normal * 0.003, normal]
 
 
+## Saída pela face indicada pela normal guardada (se for de face); senão a mais próxima.
+static func _box_exit_side(box: AABB, p: Vector3, nrm: Vector3) -> Array:
+	for axis in 3:
+		if absf(nrm[axis]) > 0.9:
+			var s := signf(nrm[axis])
+			if axis == 1 and s < 0.0:
+				break
+			var out := p
+			out[axis] = (box.end[axis] if s > 0.0 else box.position[axis]) + s * 0.003
+			var n := Vector3.ZERO
+			n[axis] = s
+			return [out, n]
+	return _box_exit(box, p)
+
+
 ## Face de saída mais próxima de um ponto dentro da caixa: [ponto na face, normal].
 static func _box_exit(box: AABB, p: Vector3) -> Array:
 	var best := INF
@@ -234,6 +265,17 @@ func solve_contacts(rope: Rope) -> void:
 				# enquanto ela aperta contra o obstáculo do lado guardado — assim o nó
 				# não "dá a volta" por baixo e a linha não atravessa.
 				var nxt := rope.pos[i + 1] if i + 1 < n else rope.end_point()
+				# LADO da linha em relação ao fio/galho (invariante topológico): sinal na
+				# normal comum (corda da linha × eixo). A normal do contato pode girar em
+				# volta do obstáculo (a linha escorrega pela superfície), mas nunca passar
+				# para o outro meio-círculo — por mais forte que se puxe.
+				var chord := nxt - rope.pos[i - 1]
+				var ns := chord.cross(ax)
+				var has_side := ns.length() > 0.3 * chord.length()
+				if has_side:
+					ns = ns.normalized()
+					if ns.dot(nrm) < 0.0:
+						ns = -ns
 				var bis := (rope.pos[i - 1] - p).normalized() + (nxt - p).normalized()
 				bis -= ax * bis.dot(ax)
 				var pressing := false
@@ -242,6 +284,8 @@ func solve_contacts(rope: Rope) -> void:
 					if nt.dot(nrm) > 0.0:
 						nrm = nt
 						pressing = true
+				if has_side and nrm.dot(ns) < 0.2:
+					nrm = (nrm - ns * (nrm.dot(ns) - 0.2)).normalized()
 				var side := d.dot(nrm)
 				if pressing and side < r:
 					corr = nrm * r - d          # apoiada: fica na superfície, do lado da linha
@@ -251,7 +295,9 @@ func solve_contacts(rope: Rope) -> void:
 				var box: AABB = e[1]
 				mu = material(e[2])[0]
 				if box.has_point(p):
-					var ex := _box_exit(box, p)
+					# Sai pela face do lado em que a linha já estava (muro fino: puxar
+					# forte não faz a linha sair pelo outro lado).
+					var ex := _box_exit_side(box, p, nrm)
 					corr = (ex[0] as Vector3) - p
 					nrm = ex[1]
 		if corr == Vector3.ZERO:
@@ -347,7 +393,7 @@ func _detect(rope: Rope) -> void:
 		var low := Vector3(mid.x, minf(a.y, b.y), mid.z)
 		if not (below_top(low, 1.6) or below_top(Vector3(a.x, low.y, a.z), 1.6) or below_top(Vector3(b.x, low.y, b.z), 1.6)):
 			continue
-		var ids := query(mid)
+		var ids := query_segment(a, b)
 		if ids.is_empty():
 			continue
 		for idx in ids:
@@ -454,7 +500,17 @@ func _update_contacts(rope: Rope, dt: float) -> String:
 		var slipped_off := false
 		if e[0] == Kind.CAPSULE:
 			var tt: float = _axis_point(e[1], e[2], p)[1]
-			slipped_off = (tt <= 0.0 or tt >= 1.0) and off_surface > 0.01
+			if tt <= 0.0 or tt >= 1.0:
+				# Escorregou até a ponta deste trecho: se o fio/galho continua (trecho
+				# seguinte da catenária, galho que sai do tronco), passa o contato para ele.
+				var nb := _capsule_neighbor(idx, tt >= 1.0)
+				if nb >= 0:
+					rope.pin_obstacle[i] = nb
+					idx = nb
+					e = entries[idx]
+					off_surface = _surface_gap(e, p)
+				else:
+					slipped_off = off_surface > 0.01
 		if rope.pinned[i] == 1:
 			# ENROSCADO: solta quando endireita ou quando o tranco quebra o galho.
 			if dev < 0.05 or slipped_off:
@@ -493,6 +549,21 @@ func _update_contacts(rope: Rope, dt: float) -> String:
 			_capstan(rope, i, dev, t_hand, t_kite, float(mat[0]), dt)
 		i -= 1
 	return snagged_now
+
+
+## Trecho de cápsula que continua a cápsula idx pela ponta b (forward) ou a; −1 se não há.
+func _capsule_neighbor(idx: int, forward: bool) -> int:
+	var e: Array = entries[idx]
+	var tip: Vector3 = e[2] if forward else e[1]
+	for j in [idx + 1, idx - 1]:
+		if j < 0 or j >= entries.size():
+			continue
+		var o: Array = entries[j]
+		if o[0] != Kind.CAPSULE:
+			continue
+		if (o[1] as Vector3).distance_to(tip) < 0.02 or (o[2] as Vector3).distance_to(tip) < 0.02:
+			return j
+	return -1
 
 
 ## Distância do nó até a superfície (>0 = afastado).
