@@ -43,7 +43,9 @@ func _process(_delta: float) -> void:
 	if rig == null or rig.body == null or _paper == null:
 		return
 	var b := rig.body
-	global_transform = Transform3D(Basis(b.q), b.x)
+	# Inclinação do desbico: a pipa deita em volta da vareta (só o desenho; a física
+	# do balanço já está no giro do bico).
+	global_transform = Transform3D(Basis(b.q) * Basis(Vector3.UP, rig.bank), b.x)
 	# Desbico: as asas batem juntas, como um pássaro (as varetas fecham e abrem).
 	var fl := rig.flap * 0.38
 	var dl := b.half_dihedral(0) + fl

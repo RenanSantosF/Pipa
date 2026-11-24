@@ -184,6 +184,7 @@ func _physics_process(delta: float) -> void:
 	_track("T_pipa_max", rig.rope.tension_end if rig.rope else 0.0, false)
 	_track("v_max", b.v.length(), false)
 	_track("push_max", b.push_accel.length(), false)
+	_track("incl_max", absf(rad_to_deg(rig.bank)), false)
 	_wsum += b.w.length_squared()
 	_wn += 1
 	var wb: Vector3 = b.q.inverse() * b.w

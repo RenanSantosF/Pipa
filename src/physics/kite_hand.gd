@@ -53,12 +53,16 @@ const LAUNCH_ALT := 14.0
 const RECOLHER_LAUNCH_LEN := 8.0
 ## Desbico por toques: giro de um balanço (rad/s) e quanto tempo ele dura (decaimento),
 ## quanto tempo sem toque reinicia a sequência, quanto tempo o rumo fica mantido.
-const SWING_RATE := 2.4
-const SWING_TAU := 0.35
+## Por tamanho [P, M, G]: pipinha rápida e curta; pipão lento e forte.
+const SWING_RATE_BY_SIZE := [3.4, 2.4, 1.75]
+const SWING_TAU_BY_SIZE := [0.2, 0.35, 0.58]
+## Inclinação (rad) de cada balanço e o tempo de resposta dela, por tamanho.
+const BANK_BY_SIZE := [0.48, 0.58, 0.68]
+const BANK_TAU_BY_SIZE := [0.05, 0.08, 0.13]
 const TAP_SEQ_RESET := 0.45
 const TAP_HOLD_TIME := 1.6
 ## Pulso de tração de cada desbico (braço curto, linha não é recolhida).
-const THRUST_LEN := 0.3
+const THRUST_LEN := 0.15
 ## Empurrão de cada batida na direção do bico (m/s).
 const DESB_IMPULSE := 4.0
 const DESB_PUSH_TIME := 0.2
@@ -253,7 +257,7 @@ func desbico_toque() -> void:
 	if _clock - _tap_clock > TAP_SEQ_RESET:
 		_tap_side = 1.0               # sequência nova: o 1º balanço é para a esquerda
 	_tap_side = -_tap_side
-	_tap_rate = _tap_side * SWING_RATE
+	_tap_rate = _tap_side * float(SWING_RATE_BY_SIZE[_size()])
 	_tap_clock = _clock
 	if not _hold_active:
 		_hold_heading = heading()
@@ -263,6 +267,10 @@ func desbico_toque() -> void:
 	# A batida (folga + tranco curto) empurra a pipa um pouco para onde o bico aponta:
 	# no ritmo ela avança devagar nessa direção (sobe, vai de lado ou desce).
 	_push_t = 0.0
+
+
+func _size() -> int:
+	return clampi(rig.profile.size_class, 0, 2) if rig != null and rig.profile != null else 1
 
 
 ## Rumo do bico na janela de vento (rad): 0 = para cima, +π/2 = direita do pipeiro.
@@ -540,7 +548,7 @@ func update(delta: float, pull_stroke: float, grip_in: float, reel: float) -> vo
 	if rig.body != null and _hold_active:
 		# Desbico por toques: o rumo mantido anda com o balanço atual (que decai).
 		_hold_heading = wrapf(_hold_heading + _tap_rate * delta, -PI, PI)
-		_tap_rate *= exp(-delta / SWING_TAU)
+		_tap_rate *= exp(-delta / float(SWING_TAU_BY_SIZE[_size()]))
 		steer_target = _heading_dir(_hold_heading)
 		steer_gain = 1.0
 		steer_ff = _tap_rate
@@ -581,6 +589,13 @@ func update(delta: float, pull_stroke: float, grip_in: float, reel: float) -> vo
 	_flap_t += delta
 	rig.flap = sin(PI * clampf(_flap_t / 0.2, 0.0, 1.0)) if _flap_t < 0.2 else 0.0
 	rig.steer_ff = steer_ff
+	# Inclinação: cada balanço deita a pipa para o lado dele (de um lado para o
+	# outro no ritmo), proporcional ao giro do balanço; volta reta quando para.
+	var sz := _size()
+	var bank_target := 0.0
+	if _hold_active:
+		bank_target = clampf(_tap_rate / float(SWING_RATE_BY_SIZE[sz]), -1.0, 1.0) * float(BANK_BY_SIZE[sz])
+	rig.bank = lerpf(rig.bank, bank_target, 1.0 - exp(-delta / float(BANK_TAU_BY_SIZE[sz])))
 	rig.steer_dir = steer_target
 	rig.steer_gain = steer_gain
 

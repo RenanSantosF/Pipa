@@ -22,7 +22,7 @@ Também ficam disponíveis: o *artifact* `pipa-debug-apk` na execução do workf
 
 | Gesto | O que faz |
 |---|---|
-| **Toque** (em qualquer lugar) | **desbico**: cada toque é um balanço, alternando os lados (1º esquerda, 2º direita, 3º esquerda…) e as asas batem |
+| **Toque** (em qualquer lugar) | **desbico**: cada toque é um balanço, alternando os lados (1º esquerda, 2º direita, 3º esquerda…): a pipa inclina para o lado do balanço e as asas batem. Pipinha balança rápido e curto; pipão, lento e forte |
 | Toques **no mesmo ritmo** | os balanços se anulam: ela segue reta para onde o bico aponta — para cima sobe devagar, de lado vai de lado, para baixo desce — **sem chegar mais perto** |
 | **Toques e pausa** | o último balanço "rende": **2 toques** e pausa = vira para a **direita**; **1 ou 3** = vira para a **esquerda**. Repetindo, ela vai girando (até de cabeça para baixo) |
 | **Arrastar de cima para baixo** | **puxe**: recolhe linha (fica no chão); ela vai **reta para onde aponta** e chega mais perto. Esfregar = mais braçadas; segurar bem embaixo = continua puxando |

@@ -17,9 +17,9 @@ const SURFACES := {
 	"dirt": [0.1, 0.18], "grass": [0.15, 0.2], "bark": [0.0, 0.9], "metal": [0.75, 0.6],
 }
 ## Escala 1:1: poste urbano de ~10,5 m (cruzeta a 9,6 m), fios em 9,6 / 7,3 m.
-const POLE_TOP := 10.4
-const WIRE_HIGH := 9.6
-const WIRE_LOW := 7.25
+const POLE_TOP := 7.8
+const WIRE_HIGH := 7.2
+const WIRE_LOW := 5.5
 const FOLIAGE := {
 	"mango": "res://assets/textures/foliage_cluster.png",
 	"palm": "res://assets/textures/palm_frond.png",

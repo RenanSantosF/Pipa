@@ -60,6 +60,8 @@ var steer_ff: float = 0.0
 var flap: float = 0.0
 ## Empurrão da batida do desbico (aceleração, m/s²), escrito pela mão.
 var push_accel := Vector3.ZERO
+## Inclinação do desbico (rad, em torno da vareta; + = asa direita para trás).
+var bank: float = 0.0
 var _t_steady: float = 5.0
 ## A mão voltando da braçada joga a linha no chão? (falso no desbico: a linha escorrega)
 var shorten_on_return: bool = true

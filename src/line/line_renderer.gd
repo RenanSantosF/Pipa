@@ -13,9 +13,9 @@ const SHADER := preload("res://src/line/line.gdshader")
 const PX_PER_POINT := 10.0
 const MAX_SUB := 10
 ## Esmaecimento: opaca até NEAR m, mínimo FAR_ALPHA a partir de FAR m.
-const NEAR := 6.0
-const FAR := 70.0
-const FAR_ALPHA := 0.28
+const NEAR := 3.0
+const FAR := 32.0
+const FAR_ALPHA := 0.04
 
 var rope: Rope
 var _im := ImmediateMesh.new()
@@ -95,10 +95,10 @@ func _process(_delta: float) -> void:
 		if side.length_squared() < 1e-12:
 			side = cam.global_basis.x
 		# Fita de 2 px (perfil triangular no shader = 1 px); perto da mão, a largura real.
-		var half := maxf(dist * px, vis_d * 0.5)
+		var half := maxf(dist * px * 0.75, vis_d * 0.5)
 		side = side.normalized() * half
 		var fade := clampf(1.0 - (dist - NEAR) / (FAR - NEAR), 0.0, 1.0)
-		var col := Color(1, 1, 1, lerpf(FAR_ALPHA, 1.0, fade * fade))
+		var col := Color(1, 1, 1, lerpf(FAR_ALPHA, 0.85, fade * fade))
 		_im.surface_set_color(col)
 		_im.surface_set_uv(Vector2(-1.0, 0.0))
 		_im.surface_add_vertex(p - side)
