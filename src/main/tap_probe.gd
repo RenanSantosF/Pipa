@@ -28,6 +28,8 @@ var _film := false
 var _film_t := -1.0
 var _film_dir := ""
 var _film_n := 0
+var _give_until := -1.0
+var _tmax := 0.0
 
 
 func start(p_main) -> void:
@@ -50,7 +52,15 @@ func start(p_main) -> void:
 			_film = true
 	Wind.direction_wander_deg = 0.0
 	Wind.gust_strength = 0.0
-	main.reset_kite()
+	if _seq == "subir":
+		main.reset_kite()   # na mão, linha curta
+	elif _seq == "parada":
+		# Linha comprida, sem mexer: a linha nunca pode arrebentar nem escorregar sozinha.
+		Wind.gust_strength = 0.45
+		rig.launch(main.player.global_position + Vector3(0.2, 1.18, -0.3), 75.0, 45.0, Wind.get_direction())
+	else:
+		rig.launch(main.player.global_position + Vector3(0.2, 1.18, -0.3), 22.0, 50.0, Wind.get_direction())
+		main.player.look_at_point(rig.body.x)
 	var s := _start
 	match _seq:
 		"ritmo":
@@ -81,12 +91,21 @@ func start(p_main) -> void:
 			while t2 < s + 3.0:
 				_events.append([t2, "tap"])
 				t2 += _int
+		"subir":
+			# Da mão: desbicando em ritmo; a partir de 4 s, dando linha junto.
+			var t3 := s
+			while t3 < s + 8.0:
+				_events.append([t3, "tap"])
+				t3 += 0.28
+			for k in 9:
+				_events.append([s + 3.0 + k * 0.5, "give"])
 		"descer":
 			for k in 6:
 				_events.append([s, "tap"])
 				s += 0.9
 			for k in 8:
 				_events.append([s + k * 0.4, "pull"])
+	_events.sort_custom(func(a, b) -> bool: return float(a[0]) < float(b[0]))
 	print("TAP seq=%s intervalo=%.2f tamanho=%s" % [_seq, _int, rig.profile.size_class])
 	if _film:
 		_film_dir = ProjectSettings.globalize_path("res://build/film")
@@ -110,13 +129,18 @@ func _physics_process(delta: float) -> void:
 	_t += delta
 	if rig.body == null or rig.flight == null:
 		return
+	if _seq != "subir" and _t < _start and _t > 0.5:
+		rig.release_hold()
 	while not _events.is_empty() and _t >= float(_events[0][0]):
 		var ev: String = _events[0][1]
 		_events.pop_front()
 		if ev == "tap":
 			it.desbico_toques += 1
+		elif ev == "give":
+			_give_until = _t + 0.3
 		else:
 			it.recolhe.append(0.8)
+	it.grip = 0.0 if _t < _give_until else 1.0
 	var f := rig.flight
 	var p := rig.body.x
 	if _t < _start:
@@ -132,7 +156,10 @@ func _physics_process(delta: float) -> void:
 		print("TAP t=%5.2f rumo=%+6.1f° giro=%+6.0f°/s lado=%+5.1fm alt=%5.1fm dist=%5.1fm vel=%4.1f linha=%4.1f" % [
 			_t - _start, dh, rad_to_deg(f.yaw_rate), side, p.y - main.player.global_position.y,
 			(p - rig.hand_position()).length(), f.speed, rig.flying_length()])
-	if _t > _start + 8.0:
+	if rig.rope != null:
+		_tmax = maxf(_tmax, rig.tension)
+	if _t > _start + (11.0 if _seq == "subir" else (40.0 if _seq == "parada" else 8.0)):
+		print("TAP tração máx %.1f N (linha aguenta %.0f N, mão escorrega acima de %.0f N), linha %.1f m" % [_tmax, rig.line_type.break_tension, 0.7 * rig.line_type.break_tension, rig.flying_length()])
 		print("TAP resumo seq=%s: rumo final %+.0f° (mín %+.0f°, máx %+.0f°)" % [_seq, rad_to_deg(wrapf(f.heading - _h0, -PI, PI)), _min_h, _max_h])
 		set_physics_process(false)
 		get_tree().quit()

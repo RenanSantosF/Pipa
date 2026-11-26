@@ -301,10 +301,10 @@ func _attach(path: String) -> void:
 ## Nova pipa no ar (com a linha atual) e câmera virada para ela.
 func reset_kite() -> void:
 	player.look_at_point(player.global_position + Wind.get_direction() * 10.0 + Vector3.UP * 4.0)
-	# Começa já no ar (linha de 22 m): arrastar para baixo é só puxar, sempre — o
-	# tranco de soltar da mão (de lado, em zigue-zague) parecia desbico.
-	player_rig.launch(player.global_position + Vector3(0.2, 1.18, -0.3), 22.0, 50.0, Wind.get_direction())
-	player.look_at_point(player_rig.body.x)
+	# Começa NA MÃO, pertinho (linha curta): desbicando (toques) ela sobe e, dando linha
+	# (arrastar para cima), vai para longe e mais alto. Solta no primeiro comando.
+	player_rig.launch_in_hand(player.global_position + Vector3(0.2, 1.18, -0.3), Wind.get_direction())
+	player.look_at_point(player_rig.body.x + Vector3.UP * 1.0)
 	EventBus.kite_launched.emit()
 
 

@@ -186,7 +186,7 @@ func launch(hand: Vector3, length: float, elevation_deg: float, direction: Vecto
 ## primeiro desbico (release_hold).
 func launch_in_hand(hand: Vector3, facing: Vector3) -> void:
 	var dir := Vector3(facing.x, 0.0, facing.z).normalized()
-	launch(hand, 2.6, 38.0, dir)
+	launch(hand, 3.2 if is_local_player else 2.6, 38.0, dir)
 	held = true
 	_held_x = body.x
 	_held_q = body.q
@@ -352,6 +352,10 @@ func _update_spool(dt: float) -> void:
 		var f_grip := minf(grip * grip * GRIP_MAX, f_cap)
 		feed_speed += ((rope.tension_hand - f_grip) / FEED_MASS - FEED_DAMP * feed_speed) * dt
 		feed_speed = maxf(feed_speed, 0.0)
+		# DESCARREGAR (pipa do jogador): com a mão aberta a linha corre com o vento
+		# mesmo com a pipa puxando pouco (alta, perto da cabeça).
+		if flight != null and grip < 0.6 and not held:
+			feed_speed = maxf(feed_speed, (0.6 - grip) / 0.6 * 2.0)
 	else:
 		feed_speed = 0.0
 	var out := feed_speed * dt

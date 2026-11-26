@@ -21,6 +21,9 @@ var node_area: float = 0.003
 var pinned_index: int = -1
 var pin_pos := Vector3.ZERO
 var pin_time: float = 0.0
+var _clock: float = 0.0
+## Aceleração da tremulação em S (m/s² com 6 m/s de vento).
+const FLUTTER_ACC := 26.0
 
 
 func _init(p_body: KiteRigidBody, p_profile: KiteProfile) -> void:
@@ -62,11 +65,28 @@ func compute_forces() -> void:
 ## explícito por tick fazia a rabiola puxar diferente conforme a taxa de física).
 func predict(h: float) -> void:
 	var c := 0.5 * RHO * profile.tail_cd * node_area * inv_m
-	for i in pos.size():
+	# Tremulação: as tiras soltam vórtices e a rabiola ondula em S (onda que corre da
+	# pipa para a ponta, mais forte e rápida com mais vento) — não fica uma vara reta.
+	_clock += h
+	var ws := _wind.length()
+	var wdir := _wind / ws if ws > 0.3 else Vector3.FORWARD
+	var amp := FLUTTER_ACC * clampf(ws / 6.0, 0.2, 1.8) * clampf(ws / 6.0, 0.2, 1.8)
+	var om := 5.0 + 1.2 * ws
+	var n := pos.size()
+	for i in n:
 		prev[i] = pos[i]
 		var v := vel[i]
 		var k := c * (_wind - v).length() * h
 		v = (v + GRAVITY * h + _wind * k) / (1.0 + k)
+		if i > 0 and amp > 0.0:
+			var along := pos[i] - pos[i - 1]
+			var side := along.cross(wdir)
+			if side.length_squared() < 1e-6:
+				side = along.cross(Vector3.UP)
+			if side.length_squared() > 1e-6:
+				side = side.normalized()
+				var ramp := float(i) / float(n)
+				v += side * (amp * (0.35 + ramp) * sin(om * _clock - float(i) * 0.85)) * h
 		vel[i] = v
 		pos[i] += v * h
 

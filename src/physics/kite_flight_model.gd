@@ -31,26 +31,26 @@ extends RefCounted
 ## Os parâmetros são estáticos para a área de testes ajustar ao vivo.
 
 ## Eficiência da vela (sustentação/arrasto) e peso equivalente (m/s).
-static var E := 1.8
+static var E := 2.1
 static var G := 3.0
 ## Guiar: ganho da curva, velocidade somada, inclinação máxima do cabresto (rad).
 static var TURN_K := 0.5
 static var TURN_V0 := 6.0
 static var BANK_MAX := 0.62
 ## Tempos de resposta (s) para a pipa M; P × 0,7 e G × 1,5.
-static var SPEED_TAU := 0.35
+static var SPEED_TAU := 0.28
 static var BANK_TAU := 0.16
-## A rabiola puxa o bico para cima quando o jogador para (rad/s por sen ψ), depois
-## de RESTORE_DELAY s sem comando.
-static var UP_RESTORE := 0.16
-static var RESTORE_DELAY := 2.0
+## Parou de mexer: a rabiola endireita o bico (rad/s por sen do erro) e a pipa volta
+## para o meio da janela, depois de RESTORE_DELAY s sem comando.
+static var UP_RESTORE := 1.2
+static var RESTORE_DELAY := 0.6
 ## Força do puxão (quanto a velocidade de recolher soma ao vento aparente).
-static var PULL_GAIN := 1.8
+static var PULL_GAIN := 2.4
 ## DESBICO (pipa M): giro de um balanço que rende inteiro (rad), tempo do balanço (s),
 ## arrancada de cada puxadinha (m/s) e pausa que recomeça a sequência pela esquerda.
-static var SWING_AMP := 0.87
-static var SWING_TAU := 0.26
-static var TUG_DV := 2.0
+static var SWING_AMP := 1.15
+static var SWING_TAU := 0.28
+static var TUG_DV := 3.2
 static var TAP_RESET := 0.45
 ## Quanto o primeiro balanço da sequência rende (centra o vaivém no rumo).
 static var FIRST_SWING := 0.6
@@ -63,10 +63,18 @@ const SIZE_SWING_TAU := [0.7, 1.0, 1.45]
 const SIZE_TUG := [0.85, 1.0, 1.15]
 ## Tranco: o giro anterior para em LOCK_TIME (linha esticada).
 const LOCK_TIME := 0.045
-## Inclinação visual por velocidade de giro do balanço (rad por rad/s).
-const ROLL_PER_W := 0.1
+## Inclinação por velocidade de giro do balanço (rad por rad/s).
+const ROLL_PER_W := 0.13
+## Tremida do vento: oscilador do bico/inclinação (rad/s de frequência natural,
+## amortecimento) forçado pelas rajadas laterais — a pipa nunca fica "dura".
+const WOB_W := 6.5
+const WOB_Z := 0.22
+const WOB_GAIN := 0.14
+## Mola da inclinação (frequência natural rad/s, amortecimento).
+const ROLL_W := 13.0
+const ROLL_Z := 0.45
 ## Dando linha, a pipa se afasta no máximo a esta velocidade (m/s).
-const V_OUT_MAX := 6.0
+const V_OUT_MAX := 4.0
 
 var rig: KiteRig
 var heading := 0.0       ## rumo do bico (rad): 0 = para cima, + = direita do pipeiro
@@ -93,8 +101,14 @@ var _pending_dv := 0.0
 var _tug := 0.0
 var _x_set := Vector3.ZERO
 var _hd_last := Vector3.ZERO
-var _pivot_key := -1
+var _pivot_key := -2
 var _tap_queue: Array[float] = []
+var _pivot_blend := 0.0
+var _wob := 0.0
+var _wob_v := 0.0
+var _w_lat_avg := 0.0
+var _roll_v := 0.0
+var _pitch := -0.22
 
 
 func _init(p_rig: KiteRig) -> void:
@@ -222,14 +236,19 @@ func step(h: float) -> void:
 	up_t = up_t.normalized() if up_t.length() > 0.02 else Vector3.FORWARD
 	var right_t := ld.cross(up_t).normalized()
 	if key != _pivot_key:
-		# Mudou o ponto de apoio: o rumo é remedido no novo referencial (o bico não pula).
+		# Mudou o ponto de apoio: o rumo é remedido no novo referencial (o bico não pula)
+		# e o raio novo chega aos poucos — sem isso a troca virava um "puxão" fantasma
+		# (a tração disparava e a linha arrebentava sozinha com a pipa longe).
 		var nose: Vector3 = b.q * Vector3.UP
 		heading = atan2(nose.dot(right_t), nose.dot(up_t))
+		if _pivot_key != -2:
+			_pivot_blend = 0.35
 		_pivot_key = key
+	_pivot_blend = maxf(_pivot_blend - h, 0.0)
 	var r_t := maxf(pivot_len * SAG, 0.8)
 	# Velocidade com que a linha puxa a pipa (mão indo para trás, linha recolhida);
 	# negativa = linha saindo (dando linha).
-	var u := (d0 - r_t) / h
+	var u := 0.0 if _pivot_blend > 0.0 else (d0 - r_t) / h
 	_pull_rate = lerpf(_pull_rate, clampf(u, -8.0, 12.0), minf(1.0, h / 0.1))
 	# Vento.
 	var wind := Wind.sample(p)
@@ -257,7 +276,9 @@ func step(h: float) -> void:
 		yaw_rate *= exp(-h / 0.012)
 		if _lock <= 0.0:
 			yaw_rate += _pending
-			speed += _pending_dv
+			# A arrancada vem do vento na vela: lá no alto da janela (bem em cima da
+			# cabeça) quase não há vento de frente e o tranco quase não empurra.
+			speed += _pending_dv * clampf(w_n / 3.0, 0.15, 1.2)
 			_pending = 0.0
 			_pending_dv = 0.0
 	var tau := SWING_TAU * float(SIZE_SWING_TAU[sz])
@@ -271,20 +292,42 @@ func step(h: float) -> void:
 	var turn := TURN_K * float(SIZE_TURN[sz]) * (maxf(speed, 0.0) + TURN_V0) * sin(steer_bank)
 	if absf(steer) > 0.05:
 		_since_input = 0.0
-	# Parado (sem toque, sem guiar, sem puxar): a rabiola endireita o bico devagar.
+	# Parado (sem toque, sem guiar, sem puxar): a rabiola endireita o bico — para cima
+	# e um pouco para o meio da janela (a pipa volta para a posição normal, reta,
+	# a favor do vento).
 	var restore := 0.0
 	if _since_input > RESTORE_DELAY and _pull_rate < 0.6:
-		var ramp := minf((_since_input - RESTORE_DELAY) / 1.0, 1.0)
-		restore = -UP_RESTORE * sin(heading) * clampf(prof.tail_length / 2.6, 0.5, 1.6) * ramp
+		var ramp := minf((_since_input - RESTORE_DELAY) / 0.5, 1.0)
+		var wd := Vector3(wind.x, 0.0, wind.z)
+		var lat := 0.0
+		if wd.length() > 0.1:
+			lat = ld.dot(wd.normalized().cross(Vector3.UP))
+		var target := clampf(-lat * 1.3, -0.7, 0.7)
+		restore = -UP_RESTORE * sin(heading - target) * clampf(prof.tail_length / 2.6, 0.6, 1.5) * ramp
+	# Tremida do vento (rajada lateral força um oscilador leve no bico).
+	var w_lat := w_t.dot(right_t)
+	_w_lat_avg = lerpf(_w_lat_avg, w_lat, minf(1.0, h / 1.2))
+	var force := (w_lat - _w_lat_avg) * WOB_GAIN * WOB_W * WOB_W
+	_wob_v += (force - WOB_W * WOB_W * _wob - 2.0 * WOB_Z * WOB_W * _wob_v) * h
+	_wob += _wob_v * h
 	heading = wrapf(heading + (yaw_rate + turn + restore) * h, -PI, PI)
 	hd = up_t * cos(heading) + right_t * sin(heading)
 	# --- Movimento na esfera em volta do apoio. ---
 	var np := p + hd * speed * h
+	var r_new := r_t
+	if _pivot_blend > 0.0:
+		r_new = move_toward(d0, r_t, 2.5 * h)
+	elif d0 < r_t:
+		# Linha saindo (descarregando): a pipa vai para trás COM O VENTO (perde um pouco
+		# de altura e afasta), não reto ao longo da linha.
+		var wh := Vector3(wind.x, 0.0, wind.z)
+		var out_dir := ld
+		if wh.length() > 0.3:
+			out_dir = (ld + wh.normalized() * 1.2).normalized()
+		np += out_dir * minf(V_OUT_MAX * h, r_t - d0)
+		r_new = minf(r_t, (np - pivot).length())
 	var rel := np - pivot
 	var rl := rel.length()
-	var r_new := r_t
-	if d0 < r_t:
-		r_new = minf(r_t, d0 + V_OUT_MAX * h)
 	if rl > 0.01:
 		np = pivot + rel / rl * r_new
 	# Poste, fio, galho, casa: não atravessa (para no toque e escorrega). O teste é
@@ -310,8 +353,15 @@ func step(h: float) -> void:
 	y_axis = y_axis.normalized() if y_axis.length() > 0.01 else up_t
 	var z_axis := -ld2
 	var x_axis := y_axis.cross(z_axis).normalized()
-	bank = clampf(steer_bank + yaw_rate * ROLL_PER_W, -0.9, 0.9)
-	var basis := Basis(x_axis, y_axis, z_axis) * Basis(Vector3.UP, bank)
+	# Inclinação com mola (passa um pouco e volta: viva, não dura) e a tremida.
+	var bank_target := clampf(steer_bank + yaw_rate * ROLL_PER_W + _wob * 1.6, -1.0, 1.0)
+	_roll_v += ((bank_target - bank) * ROLL_W * ROLL_W - 2.0 * ROLL_Z * ROLL_W * _roll_v) * h
+	bank = clampf(bank + _roll_v * h, -1.1, 1.1)
+	# Ângulo da vela com a linha: em voo o topo deita para trás (contra o vento);
+	# na arrancada/puxão ela "abaixa a cabeça" para frente, devagar, ela levanta.
+	var pitch_target := clampf(-0.32 + 0.035 * speed - 0.025 * maxf(w_eff - speed, 0.0), -0.45, 0.05)
+	_pitch = lerpf(_pitch, pitch_target, minf(1.0, h / 0.12))
+	var basis := Basis(x_axis, y_axis, z_axis).rotated(z_axis, _wob) * Basis(Vector3.RIGHT, _pitch) * Basis(Vector3.UP, bank)
 	var q_new := basis.get_rotation_quaternion()
 	var x_new := np - q_new * b.tow_local
 	var inv_h := 1.0 / h
@@ -330,10 +380,20 @@ func step(h: float) -> void:
 	_tug = maxf(_tug - h / 0.16, 0.0)
 	rig.flap = tug_visual()
 	rig.bank = 0.0
-	# Tração na linha (pressão dinâmica × área × coeficiente) + tranco do toque.
-	var w_line := maxf(w_n + _pull_rate, 0.0)
-	tension = 0.5 * KiteRigidBody.RHO * (w_line * w_line + 0.5 * speed * speed) * (b._half_area[0] + b._half_area[1]) * 2.2
-	tension += tug_visual() * (2.5 + 1.5 * float(sz))
+	# Tração na linha: pressão dinâmica do vento aparente × área × coeficiente da vela
+	# (~10 N para a M com 8 m/s). Voando parada ela NUNCA chega perto de arrebentar a
+	# linha (no máximo metade do que a linha aguenta); só puxão, tranco e combate.
+	var area := b._half_area[0] + b._half_area[1]
+	var w_air := maxf(w_n, 0.0) + 0.3 * w_t.length()
+	var base := 0.5 * KiteRigidBody.RHO * (w_air * w_air + 0.35 * speed * speed) * area * 1.1
+	var brk := rig.line_type.break_tension if rig.line_type else 40.0
+	base = minf(base, 0.5 * brk)
+	var pull_extra := 0.5 * KiteRigidBody.RHO * maxf(_pull_rate, 0.0) * (2.0 * w_air + maxf(_pull_rate, 0.0)) * area * 1.1
+	tension = minf(base + pull_extra, 0.9 * brk) + tug_visual() * (2.5 + 1.5 * float(sz))
+	# Linha frouxa (saindo mais rápido do que a pipa se afasta) quase não puxa: é isso
+	# que limita o "descarregar" à velocidade com que o vento leva a pipa.
+	var slack := (r_t - d0) / maxf(0.02 * r_t, 0.15)
+	tension *= clampf(1.0 - slack, 0.08, 1.0)
 
 
 ## Área de testes: ler/escrever parâmetro pelo nome.

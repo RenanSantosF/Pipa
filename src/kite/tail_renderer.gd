@@ -20,6 +20,7 @@ const BLOCK := 4
 var rig: KiteRig
 var _im := ImmediateMesh.new()
 var _mat := StandardMaterial3D.new()
+var _mat_far := StandardMaterial3D.new()
 var _pts := PackedVector3Array()
 var _curve := PackedVector3Array()
 
@@ -34,6 +35,11 @@ func _ready() -> void:
 	_mat.vertex_color_use_as_albedo = true
 	_mat.vertex_color_is_srgb = true
 	_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	_mat_far.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_mat_far.vertex_color_use_as_albedo = true
+	_mat_far.vertex_color_is_srgb = true
+	_mat_far.cull_mode = BaseMaterial3D.CULL_DISABLED
+	_mat_far.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 
 
 func bind(p_rig: KiteRig) -> void:
@@ -72,7 +78,7 @@ func _process(_delta: float) -> void:
 	# Curva lisa (Catmull-Rom) entre os nós: a rabiola é maleável, não um serrote.
 	_curve.resize(0)
 	var n := _pts.size()
-	var sub := 1 if far else 3
+	var sub := 2 if far else 3
 	for i in n - 1:
 		var p0 := _pts[maxi(i - 1, 0)]
 		var p1 := _pts[i]
@@ -92,14 +98,34 @@ func _process(_delta: float) -> void:
 		_tri(a - side, a + side, b + side, string_col)
 		_tri(a - side, b + side, b - side, string_col)
 	if far:
-		# Longe: uma fita colorida fina (mesma silhueta, bem mais barato).
-		for i in _curve.size() - 1:
+		# Longe: uma fita LISA e afinando até a ponta, com largura de ~2 px na tela e
+		# cor misturada (os blocos de cor serrilhavam e piscavam com a resolução baixa).
+		_im.surface_end()
+		_im.surface_begin(Mesh.PRIMITIVE_TRIANGLES, _mat_far)
+		var col_far := prof.tail_color_a.lerp(prof.tail_color_b, 0.5)
+		var nc := _curve.size()
+		for i in nc - 1:
 			var a0 := _curve[i]
 			var b0 := _curve[i + 1]
-			var sd := (b0 - a0).cross(cam_pos - a0).normalized() * STRIP_LEN * k * 0.45
-			var col := prof.tail_color_a if (i / 2) % 2 == 0 else prof.tail_color_b
-			_tri(a0 - sd, a0 + sd, b0 + sd, col)
-			_tri(a0 - sd, b0 + sd, b0 - sd, col)
+			var u0 := float(i) / float(nc - 1)
+			var u1 := float(i + 1) / float(nc - 1)
+			var wa := maxf(cam_pos.distance_to(a0) * 0.0021, STRIP_LEN * k * 0.12) * (1.0 - 0.65 * u0)
+			var wb := maxf(cam_pos.distance_to(b0) * 0.0021, STRIP_LEN * k * 0.12) * (1.0 - 0.65 * u1)
+			var dir := (b0 - a0).cross(cam_pos - a0).normalized()
+			var ca := Color(col_far, 0.85 - 0.45 * u0)
+			var cb := Color(col_far, 0.85 - 0.45 * u1)
+			_im.surface_set_color(ca)
+			_im.surface_add_vertex(a0 - dir * wa)
+			_im.surface_set_color(ca)
+			_im.surface_add_vertex(a0 + dir * wa)
+			_im.surface_set_color(cb)
+			_im.surface_add_vertex(b0 + dir * wb)
+			_im.surface_set_color(ca)
+			_im.surface_add_vertex(a0 - dir * wa)
+			_im.surface_set_color(cb)
+			_im.surface_add_vertex(b0 + dir * wb)
+			_im.surface_set_color(cb)
+			_im.surface_add_vertex(b0 - dir * wb)
 		_im.surface_end()
 		return
 	var t_now := Time.get_ticks_msec() / 1000.0

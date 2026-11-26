@@ -58,8 +58,8 @@ const GUIDE_DEAD_PX := 18.0
 ## que a pipa deve ocupar e zona livre (fração do campo) em que ela anda sem a
 ## câmera ir atrás.
 const BASE_FOV := 72.0
-const MIN_FOV := 24.0
-const KITE_SCREEN_FRACTION := 0.085
+const MIN_FOV := 52.0
+const KITE_SCREEN_FRACTION := 0.06
 const FREE_ZONE := 0.18
 const GUIDE_FULL_PX := 110.0
 ## Erro de rumo (rad) que já pede cabresto todo para um lado.
@@ -202,6 +202,9 @@ func _drive_rig(delta: float) -> void:
 	#    encostou, como um manche em qualquer lugar da tela) é para onde o bico deve
 	#    apontar na tela. Vira só um COMANDO DE CABRESTO (−1..1); o modelo de voo
 	#    inclina, curva e acelera com a inércia dele.
+	if rig.flight != null and rig.held and (intent.desbico_toques > 0 or not intent.recolhe.is_empty() \
+			or intent.grip < 0.95 or intent.pull_held or (intent.guide_active and intent.guide_vec.length() > GUIDE_DEAD_PX)):
+		rig.release_hold()   # pipa na mão: o primeiro comando solta
 	if rig.flight != null:
 		# Cada toque entra com atraso fixo de um tick a partir da hora em que o dedo
 		# soltou: o intervalo entre toques fica exato (o ritmo é o que o jogador fez).

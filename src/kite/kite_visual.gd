@@ -13,8 +13,8 @@ const BRIDLE := Color(0.95, 0.94, 0.9)
 const GRID_V := 16
 const GRID_U := 12
 ## Distância (m) a partir da qual a pipa é desenhada maior, e o máximo.
-const VIS_SCALE_DIST := 26.0
-const VIS_SCALE_MAX := 1.6
+const VIS_SCALE_DIST := 12.0
+const VIS_SCALE_MAX := 3.2
 
 var rig: KiteRig
 var _paper: ShaderMaterial
@@ -49,7 +49,7 @@ func _process(_delta: float) -> void:
 	# Inclinação do desbico: a pipa deita em volta da vareta (só o desenho; a física
 	# do balanço já está no giro do bico).
 	var basis := Basis(b.q) * Basis(Vector3.UP, rig.bank)
-	# Longe da câmera a pipa é DESENHADA maior (até 1,6×), em volta do nó do cabresto
+	# Longe da câmera a pipa é DESENHADA maior (até 3×), em volta do nó do cabresto
 	# (a linha continua presa no mesmo ponto): no celular uma pipa de 65 cm a 40 m
 	# vira um pontinho e o balanço do desbico some.
 	var k := 1.0
