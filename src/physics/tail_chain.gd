@@ -23,7 +23,7 @@ var pin_pos := Vector3.ZERO
 var pin_time: float = 0.0
 var _clock: float = 0.0
 ## Aceleração da tremulação em S (m/s² com 6 m/s de vento).
-const FLUTTER_ACC := 26.0
+const FLUTTER_ACC := 9.0
 
 
 func _init(p_body: KiteRigidBody, p_profile: KiteProfile) -> void:
@@ -70,7 +70,7 @@ func predict(h: float) -> void:
 	_clock += h
 	var ws := _wind.length()
 	var wdir := _wind / ws if ws > 0.3 else Vector3.FORWARD
-	var amp := FLUTTER_ACC * clampf(ws / 6.0, 0.2, 1.8) * clampf(ws / 6.0, 0.2, 1.8)
+	var amp := FLUTTER_ACC * clampf(ws / 6.0, 0.3, 1.3) * clampf(ws / 6.0, 0.3, 1.3)
 	var om := 5.0 + 1.2 * ws
 	var n := pos.size()
 	for i in n:

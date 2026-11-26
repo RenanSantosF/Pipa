@@ -34,6 +34,12 @@ func register(rig: KiteRig) -> void:
 func _physics_process(dt: float) -> void:
 	var t0 := Time.get_ticks_usec()
 	_collect_new_rigs()
+	# Corpo dos vizinhos como obstáculo para a linha (anda junto com eles).
+	if obstacles != null:
+		var feet: Array = []
+		for n in get_tree().get_nodes_in_group(&"people"):
+			feet.append((n as Node3D).global_position)
+		obstacles.set_people(feet)
 	var sub := GameConfig.physics_substeps()
 	var h := dt / float(sub)
 	for r in rigs:

@@ -58,7 +58,7 @@ const GUIDE_DEAD_PX := 18.0
 ## que a pipa deve ocupar e zona livre (fração do campo) em que ela anda sem a
 ## câmera ir atrás.
 const BASE_FOV := 72.0
-const MIN_FOV := 52.0
+const MIN_FOV := 46.0
 const KITE_SCREEN_FRACTION := 0.06
 const FREE_ZONE := 0.18
 const GUIDE_FULL_PX := 110.0

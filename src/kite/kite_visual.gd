@@ -14,7 +14,8 @@ const GRID_V := 16
 const GRID_U := 12
 ## Distância (m) a partir da qual a pipa é desenhada maior, e o máximo.
 const VIS_SCALE_DIST := 12.0
-const VIS_SCALE_MAX := 3.2
+## 1,0 = tamanho real (escala 1:1, como pediu o jogador).
+const VIS_SCALE_MAX := 1.0
 
 var rig: KiteRig
 var _paper: ShaderMaterial
@@ -174,14 +175,34 @@ func _update_bridle(dl: float, dr: float) -> void:
 	var yc := nose.y - _profile.cross_at * h
 	var yl := nose.y - _profile.lower_at * h
 	var knot := rig.body.tow_local + Vector3(rig.bridle_offset.x, rig.bridle_offset.y, 0.0) if rig and not rig.loose else rig.body.tow_local
-	# Cabresto de 2 pernas: no cruzamento da travessa e mais abaixo na vareta.
+	# Cabresto de 2 pernas: no cruzamento da travessa e mais abaixo na vareta. É
+	# LINHA: esticado com a pipa puxando; folgado, faz barriga para baixo e tremula.
 	var low_y := lerpf(yl, _corners[3].y, 0.35)
 	var anchors := [Vector3(0, yc - 0.01, 0), Vector3(0, low_y, 0)]
+	var t_line := rig.tension if rig else 0.0
+	var slack := clampf(1.0 - t_line / 3.0, 0.0, 1.0)
+	var g_local: Vector3 = (rig.body.q.inverse() * Vector3.DOWN) if rig and rig.body else Vector3.DOWN
+	var t_now := Time.get_ticks_msec() / 1000.0
 	_bridle.clear_surfaces()
 	_bridle.surface_begin(Mesh.PRIMITIVE_LINES, _bridle_mat)
-	for a in anchors:
-		_bridle.surface_add_vertex(knot)
-		_bridle.surface_add_vertex(a)
+	for li in anchors.size():
+		var a: Vector3 = anchors[li]
+		var leg := knot - a
+		var ll := leg.length()
+		var dirl := leg / maxf(ll, 0.001)
+		var sag_dir := g_local - dirl * g_local.dot(dirl)
+		sag_dir = sag_dir.normalized() if sag_dir.length() > 0.01 else Vector3.DOWN
+		var side := dirl.cross(sag_dir)
+		var sag := ll * (0.012 + 0.05 * slack)
+		var flick := ll * (0.004 + 0.012 * slack) * sin(t_now * 23.0 + float(li) * 1.7)
+		var prev := a
+		for k in range(1, 9):
+			var u := float(k) / 8.0
+			var bump := sin(PI * u)
+			var pt := a + leg * u + sag_dir * (sag * bump) + side * (flick * bump)
+			_bridle.surface_add_vertex(prev)
+			_bridle.surface_add_vertex(pt)
+			prev = pt
 	# Linha de contorno de cima: da cabeça às pontas (envergadas) da travessa.
 	for sx in [-1.0, 1.0]:
 		var tip := Vector3(sx * hw, yc, _bow_z(sx * hw, dl, dr))

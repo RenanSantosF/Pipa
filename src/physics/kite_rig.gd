@@ -147,6 +147,13 @@ func launch(hand: Vector3, length: float, elevation_deg: float, direction: Vecto
 		# Vizinhos: rabiola com menos nós (mesma física, menos custo).
 		profile.tail_nodes = mini(profile.tail_nodes, [6, 8, 10][GameConfig.quality])
 	body = KiteRigidBody.new(profile)
+	if is_local_player:
+		# Pipa do jogador (modelo de voo): o nó do cabresto fica onde fica na pipa de
+		# verdade — na altura logo abaixo da travessa (~38% da altura, a partir da
+		# cabeça) e uns 40% da altura à frente do papel. Antes ele ficava rente à
+		# cabeça e a linha parecia sair da ponta de cima.
+		var hh := profile.height
+		body.tow_local = Vector3(0.0, body.corners[0].y - 0.38 * hh, 0.40 * hh)
 	var el := deg_to_rad(elevation_deg)
 	var dir_h := Vector3(direction.x, 0.0, direction.z).normalized()
 	var d := (dir_h * cos(el) + Vector3.UP * sin(el)).normalized()

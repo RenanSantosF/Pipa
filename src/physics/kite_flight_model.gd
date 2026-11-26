@@ -189,12 +189,15 @@ func tap_at(delay: float) -> void:
 ## DESBICO: um toque = uma puxadinha (tranco + balanço para o próximo lado).
 func tap() -> void:
 	var sz := _size()
-	if _since_tap > TAP_RESET:
+	# Os lados SEMPRE alternam: se o último balanço foi para a esquerda, o próximo é
+	# para a direita, aconteça o que acontecer (o primeiro de todos é para a esquerda).
+	var fresh := _since_tap > TAP_RESET
+	if fresh:
 		taps = 0
 	taps += 1
 	tap_count += 1
-	swing_side = -1.0 if taps % 2 == 1 else 1.0
-	var amp := SWING_AMP * float(SIZE_SWING_AMP[sz]) * (FIRST_SWING if taps == 1 else 1.0)
+	swing_side = 1.0 if swing_side < 0.0 else -1.0
+	var amp := SWING_AMP * float(SIZE_SWING_AMP[sz]) * (FIRST_SWING if fresh else 1.0)
 	_pending = swing_side * amp / (SWING_TAU * float(SIZE_SWING_TAU[sz]))
 	_pending_dv = TUG_DV * float(SIZE_TUG[sz])
 	_lock = LOCK_TIME
@@ -393,7 +396,9 @@ func step(h: float) -> void:
 	var brk := rig.line_type.break_tension if rig.line_type else 40.0
 	base = minf(base, 0.5 * brk)
 	var pull_extra := 0.5 * KiteRigidBody.RHO * maxf(_pull_rate, 0.0) * (2.0 * w_air + maxf(_pull_rate, 0.0)) * area * 1.1
-	tension = minf(base + pull_extra, 0.9 * brk) + tug_visual() * (2.5 + 1.5 * float(sz))
+	# Nunca passa de 85% do que a linha aguenta pelo voo/puxão/tranco: a linha só
+	# arrebenta no combate (cerol) ou puxando a pipa enroscada.
+	tension = minf(base + pull_extra + tug_visual() * (2.5 + 1.5 * float(sz)), 0.85 * brk)
 	# Linha frouxa (saindo mais rápido do que a pipa se afasta) quase não puxa: é isso
 	# que limita o "descarregar" à velocidade com que o vento leva a pipa.
 	slack = maxf(r_t - d0, 0.0)

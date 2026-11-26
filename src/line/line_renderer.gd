@@ -85,6 +85,7 @@ func _process(_delta: float) -> void:
 
 	var m := _smooth.size()
 	var vis_d := maxf(_diameter * 1.6, 0.001)
+	var to_sun := _sun_dir()
 	_im.surface_begin(Mesh.PRIMITIVE_TRIANGLE_STRIP, _mat)
 	for i in m:
 		var p := _smooth[i]
@@ -98,7 +99,15 @@ func _process(_delta: float) -> void:
 		var half := maxf(dist * px * 0.75, vis_d * 0.5)
 		side = side.normalized() * half
 		var fade := clampf(1.0 - (dist - NEAR) / (FAR - NEAR), 0.0, 1.0)
-		var col := Color(1, 1, 1, lerpf(FAR_ALPHA, 0.85, fade * fade))
+		var alpha := lerpf(FAR_ALPHA, 0.85, fade * fade)
+		# Brilho do sol: linha de pipa (fio encerado/cerol) reflete onde ela fica
+		# perpendicular à bissetriz sol–olho — um trecho que acende e corre pela linha
+		# quando ela balança (de longe é o que mais denuncia a linha no céu).
+		var tn := tangent.normalized() if tangent.length_squared() > 1e-10 else Vector3.UP
+		var hv := (to_sun + to_cam / maxf(dist, 0.001)).normalized()
+		var g := pow(clampf(1.0 - absf(tn.dot(hv)), 0.0, 1.0), 14.0)
+		alpha = maxf(alpha, g * 0.75)
+		var col := Color(1.0 + 0.6 * g, 1.0 + 0.55 * g, 1.0 + 0.4 * g, alpha)
 		_im.surface_set_color(col)
 		_im.surface_set_uv(Vector2(-1.0, 0.0))
 		_im.surface_add_vertex(p - side)
@@ -106,6 +115,18 @@ func _process(_delta: float) -> void:
 		_im.surface_set_uv(Vector2(1.0, 0.0))
 		_im.surface_add_vertex(p + side)
 	_im.surface_end()
+
+
+var _sun_cache := Vector3.ZERO
+
+
+func _sun_dir() -> Vector3:
+	if _sun_cache == Vector3.ZERO:
+		_sun_cache = Vector3(0.3, 0.8, 0.5).normalized()
+		var lights := get_tree().root.find_children("*", "DirectionalLight3D", true, false)
+		if not lights.is_empty():
+			_sun_cache = (lights[0] as DirectionalLight3D).global_basis.z.normalized()
+	return _sun_cache
 
 
 ## Trecho encostado em outra linha: desenha reto passando pelos pontos de contato

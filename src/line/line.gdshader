@@ -8,6 +8,7 @@ uniform vec4 line_color : source_color = vec4(0.96, 0.95, 0.9, 1.0);
 
 void fragment() {
 	float a = 1.0 - abs(UV.x);
-	ALBEDO = line_color.rgb;
+	// A cor do vértice também traz o BRILHO do sol na linha (trecho que reflete).
+	ALBEDO = min(line_color.rgb * COLOR.rgb, vec3(1.0));
 	ALPHA = clamp(a * COLOR.a * 1.15, 0.0, 1.0);
 }

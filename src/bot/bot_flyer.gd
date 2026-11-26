@@ -39,6 +39,7 @@ var _rng := RandomNumberGenerator.new()
 
 
 func _ready() -> void:
+	add_to_group(&"people")   # a linha encosta no corpo dele
 	process_physics_priority = -50
 	_rng.seed = randi()  # segue a semente global (testes reproduzíveis com --seed)
 	_style_release = _rng.randf() < 0.5

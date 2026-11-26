@@ -44,6 +44,7 @@ const MATERIALS := {
 	"trave": [0.35, 2.6, 12.0, 0.8, 12.0, 22.0],
 	"telhado": [0.55, 99.0, 10.0, 0.9, 1000.0, 1000.0],
 	"muro": [0.5, 99.0, 11.0, 0.9, 1000.0, 1000.0],
+	"pessoa": [0.5, 99.0, 99.0, 99.0, 1000.0, 1000.0],   # encosta e escorrega, nunca prende
 }
 
 ## Cada entrada:
@@ -55,6 +56,43 @@ var entries: Array = []
 ## ela (fio que nasce dentro do poste, galho que sai do tronco, cruzeta no poste).
 var _boxes: Array[AABB] = []
 var _overlaps: Dictionary = {}
+## Pessoas (vizinhos): cápsulas que andam, atualizadas a cada quadro (set_people).
+var _dyn: PackedInt32Array = PackedInt32Array()
+
+
+## Corpo dos vizinhos (pés de cada um): a linha encosta e escorrega neles em vez de
+## atravessar o personagem.
+func set_people(feet: Array) -> void:
+	while _dyn.size() < feet.size():
+		_dyn.append(entries.size())
+		entries.append([Kind.CAPSULE, Vector3(0, -1000, 0), Vector3(0, -999, 0), 0.22, "pessoa"])
+		_boxes.append(AABB(Vector3(0, -1001, 0), Vector3.ONE))
+	for k in _dyn.size():
+		var idx := _dyn[k]
+		var e: Array = entries[idx]
+		if k < feet.size():
+			var f: Vector3 = feet[k]
+			e[1] = f + Vector3.UP * 0.32
+			e[2] = f + Vector3.UP * 1.5
+			_boxes[idx] = AABB(f + Vector3(-0.24, 0.08, -0.24), Vector3(0.48, 1.66, 0.48))
+		else:
+			e[1] = Vector3(0, -1000, 0)
+			e[2] = Vector3(0, -999, 0)
+			_boxes[idx] = AABB(Vector3(0, -1001, 0), Vector3.ONE)
+
+
+func _dyn_near(box: AABB, out: PackedInt32Array) -> PackedInt32Array:
+	if _dyn.is_empty():
+		return out
+	var res := out
+	var copied := false
+	for idx in _dyn:
+		if _boxes[idx].intersects(box):
+			if not copied:
+				res = out.duplicate()
+				copied = true
+			res.append(idx)
+	return res
 var _grid: Dictionary = {}
 ## Altura do topo mais alto de cada célula: linha acima disso nem é testada.
 var _cell_top: Dictionary = {}
@@ -106,12 +144,18 @@ func _insert(e: Array, mn: Vector3, mx: Vector3) -> void:
 ## Algum obstáculo da célula de p chega até a altura de p (+ folga)?
 func below_top(p: Vector3, margin: float = 0.3) -> bool:
 	var key := Vector2i(floori(p.x / CELL), floori(p.z / CELL))
-	return p.y < float(_cell_top.get(key, -INF)) + margin
+	if p.y < float(_cell_top.get(key, -INF)) + margin:
+		return true
+	for idx in _dyn:
+		if _boxes[idx].grow(margin + 1.0).has_point(p):
+			return true
+	return false
 
 
 func query(p: Vector3) -> PackedInt32Array:
 	var key := Vector2i(floori(p.x / CELL), floori(p.z / CELL))
-	return _grid.get(key, PackedInt32Array())
+	var base: PackedInt32Array = _grid.get(key, PackedInt32Array())
+	return _dyn_near(AABB(p, Vector3.ZERO).grow(1.5), base) if not _dyn.is_empty() else base
 
 
 ## Obstáculos das células tocadas pelo trecho a–b (um trecho longo de linha pode
@@ -119,15 +163,17 @@ func query(p: Vector3) -> PackedInt32Array:
 func query_segment(a: Vector3, b: Vector3) -> PackedInt32Array:
 	var ka := Vector2i(floori(a.x / CELL), floori(a.z / CELL))
 	var kb := Vector2i(floori(b.x / CELL), floori(b.z / CELL))
+	var seg_box := AABB(a, Vector3.ZERO).expand(b).grow(1.5)
 	if ka == kb:
-		return _grid.get(ka, PackedInt32Array())
+		var base: PackedInt32Array = _grid.get(ka, PackedInt32Array())
+		return _dyn_near(seg_box, base) if not _dyn.is_empty() else base
 	var out := PackedInt32Array()
 	for gx in range(mini(ka.x, kb.x), maxi(ka.x, kb.x) + 1):
 		for gz in range(mini(ka.y, kb.y), maxi(ka.y, kb.y) + 1):
 			for idx in _grid.get(Vector2i(gx, gz), PackedInt32Array()):
 				if not out.has(idx):
 					out.append(idx)
-	return out
+	return _dyn_near(seg_box, out) if not _dyn.is_empty() else out
 
 
 ## Altura do topo do que houver em (x, z): laje/telhado (caixas) ou o chão.
@@ -227,6 +273,20 @@ static func _box_exit_side(box: AABB, p: Vector3, nrm: Vector3) -> Array:
 	return _box_exit(box, p)
 
 
+## Saída de um ponto dentro da caixa pela face por onde ele entrou (vindo de `from`);
+## se `from` também está dentro, a face mais perto.
+static func _box_exit_from(box: AABB, p: Vector3, from: Vector3) -> Array:
+	if not box.has_point(from):
+		var hit := _segment_box(from, p, box)
+		if not hit.is_empty():
+			var n: Vector3 = hit[2]
+			var out := p
+			var axis := 0 if absf(n.x) > 0.5 else (1 if absf(n.y) > 0.5 else 2)
+			out[axis] = (box.end[axis] if n[axis] > 0.0 else box.position[axis]) + n[axis] * 0.003
+			return [out, n]
+	return _box_exit(box, p)
+
+
 ## Face de saída mais próxima de um ponto dentro da caixa: [ponto na face, normal].
 static func _box_exit(box: AABB, p: Vector3) -> Array:
 	var best := INF
@@ -252,6 +312,8 @@ static func _box_exit(box: AABB, p: Vector3) -> Array:
 func _overlaps_of(idx: int) -> PackedInt32Array:
 	if _overlaps.has(idx):
 		return _overlaps[idx]
+	if _dyn.has(idx):
+		return PackedInt32Array()   # pessoa anda: sem vizinhos fixos
 	var out := PackedInt32Array()
 	# Vizinhos que se sobrepõem OU estão a menos de 30 cm (laje logo acima do corpo
 	# da casa, fio que nasce no poste): o nó apoiado num não pode entrar no outro.
@@ -412,7 +474,7 @@ func _foliage_drag(rope: Rope, dt: float) -> void:
 func _absorb_nodes(rope: Rope) -> void:
 	var start := 1 if rope.hand_fixed else 0
 	for i in range(start, rope.pos.size()):
-		if rope.pin_obstacle[i] >= 0 or rope.contact_count() >= MAX_CONTACTS:
+		if rope.pin_obstacle[i] >= 0:
 			continue
 		var p := rope.pos[i]
 		if not below_top(p):
@@ -420,18 +482,28 @@ func _absorb_nodes(rope: Rope) -> void:
 		for idx in query(p):
 			if not _boxes[idx].has_point(p):
 				continue
-			if _contacts_on(rope, idx) >= _limit_for(idx):
+			# Nó DENTRO de casa/muro sempre vira contato (sem limite: linha dentro da
+			# caixa é pior do que um nó a mais); no fio/galho respeita o limite.
+			var e0: Array = entries[idx]
+			var inside_box: bool = e0[0] == Kind.BOX and (e0[1] as AABB).has_point(p)
+			if not inside_box and (rope.contact_count() >= MAX_CONTACTS or _contacts_on(rope, idx) >= _limit_for(idx)):
 				continue
 			var e: Array = entries[idx]
 			match e[0]:
 				Kind.CAPSULE:
 					var q: Vector3 = _axis_point(e[1], e[2], p)[0]
 					if p.distance_to(q) < float(e[3]) + LINE_RADIUS:
-						rope.set_contact(i, idx, _capsule_side(e[1], e[2], p, rope.vel[i] * -1.0))
+						var sn := _capsule_side(e[1], e[2], p, rope.vel[i] * -1.0)
+						rope.set_contact(i, idx, sn)
+						rope.pos[i] = q + sn * (float(e[3]) + LINE_RADIUS + 0.001)   # já na superfície
 				Kind.BOX:
 					var box: AABB = e[1]
 					if box.has_point(p):
-						rope.set_contact(i, idx, (_box_exit(box, p)[1] as Vector3))
+						# Sai pelo lado de onde o nó veio (posição do começo do quadro), não
+						# pela face mais perto (que podia ser a de baixo do telhado).
+						var ex := _box_exit_from(box, p, rope.frame_pos[i] if rope.frame_pos.size() == rope.pos.size() else p)
+						rope.set_contact(i, idx, ex[1] as Vector3)
+						rope.pos[i] = ex[0]
 			if rope.pin_obstacle[i] >= 0:
 				break
 
@@ -721,6 +793,12 @@ func _update_contacts(rope: Rope, dt: float) -> String:
 		# CONTATO DESLIZANTE. Linha reta deitada no meio de um telhado/laje não precisa
 		# de nó de contato (só apoia): solta para não esgotar o limite da caixa.
 		var flat_on_top: bool = e[0] == Kind.BOX and dev < 0.03 and rope.c_normal[i].y > 0.9
+		if flat_on_top and i < rope.rest.size() and rope.rest[i - 1] + rope.rest[i] < rope.segment_target * 1.6:
+			# Nó a mais no meio do telhado com a linha reta: some (os vizinhos apoiam).
+			rope.clear_contact(i)
+			rope.remove_node(i)
+			i -= 1
+			continue
 		if (dev < 0.04 and off_surface > 0.01) or slipped_off or off_surface > 0.35 or flat_on_top:
 			rope.clear_contact(i)
 			# Nó criado só para o contato (trecho curto) volta a ser um segmento só.
