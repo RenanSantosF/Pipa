@@ -150,6 +150,7 @@ func _ready() -> void:
 	player.input_router = input_router
 	player.rig = player_rig
 	player_rig.is_local_player = true
+	player_rig.physical = GameConfig.physical_flight
 	physics_world.register(player_rig)
 	physics_world.register(bot_rig)
 	bot.rig = bot_rig
@@ -300,6 +301,7 @@ func _attach(path: String) -> void:
 
 ## Nova pipa no ar (com a linha atual) e câmera virada para ela.
 func reset_kite() -> void:
+	player_rig.physical = GameConfig.physical_flight
 	player.look_at_point(player.global_position + Wind.get_direction() * 10.0 + Vector3.UP * 4.0)
 	# Começa NA MÃO, pertinho (linha curta): desbicando (toques) ela sobe e, dando linha
 	# (arrastar para cima), vai para longe e mais alto. Solta no primeiro comando.

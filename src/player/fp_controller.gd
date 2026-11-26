@@ -39,6 +39,8 @@ var _gravity: float = 9.8
 var _stroke_smooth: float = 0.0
 var _body_yaw: float = 0.0
 var _hand: KiteHand
+## Mão na linha da FÍSICA REAL (rig.physical): só posição do braço, pegada e carretel.
+var _line_hand: LineHand
 
 ## Curva da mão num desbico (m; negativo = mão vai para a frente e afrouxa a linha).
 const DESBICO_TIME := 0.46
@@ -172,6 +174,53 @@ func _physics_process(delta: float) -> void:
 		character.set_locomotion(Vector2(velocity.x, velocity.z).length())
 
 
+## FÍSICA REAL: os gestos viram SÓ movimentos da mão na linha (LineHand). Quem decide
+## o que a pipa faz é a linha (tração/folga), o cabresto, o vento, o peso e a rabiola.
+##   toque (qualquer dedo) = desbico "dá e puxa" · arrastar rápido para baixo = puxão
+##   (braçada que recolhe) · segurar para baixo = puxada contínua · arrastar para cima
+##   = dar linha (mão abre) · segurar e arrastar devagar = braço à frente (folga) ou
+##   para trás (estica) · aparar = enrolar na lata.
+func _drive_physical(delta: float, intent: PlayerIntent) -> void:
+	if _line_hand == null or _line_hand.rig != rig:
+		_line_hand = LineHand.new(rig)
+	var now := Time.get_ticks_usec() / 1000000.0
+	var n := intent.desbico_toques + intent.taps.size() + intent.double_taps * 2 + intent.desbico_press.size()
+	for i in n:
+		# O toque entra na hora exata em que o dedo soltou (ritmo do jogador).
+		var dl := 0.0
+		if i < intent.desbico_times.size():
+			dl = clampf(intent.desbico_times[i] + delta - now, 0.0, delta)
+		_line_hand.tap(dl)
+	intent.desbico_toques = 0
+	intent.desbico_times.clear()
+	intent.taps.clear()
+	intent.double_taps = 0
+	intent.desbico_press.clear()
+	intent.desbico_release = 0
+	intent.throws.clear()
+	intent.cancel_desbico = false
+	for _a in intent.recolhe:
+		_line_hand.pull()
+	intent.recolhe.clear()
+	for _i in intent.pull_taps:
+		_line_hand.pull()
+	intent.pull_taps = 0
+	_line_hand.pull_held = intent.pull_held
+	_line_hand.pull_rate = intent.pull_rate
+	var arm := 0.0
+	if intent.guide_active and intent.guide_vec.length() > GUIDE_DEAD_PX:
+		# Arrastar para cima = braço à frente (folga); para baixo = braço para trás.
+		arm = clampf(intent.guide_vec.y / GUIDE_FULL_PX, -1.0, 1.0)
+	if intent.stroke > 0.01:
+		arm = maxf(arm, clampf(intent.stroke / 0.5, 0.0, 1.0))   # braçada lenta (PC)
+	_line_hand.arm = arm
+	_line_hand.update(delta, intent.grip, intent.reel_rate)
+	if character:
+		character.right_hand_target = rig.hand_position()
+		character.line_tension = rig.tension
+		character.reel_speed = rig.reel_rate - rig.feed_speed
+
+
 ## Escreve as entradas da pipa a partir do intent.
 func _drive_rig(delta: float) -> void:
 	if rig == null or input_router == null:
@@ -182,6 +231,9 @@ func _drive_rig(delta: float) -> void:
 	var to_kite := (focus_point() - global_position).normalized()
 	rig.hand_rest = global_position + body_basis * hand_rest_local + to_kite * (0.12 * t_norm)
 	rig.stroke_dir = (body_basis * stroke_dir_local).normalized()
+	if rig.physical:
+		_drive_physical(delta, intent)
+		return
 	# Desbico/puxar/dar linha pela "mão do pipeiro" (mesma lógica dos vizinhos).
 	if _hand == null or _hand.rig != rig:
 		_hand = KiteHand.new(rig)

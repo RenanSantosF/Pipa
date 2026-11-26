@@ -148,6 +148,22 @@ func _phase_flight(_delta: float) -> void:
 		_m["len2"] = rig.flying_length()
 		_m["el2"] = el
 		_m["lat2"] = lat
+	elif rig.physical and _t < 27.0:
+		# FÍSICA REAL: não existe "guiar" direto — só a mão na linha. Mede o giro do bico
+		# parada (14–20 s) e com desbicos em ritmo (21–25 s), e se ela não dá loopings.
+		var hd := rig.heading()
+		var rate := rad_to_deg(wrapf(hd - float(_m.get("hprev", hd)), -PI, PI)) / maxf(_dt, 1e-4)
+		_m["hprev"] = hd
+		if _t > 14.5 and _t < 20.0:
+			_m["ri2"] = float(_m.get("ri2", 0.0)) + rate * rate
+			_m["rin"] = int(_m.get("rin", 0)) + 1
+		elif _t >= 21.0 and _t < 25.0:
+			if _every(0.25, 21.0):
+				it.desbico_toques += 1
+			_m["rt2"] = float(_m.get("rt2", 0.0)) + rate * rate
+			_m["rtn"] = int(_m.get("rtn", 0)) + 1
+		if absf(rad_to_deg(hd)) > 150.0:
+			_m["inv"] = int(_m.get("inv", 0)) + 1
 	elif _t < 17.0:
 		it.guide_dir = _window_dir(Vector2(-1, 0))   # guiar para a esquerda
 		it.guide_amount = 1.0
@@ -180,6 +196,29 @@ func _phase_flight(_delta: float) -> void:
 	if _every(2.0):
 		print("AUTOTEST voo t=%5.1f alt=%6.2f el=%4.0f lat=%+6.1f T=%5.2f linha=%5.1f física=%.2fms" % [
 			_t, b.x.y - main.player.global_position.y, el, lat, rig.tension, rig.flying_length(), main.physics_world.frame_ms])
+	if _t >= 30.0 and rig.physical:
+		var mean_alt2 := _alt_sum / maxf(float(_alt_n), 1.0)
+		var r_idle := sqrt(float(_m.get("ri2", 0.0)) / maxf(float(_m.get("rin", 1)), 1.0))
+		var r_tap := sqrt(float(_m.get("rt2", 0.0)) / maxf(float(_m.get("rtn", 1)), 1.0))
+		print("AUTOTEST voo (física real): dar linha %.1f → %.1f m · puxar %.1f → %.1f m (elevação %.0f° → %.0f°) · giro do bico parada %.0f°/s, desbicando %.0f°/s · invertida %d ticks · altura final %.1f m" % [
+			_m["len0"], _m["len1"], _m["len1"], _m["len2"], _m["el1"], _m["el2"], r_idle, r_tap, int(_m.get("inv", 0)), mean_alt2])
+		var checks2 := [
+			[_m["len1"] > _m["len0"] + 2.0, "dar linha não deu linha"],
+			[_m["len2"] < _m["len1"] - 2.0, "puxar não recolheu linha"],
+			[_m["el2"] > _m["el1"] + 2.0, "puxar não fez a pipa subir no céu"],
+			[mean_alt2 > 6.0, "a pipa não se manteve no ar"],
+			[r_tap > 1.3 * r_idle and r_tap > 15.0, "desbicar não mexeu o bico (giro %.0f°/s × %.0f°/s parada)" % [r_tap, r_idle]],
+			[int(_m.get("inv", 0)) < 30, "a pipa ficou de cabeça para baixo (looping)"],
+		]
+		for c in checks2:
+			if not c[0]:
+				_ok = false
+				print("AUTOTEST FAIL: ", c[1])
+		if OS.get_cmdline_user_args().has("--flightonly"):
+			_finish()
+			return
+		_start_combat()
+		return
 	if _t >= 30.0:
 		var mean_alt := _alt_sum / maxf(float(_alt_n), 1.0)
 		var turn_r := rad_to_deg(wrapf(float(_m["h6"]) - float(_m["h5"]), -PI, PI))

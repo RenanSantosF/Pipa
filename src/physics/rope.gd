@@ -55,6 +55,9 @@ var owner_id: int = 0
 ## Corpo preso na ponta (pipa) ou null.
 var end_body: KiteRigidBody = null
 var end_local := Vector3.ZERO
+## Cabresto de linha (nó + 2 pernas): com ele, end_local é o NÓ, que escorrega nas
+## pernas conforme a linha puxa (Bridle.update a cada subpasso).
+var bridle: Bridle = null
 ## Nó 0 preso à mão?
 var hand_fixed: bool = true
 var hand_position := Vector3.ZERO
@@ -379,6 +382,8 @@ func predict(h: float) -> void:
 	for i in n:
 		if pinned[i] == 1:
 			pos[i] = pin_pos[i]
+	if bridle != null and end_body != null and n > 0:
+		end_local = bridle.update(pos[n - 1])
 	lam.fill(0.0)
 	_lam_tether = 0.0
 
@@ -484,6 +489,8 @@ func finish_tick(h: float) -> void:
 	var k := -1.0 / (h * h * float(_substeps_done))
 	tension_hand = maxf(_lam_hand_sum * k, 0.0)
 	tension_end = maxf(_lam_end_sum * k, 0.0)
+	if bridle != null:
+		bridle.finish_tick(tension_end)
 	seg_tension.resize(_lam_sum.size())
 	for i in _lam_sum.size():
 		seg_tension[i] = maxf(_lam_sum[i] * k, 0.0)
@@ -536,6 +543,7 @@ func split_at(s_cut: float) -> Rope:
 	kite_side.hand_fixed = false
 	kite_side.end_body = end_body
 	kite_side.end_local = end_local
+	kite_side.bridle = bridle
 	kite_side.segment_target = segment_target
 	kite_side.pos.append(cut_pos)
 	kite_side.vel.append(cut_vel)
@@ -560,6 +568,7 @@ func split_at(s_cut: float) -> Rope:
 	new_rest.append(maxf(rest[k] * t, 0.02))
 	rest = new_rest
 	end_body = null
+	bridle = null
 	prev = pos.duplicate()
 	var old_pinned := pinned.duplicate()
 	var old_pp := pin_pos.duplicate()

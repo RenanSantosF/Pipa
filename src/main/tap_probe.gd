@@ -35,6 +35,8 @@ var _tmax := 0.0
 func start(p_main) -> void:
 	main = p_main
 	rig = main.player_rig
+	GameConfig.physical_flight = false
+	rig.physical = false   # sonda do modelo de voo antigo
 	main.input_router.autopilot = true
 	it = main.input_router.intent
 	for b in main.bots:

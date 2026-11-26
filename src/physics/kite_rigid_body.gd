@@ -22,7 +22,7 @@ const RHO := 1.225
 const GRAVITY := Vector3(0.0, -9.8, 0.0)
 static var RELAX_DIHEDRAL := 0.0
 ## Amortecimento aerodinâmico de rolagem (adimensional).
-const ROLL_DAMPING := 2.5
+static var ROLL_DAMPING := 2.5
 var _roll_k := 0.0
 
 var profile: KiteProfile
@@ -48,6 +48,19 @@ var sail_asym: float = 0.0
 ## na vela torta gira a pipa em torno da normal ("a pipa roda / vira o bico").
 var relax: float = 0.0
 var spin_bias: float = 0.0
+## ARQUEAMENTO ELÁSTICO (física de verdade): cada meia-travessa é uma vara de bambu
+## presa na vareta, que verga com a força do vento NAQUELE lado. flex[i] = diedro a
+## mais da meia-vela i (rad), seguindo a carga com a inércia da vara. Com a linha
+## esticada as duas vergam (diedro grande: estável, voa reto pelo bico); sem carga
+## ela desenverga (vela quase plana: perde a estabilidade, o bico fica solto). Um lado
+## mais carregado verga mais e alivia a si mesmo.
+## flex_per_n = rad por N de força normal na meia-vela (0 = desligado: diedro fixo).
+var flex_per_n: float = 0.0
+var flex_rest: float = 0.0
+var flex: PackedFloat32Array = PackedFloat32Array([0.0, 0.0])
+const FLEX_TAU := 0.035
+const FLEX_MAX := 0.55
+var _half_normal_force: PackedFloat32Array = PackedFloat32Array([0.0, 0.0])
 ## GUIAR (desbico por toque): direção desejada do bico no mundo (zero = solto),
 ## força do comando (0..1) e direção da linha (mão → pipa).
 var steer_dir := Vector3.ZERO
@@ -155,6 +168,8 @@ static func _poly_centroid(pts: Array) -> Vector2:
 ## sail_asym > 0: a meia-vela DIREITA fecha (vai para trás), a esquerda abre.
 func half_dihedral(i: int) -> float:
 	# Folga: a vareta relaxa (menos envergada) e fica torta para o lado do desbico.
+	if flex_per_n > 0.0:
+		return clampf(flex_rest + flex[i], 0.0, FLEX_MAX)
 	var a := sail_asym - spin_bias * relax * 0.02
 	var s := a if i == 1 else -a
 	var base := dihedral * (1.0 - RELAX_DIHEDRAL * relax)
@@ -262,6 +277,8 @@ func compute_forces() -> void:
 			lmag = qd * area * co.x
 		lift_sum += lmag
 		drag_sum += qd * area * co.y
+		# Força que enverga a meia-travessa: componente normal à meia-vela.
+		_half_normal_force[i] = maxf(-f.dot(n), 0.0)
 		# Centro de pressão ao longo do escoamento no plano da meia-vela.
 		var cop := cw
 		var flow := vd - n * vd.dot(n)
@@ -280,6 +297,9 @@ func compute_forces() -> void:
 		_force += f
 		_torque += cop.cross(f)
 	angle_of_attack = alpha_sum * 0.5
+	if sp_sum < 0.1:
+		_half_normal_force[0] = 0.0
+		_half_normal_force[1] = 0.0
 	airspeed = sp_sum * 0.5
 	lift = lift_sum
 	drag = drag_sum
@@ -354,6 +374,10 @@ func predict(h: float) -> void:
 	_q_prev = q
 	if kinematic:
 		return
+	if flex_per_n > 0.0:
+		var kf := minf(h / FLEX_TAU, 1.0)
+		for i in 2:
+			flex[i] += (_half_normal_force[i] * flex_per_n - flex[i]) * kf
 	v += _force / mass * h
 	w += mul_inv_inertia(_torque) * h
 	if _roll_k > 0.0:

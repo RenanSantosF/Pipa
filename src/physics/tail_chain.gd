@@ -22,15 +22,24 @@ var pinned_index: int = -1
 var pin_pos := Vector3.ZERO
 var pin_time: float = 0.0
 var _clock: float = 0.0
+## Tremulação desta rabiola (1 = cheia). Na pipa física a rabiola puxa a pipa de
+## verdade, então a tremulação é menor (as tiras balançam mais no desenho).
+var flutter_scale: float = 1.0
+## Passadas do solver da rabiola por subpasso (a pipa física precisa da rabiola
+## firme: uma passada só deixava a corrente elástica e o tranco não chegava nela).
+var iterations: int = 1
+static var ITER_OVERRIDE := 0
 ## Aceleração da tremulação em S (m/s² com 6 m/s de vento).
 const FLUTTER_ACC := 9.0
+## Escala da tremulação (laboratório).
+static var FLUTTER_SCALE := 1.0
 
 
-func _init(p_body: KiteRigidBody, p_profile: KiteProfile) -> void:
+func _init(p_body: KiteRigidBody, p_profile: KiteProfile, length_mult: float = 1.0) -> void:
 	body = p_body
 	profile = p_profile
 	var n := profile.tail_nodes
-	seg_len = profile.tail_length / float(n)
+	seg_len = profile.tail_length * length_mult / float(n)
 	inv_m = 1.0 / maxf(profile.tail_mass / float(n), 0.0001)
 	node_area = profile.tail_area / float(n)
 	reset()
@@ -75,7 +84,7 @@ func predict(h: float) -> void:
 	_clock += h
 	var ws := _wind.length()
 	var wdir := _wind / ws if ws > 0.3 else Vector3.FORWARD
-	var amp := FLUTTER_ACC * clampf(ws / 6.0, 0.3, 1.3) * clampf(ws / 6.0, 0.3, 1.3)
+	var amp := flutter_scale * FLUTTER_SCALE * FLUTTER_ACC * clampf(ws / 6.0, 0.3, 1.3) * clampf(ws / 6.0, 0.3, 1.3)
 	var om := 5.0 + 1.2 * ws
 	var n := pos.size()
 	for i in n:
@@ -100,6 +109,14 @@ func solve(_h: float) -> void:
 	var n := pos.size()
 	if n == 0:
 		return
+	var iters := ITER_OVERRIDE if ITER_OVERRIDE > 0 else iterations
+	for _it in iters:
+		_solve_once(n)
+	if pinned_index >= 0 and pinned_index < n:
+		pos[pinned_index] = pin_pos
+
+
+func _solve_once(n: int) -> void:
 	# Primeiro segmento: corpo rígido ↔ partícula.
 	var r := body.q * body.tail_local
 	var a := body.x + r
@@ -130,8 +147,6 @@ func solve(_h: float) -> void:
 		if p.y < gy:
 			p.y = gy
 			pos[i] = p
-	if pinned_index >= 0 and pinned_index < n:
-		pos[pinned_index] = pin_pos
 
 
 ## Rabiola engancha em fio ou galho; solta com tranco forte ou com o tempo (balançando).

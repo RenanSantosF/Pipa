@@ -17,6 +17,10 @@ func start(p_main) -> void:
 	gc = main.gestures
 	gc.visible = true
 	gc.size = Vector2(1280, 720)
+	# Testa os GESTOS sobre o modelo de voo antigo (os comandos dele são verificáveis um
+	# a um); a física real é testada no --autotest e no laboratório.
+	GameConfig.physical_flight = false
+	main.player_rig.physical = false
 	main.player_rig.launch(main.player.global_position + Vector3(0.2, 1.18, -0.3), 30.0, 55.0, Wind.get_direction())
 	var c := Vector2(640, 420)
 	var r := c + Vector2(130, 0)

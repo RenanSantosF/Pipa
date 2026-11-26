@@ -20,6 +20,28 @@ Também ficam disponíveis: o *artifact* `pipa-debug-apk` na execução do workf
 
 ## Controles (só gestos, como no Pipa Combate)
 
+**0.18 — física real (padrão):** a pipa do jogador é um corpo rígido com cabresto de
+linha e rabiola, e os gestos só mexem a **mão na linha** (detalhes em `docs/V18.md`):
+
+| Gesto | Mão na linha | O que a física faz |
+|---|---|---|
+| **Tocar** | desbico "dá e puxa": o braço dá folga e puxa curto | sem tração a travessa desenverga e o bico fica solto; o tranco estica e a rabiola (pêndulo) devolve o bico — cada toque balança para um lado, alternando |
+| **Arrastar rápido para baixo** | braçada (recolhe ~0,6 m) | pico de tração: ela vai para onde o bico aponta e sobe |
+| **Segurar para baixo** | braçadas em série | recolhe e sobe |
+| **Arrastar para cima** | mão abre | a linha corre com a tração: ela vai embora e desce aos poucos |
+| **Segurar e arrastar devagar** | braço à frente (folga) / para trás (estica) | folga = ela solta; estica = firma |
+| Enrolar (Q no PC) | lata enrola | apara a linha |
+
+A chave **Física real** fica no topo da área de testes (tubo de ensaio); desligada, volta
+o modelo de voo antigo, com os controles da tabela abaixo.
+
+Laboratório da física no PC (cena isolada, sem cidade): abra `src/lab/physics_lab.tscn`
+(Espaço desbico · S puxão · D puxada contínua · W dar linha · R aparar · Q/E braço ·
+setas vento · 1/2/3 tamanho · C câmera). Medições sem tela:
+`godot --headless --fixed-fps 30 --path . res://src/lab/physics_lab.tscn -- --seq=ritmo|toques|pausa|puxao|soltar|aparar|folga|mao|eq`.
+
+Modelo antigo:
+
 | Gesto | O que faz |
 |---|---|
 | **Tocar** (qualquer dedo, em qualquer lugar) | **desbico**: cada toque é uma puxadinha — o bico balança para um lado, alternando (1º esquerda, 2º direita…). Os lados **sempre alternam** (se o último foi para a esquerda, o próximo é para a direita). **Ritmo constante** = ela segue para onde aponta, balançando e subindo um pouco (sem chegar mais perto). **Pausa** = o último balanço rende e ela vira para aquele lado. Pipão balança mais devagar e mais; pipinha mais rápido e curto |
@@ -40,7 +62,7 @@ A pipa **começa na mão**, com a linha curta: **desbique** (toques) para ela su
 
 PC (testes): Espaço = desbico (toque) · ←/→ segurados = guiar · F = puxão (segurar = em série) · Tab = olhar com o mouse · E = dar linha · G = braçada lenta · Q = enrolar · R = nova pipa · T = trocar linha · Y = tamanho · U = envergadura · J = rabiola.
 
-Detalhes do desbico e do puxão: `docs/DESBICO_PUXAO.md`. O que mudou na 0.7 (pipa da foto, gestos, linha fina, desempenho): `docs/V07.md`; na 0.8: `docs/V08.md`; na 0.9: `docs/V09.md`; na 0.10: `docs/V10.md`; na 0.13 (voo reconstruído: controle separado da física, cabresto → inclinação → curva, área de testes): `docs/V13.md`; na 0.14 (desbico por toques no modelo de voo, linha que não atravessa): `docs/V14.md`; na 0.15 (pipa viva, volta reta, começa na mão, linha não arrebenta sozinha): `docs/V15.md`; na 0.16 (escala real, cabresto de linha, linha no corpo dos vizinhos): `docs/V16.md`; na 0.17 (mais lenta, levada pelo vento, 60 quadros/s): `docs/V17.md`.
+Detalhes do desbico e do puxão: `docs/DESBICO_PUXAO.md`. O que mudou na 0.7 (pipa da foto, gestos, linha fina, desempenho): `docs/V07.md`; na 0.8: `docs/V08.md`; na 0.9: `docs/V09.md`; na 0.10: `docs/V10.md`; na 0.13 (voo reconstruído: controle separado da física, cabresto → inclinação → curva, área de testes): `docs/V13.md`; na 0.14 (desbico por toques no modelo de voo, linha que não atravessa): `docs/V14.md`; na 0.15 (pipa viva, volta reta, começa na mão, linha não arrebenta sozinha): `docs/V15.md`; na 0.16 (escala real, cabresto de linha, linha no corpo dos vizinhos): `docs/V16.md`; na 0.17 (mais lenta, levada pelo vento, 60 quadros/s): `docs/V17.md`; na 0.18 (física real: laboratório, cabresto de linha, pipa corpo rígido, controle só pela linha): `docs/V18.md` e a análise `docs/ANALISE_FISICA.md`.
 
 ## Como é a física (resumo)
 

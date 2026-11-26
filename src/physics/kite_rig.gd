@@ -23,6 +23,11 @@ const FEED_MASS := 0.06      # inércia da linha + lata girando
 const FEED_DAMP := 2.5
 const MIN_LENGTH := 2.0
 const REEL_HARD_TENSION := 25.0
+## Comprimento da rabiola na pipa física (× o do perfil), por rabiola [curta, média,
+## grande]. Na física real é a rabiola que segura a pipa: a curta do perfil (55%)
+## deixava a pipinha e a média instáveis (davam looping e caíam).
+const TAIL_PHYSICAL := [1.65, 1.2, 1.0]
+static var TAIL_PHYSICAL_OVERRIDE := 0.0
 
 @export var profile: KiteProfile
 @export var line_type: LineType
@@ -64,6 +69,16 @@ var push_accel := Vector3.ZERO
 var bank: float = 0.0
 ## Modelo de voo (pipa do jogador presa na linha); nulo = física de corpo rígido.
 var flight: KiteFlightModel = null
+## FÍSICA DE VERDADE (v0.18): corpo rígido + cabresto de linha (nó + 2 pernas) +
+## rabiola acoplada, controlado SÓ pela mão na linha (posição da mão, pegada,
+## carretel). Sem modelo de voo, sem servo, sem empurrão. Vale no próximo launch().
+var physical: bool = false
+## Nó do cabresto (frações da altura): abaixo da cabeça e à frente do papel.
+var knot_y: float = 0.25
+var knot_z: float = 0.30
+## Arqueamento elástico da travessa (rad por N na meia-vela) e diedro sem carga (rad).
+var flex_per_n: float = 0.05
+var flex_rest: float = 0.05
 ## Cruzamentos com outras linhas encostadas no último tick: [trecho, t] (LineCombat).
 var line_pivots: Array = []
 ## Escala do DESENHO da pipa (longe da câmera ela é desenhada um pouco maior para o
@@ -151,13 +166,20 @@ func launch(hand: Vector3, length: float, elevation_deg: float, direction: Vecto
 		# Vizinhos: rabiola com menos nós (mesma física, menos custo).
 		profile.tail_nodes = mini(profile.tail_nodes, [6, 8, 10][GameConfig.quality])
 	body = KiteRigidBody.new(profile)
-	if is_local_player:
+	var use_flight := is_local_player and not physical
+	if use_flight:
 		# Pipa do jogador (modelo de voo): o nó do cabresto fica onde fica na pipa de
 		# verdade — na altura logo abaixo da travessa (~38% da altura, a partir da
 		# cabeça) e uns 40% da altura à frente do papel. Antes ele ficava rente à
 		# cabeça e a linha parecia sair da ponta de cima.
 		var hh := profile.height
 		body.tow_local = Vector3(0.0, body.corners[0].y - 0.38 * hh, 0.40 * hh)
+	var br: Bridle = null
+	if physical:
+		var bp := Bridle.standard_points(body, knot_y, knot_z)
+		br = Bridle.new()
+		br.setup(body, bp[0], bp[1], bp[2])
+		body.tow_local = br.knot_local
 	var el := deg_to_rad(elevation_deg)
 	var dir_h := Vector3(direction.x, 0.0, direction.z).normalized()
 	var d := (dir_h * cos(el) + Vector3.UP * sin(el)).normalized()
@@ -168,11 +190,29 @@ func launch(hand: Vector3, length: float, elevation_deg: float, direction: Vecto
 	rope.owner_id = get_instance_id()
 	rope.max_nodes = GameConfig.rope_max_nodes(is_local_player)
 	rope.setup(hand, body, body.tow_local, length)
-	tail = TailChain.new(body, profile)
+	rope.bridle = br
+	# Pipa física: rabiola 20% mais longa (é ela que estabiliza a pipa de verdade) e
+	# com menos tremulação forçada.
+	var tmul: float = TAIL_PHYSICAL[clampi(profile.tail_class, 0, 2)]
+	if TAIL_PHYSICAL_OVERRIDE > 0.0:
+		tmul = TAIL_PHYSICAL_OVERRIDE
+	tail = TailChain.new(body, profile, tmul if physical else 1.0)
+	if physical:
+		tail.flutter_scale = 0.5
+		body.flex_per_n = flex_per_n
+		body.flex_rest = flex_rest
 	flight = null
-	if is_local_player:
+	if use_flight:
 		body.kinematic = true
 		flight = KiteFlightModel.new(self)
+	# Física de verdade: nenhum atuador artificial na pipa.
+	bridle_offset = Vector2.ZERO
+	sail_asym = 0.0
+	spin_bias = 0.0
+	steer_dir = Vector3.ZERO
+	steer_gain = 0.0
+	steer_ff = 0.0
+	push_accel = Vector3.ZERO
 	spool = maxf(spool_capacity - length, 0.0)
 	pile = 0.0
 	feed_speed = 0.0
@@ -352,7 +392,7 @@ func pre_frame(dt: float) -> void:
 			var ld := body.x - hand_position()
 			if ld.length() > 0.01:
 				body.line_dir = ld.normalized()
-		if rope != null and rope.end_body == body:
+		if rope != null and rope.end_body == body and rope.bridle == null:
 			var off := Vector2.ZERO if loose else bridle_offset
 			rope.end_local = body.tow_local + Vector3(off.x, off.y, 0.0)
 		tail.compute_forces()

@@ -60,9 +60,10 @@ func _process(_delta: float) -> void:
 	if cam != null:
 		k = clampf(cam.global_position.distance_to(b.x) / VIS_SCALE_DIST, 1.0, VIS_SCALE_MAX)
 	rig.visual_scale = k
-	var knot := pose.origin + pose.basis * b.tow_local
+	var kl := _knot_local()
+	var knot := pose.origin + pose.basis * kl
 	var bs := basis.scaled(Vector3(k, k, k))
-	global_transform = Transform3D(bs, knot - bs * b.tow_local)
+	global_transform = Transform3D(bs, knot - bs * kl)
 	rig.visual_tail_offset = (global_transform * b.tail_local) - b.world_point(b.tail_local)
 	# Desbico: as asas batem juntas, como um pássaro (as varetas fecham e abrem).
 	var fl := rig.flap * 0.38
@@ -73,6 +74,24 @@ func _process(_delta: float) -> void:
 		m.set_shader_parameter("dihedral_r", dr)
 	_paper.set_shader_parameter("airspeed", b.airspeed)
 	_update_bridle(dl, dr)
+
+
+## Nó do cabresto no sistema da pipa: o nó de verdade (partícula) quando há cabresto
+## de linha; senão o ponto de tração fixo.
+func _knot_local() -> Vector3:
+	var b := rig.body
+	var br := _bridle_of()
+	if br != null:
+		return rig.rope.end_local
+	if not rig.loose:
+		return b.tow_local + Vector3(rig.bridle_offset.x, rig.bridle_offset.y, 0.0)
+	return b.tow_local
+
+
+func _bridle_of() -> Bridle:
+	if rig == null or rig.rope == null or rig.rope.bridle == null or rig.rope.end_body != rig.body:
+		return null
+	return rig.rope.bridle
 
 
 func _bow_z(x: float, dl: float, dr: float) -> float:
@@ -176,13 +195,16 @@ func _update_bridle(dl: float, dr: float) -> void:
 	var nose := _corners[0]
 	var yc := nose.y - _profile.cross_at * h
 	var yl := nose.y - _profile.lower_at * h
-	var knot := rig.body.tow_local + Vector3(rig.bridle_offset.x, rig.bridle_offset.y, 0.0) if rig and not rig.loose else rig.body.tow_local
+	var knot := _knot_local()
 	# Cabresto de 2 pernas: no cruzamento da travessa e mais abaixo na vareta. É
 	# LINHA: esticado com a pipa puxando; folgado, faz barriga para baixo e tremula.
 	var low_y := lerpf(yl, _corners[3].y, 0.35)
 	var anchors := [Vector3(0, yc - 0.01, 0), Vector3(0, low_y, 0)]
 	var t_line := rig.tension if rig else 0.0
 	var slack := clampf(1.0 - t_line / 3.0, 0.0, 1.0)
+	var br := _bridle_of()
+	if br != null:
+		anchors = [br.anchors[0], br.anchors[1]]
 	var g_local: Vector3 = (rig.body.q.inverse() * Vector3.DOWN) if rig and rig.body else Vector3.DOWN
 	var t_now := Time.get_ticks_msec() / 1000.0
 	_bridle.clear_surfaces()
@@ -195,6 +217,14 @@ func _update_bridle(dl: float, dr: float) -> void:
 		var sag_dir := g_local - dirl * g_local.dot(dirl)
 		sag_dir = sag_dir.normalized() if sag_dir.length() > 0.01 else Vector3.DOWN
 		var side := dirl.cross(sag_dir)
+		if br != null:
+			# Cada perna com a SUA tração (perna frouxa faz barriga; o comprimento é o
+			# da perna, a corda até o nó fica mais curta quando ela afrouxa).
+			slack = clampf(1.0 - br.leg_tension[li] / 1.2, 0.0, 1.0)
+			var extra := maxf(br.legs[li] - ll, 0.0)
+			sag_dir = sag_dir * 1.0
+			ll = maxf(ll, 0.001)
+			slack = maxf(slack, clampf(extra / (0.08 * br.legs[li]), 0.0, 1.0))
 		var sag := ll * (0.012 + 0.05 * slack)
 		var flick := ll * (0.004 + 0.012 * slack) * sin(t_now * 23.0 + float(li) * 1.7)
 		var prev := a

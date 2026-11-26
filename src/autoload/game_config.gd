@@ -18,6 +18,10 @@ var show_debug: bool = false
 var sound_enabled: bool = true
 
 var quality: int = Quality.MEDIUM
+## FÍSICA REAL da pipa do jogador (v0.18): corpo rígido + cabresto de linha + rabiola,
+## controlada só pela mão na linha. Falso = modelo de voo antigo (v0.13–v0.17).
+## Linha de comando: --oldflight volta ao modelo antigo.
+var physical_flight: bool = true
 
 const _LINE_POINTS := {
 	Quality.LOW: 14,
@@ -38,6 +42,8 @@ var _ropeit_override := 0
 
 
 func _ready() -> void:
+	if OS.get_cmdline_user_args().has("--oldflight"):
+		physical_flight = false
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--substeps="):
 			_substeps_override = int(a.substr(11))
@@ -98,9 +104,14 @@ func tail_points() -> int:
 
 
 ## Subpassos XPBD por tick de física (mais = linha mais firme, mais CPU).
-## BAIXO/MÉDIO rodam a física a 30 Hz: 5–6 subpassos (~6 ms cada, estável).
+## BAIXO/MÉDIO rodam a física a 30 Hz. Na física real o tranco da mão tem que chegar
+## na pipa pela linha e pela rabiola: com 4 subpassos a 30 Hz a linha "engolia" a
+## puxadinha (bico girando ~40°/s); com 6, cada toque vira um balanço (~90°/s).
+## Custo medido no PC com 2 vizinhos: 1,5 ms (4) → 2,0 ms (6).
 func physics_substeps() -> int:
-	return _substeps_override if _substeps_override > 0 else [4, 5, 8][quality]
+	if _substeps_override > 0:
+		return _substeps_override
+	return ([6, 6, 8] if physical_flight else [4, 5, 8])[quality]
 
 
 ## Varreduras do solver da linha por subpasso (física a 30 Hz precisa de ida e volta).

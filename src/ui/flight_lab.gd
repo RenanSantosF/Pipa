@@ -1,8 +1,10 @@
 class_name FlightLab
 extends PanelContainer
-## ÁREA DE TESTES do voo: ajusta ao vivo os parâmetros do KiteFlightModel sem
-## reiniciar a partida (abre pelo ícone de tubo de ensaio). Mostra rumo, inclinação,
-## velocidade, comando do cabresto e tração da pipa do jogador.
+## ÁREA DE TESTES do voo (abre pelo ícone de tubo de ensaio).
+## No topo: a chave FÍSICA REAL (v0.18: corpo rígido + cabresto de linha + rabiola,
+## controlada só pela mão na linha) × modelo de voo antigo, e as medidas da física
+## (tração na mão, nas pernas do cabresto, ângulo de ataque, arqueamento da travessa).
+## Abaixo: os parâmetros do modelo de voo antigo (valem com a física real desligada).
 
 const PARAMS := [
 	["SWING_AMP", "Desbico: tamanho do balanço (rad)", 0.3, 1.8],
@@ -41,6 +43,18 @@ func _ready() -> void:
 	title.text = "Área de testes do voo"
 	title.add_theme_font_size_override("font_size", 18)
 	box.add_child(title)
+	var phys := Button.new()
+	phys.custom_minimum_size = Vector2(0, 44)
+	phys.add_theme_font_size_override("font_size", 16)
+	var upd := func() -> void:
+		phys.text = "Física real: LIGADA (toque para o modelo antigo)" if GameConfig.physical_flight \
+			else "Física real: DESLIGADA (modelo antigo — toque para ligar)"
+	upd.call()
+	phys.pressed.connect(func() -> void:
+		GameConfig.physical_flight = not GameConfig.physical_flight
+		upd.call()
+		EventBus.reset_requested.emit())
+	box.add_child(phys)
 	_readout = Label.new()
 	_readout.add_theme_font_size_override("font_size", 13)
 	_readout.modulate = Color(0.75, 0.9, 1.0)
@@ -86,7 +100,17 @@ func _ready() -> void:
 
 
 func _process(_delta: float) -> void:
-	if not visible or rig == null or rig.flight == null:
+	if not visible or rig == null:
+		return
+	if rig.physical and rig.body != null and rig.rope != null:
+		var b := rig.body
+		var br := rig.rope.bridle
+		_readout.text = "rumo %+4.0f°  ataque %3.0f°  vento na pipa %4.1f m/s  velocidade %4.1f m/s\ntração mão %4.1f N  pernas do cabresto %4.1f / %4.1f N  travessa %2.0f°/%2.0f°  linha %4.1f m" % [
+			rad_to_deg(rig.heading()), rad_to_deg(b.angle_of_attack), b.airspeed, b.v.length(), rig.tension,
+			br.leg_tension[0] if br else 0.0, br.leg_tension[1] if br else 0.0,
+			rad_to_deg(b.half_dihedral(0)), rad_to_deg(b.half_dihedral(1)), rig.flying_length()]
+		return
+	if rig.flight == null:
 		return
 	var f := rig.flight
 	_readout.text = "rumo %+4.0f°  giro %+4.0f°/s  inclinação %+3.0f°  velocidade %4.1f m/s\ncabresto %+.2f  toques %d (%s)  tração %4.1f N  linha %4.1f m" % [
