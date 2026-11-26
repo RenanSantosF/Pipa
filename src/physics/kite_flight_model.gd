@@ -92,6 +92,8 @@ var tap_count := 0
 ## Ponto de apoio atual (mão, obstáculo ou linha de outro) e comprimento até a pipa.
 var pivot := Vector3.ZERO
 var pivot_len := 0.0
+## Folga da linha (m): quanto a linha está mais comprida do que a distância até o apoio.
+var slack := 0.0
 var _pull_rate := 0.0
 var _since_tap := 10.0
 var _since_input := 10.0
@@ -132,13 +134,15 @@ func _pivot() -> Array:
 	var best_p := r.pos[0]
 	var key := -1
 	# Nós encostados em fio/galho/telhado (ou presos).
+	# A chave é o OBSTÁCULO (o índice do nó muda quando a mão recolhe linha e nós
+	# saem perto dela — trocar a chave à toa cortava o efeito do puxão).
 	for k in range(1, r.pos.size()):
 		if r.pin_obstacle[k] >= 0 or r.pinned[k] == 1:
 			var s: float = r.mat_s[k]
 			if s > 0.3 and s < best_s:
 				best_s = s
 				best_p = r.pos[k]
-				key = k
+				key = 10 + maxi(r.pin_obstacle[k], 0)
 	# Linha de outra pipa encostada (cruzou): a pipa gira em volta do cruzamento.
 	var segs := r.segment_count()
 	for lp in rig.line_pivots:
@@ -151,7 +155,7 @@ func _pivot() -> Array:
 			var sp := r.segment_points(ia)
 			best_s = s2
 			best_p = sp[0].lerp(sp[1], ta)
-			key = 1000 + ia
+			key = 2000000 + (int(lp[2]) % 1000000 if lp.size() > 2 else 0)
 	return [best_p, best_s, key]
 
 
@@ -323,7 +327,7 @@ func step(h: float) -> void:
 		var wh := Vector3(wind.x, 0.0, wind.z)
 		var out_dir := ld
 		if wh.length() > 0.3:
-			out_dir = (ld + wh.normalized() * 1.2).normalized()
+			out_dir = (ld + wh.normalized() * 0.6).normalized()
 		np += out_dir * minf(V_OUT_MAX * h, r_t - d0)
 		r_new = minf(r_t, (np - pivot).length())
 	var rel := np - pivot
@@ -392,8 +396,8 @@ func step(h: float) -> void:
 	tension = minf(base + pull_extra, 0.9 * brk) + tug_visual() * (2.5 + 1.5 * float(sz))
 	# Linha frouxa (saindo mais rápido do que a pipa se afasta) quase não puxa: é isso
 	# que limita o "descarregar" à velocidade com que o vento leva a pipa.
-	var slack := (r_t - d0) / maxf(0.02 * r_t, 0.15)
-	tension *= clampf(1.0 - slack, 0.08, 1.0)
+	slack = maxf(r_t - d0, 0.0)
+	tension *= clampf(1.0 - slack / maxf(0.02 * r_t, 0.15), 0.08, 1.0)
 
 
 ## Área de testes: ler/escrever parâmetro pelo nome.

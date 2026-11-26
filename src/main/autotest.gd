@@ -39,6 +39,10 @@ func start(p_main) -> void:
 	router.autopilot = true
 	for b in main.bots:
 		b.rig = null  # vizinhos parados durante o teste
+	# O vizinho principal também (a IA dele é aleatória e a linha dele podia encostar
+	# na sua durante o teste de voo); na fase de combate o teste controla a pipa dele.
+	main.bot.rig = null
+	bot_rig.stow()
 	EventBus.line_cut.connect(_on_line_cut)
 	# Começa na mão, como no jogo.
 	seed(20260)
@@ -133,9 +137,10 @@ func _phase_flight(_delta: float) -> void:
 	it.guide_dir = Vector3.ZERO
 	if _t < 6.0:
 		_m["len0"] = rig.flying_length()
-	elif _t < 10.0:
+	elif _t < 9.0:
 		it.grip = 0.15                      # dar linha
-		_m["len1"] = rig.flying_length()
+	elif _t < 10.0:
+		_m["len1"] = rig.flying_length()    # espera a linha esticar de novo
 		_m["el1"] = el
 	elif _t < 14.0:
 		if _every(0.4):
@@ -147,10 +152,12 @@ func _phase_flight(_delta: float) -> void:
 		it.guide_dir = _window_dir(Vector2(-1, 0))   # guiar para a esquerda
 		it.guide_amount = 1.0
 		_m["lat3"] = lat
+		_m["hl"] = rig.flight.heading if rig.flight else 0.0
 	elif _t < 20.0:
 		it.guide_dir = _window_dir(Vector2(1, 0))    # guiar para a direita
 		it.guide_amount = 1.0
 		_m["lat4"] = lat
+		_m["hr"] = rig.flight.heading if rig.flight else 0.0
 	elif _t < 21.0:
 		it.guide_dir = _window_dir(Vector2(0, 1))    # bico para cima de novo
 		it.guide_amount = 1.0
@@ -182,8 +189,10 @@ func _phase_flight(_delta: float) -> void:
 			[_m["len1"] > _m["len0"] + 2.0, "dar linha não deu linha"],
 			[_m["len2"] < _m["len1"] - 2.0, "puxar não recolheu linha"],
 			[_m["el2"] > _m["el1"] + 2.0, "puxar não fez a pipa subir no céu"],
-			[_m["lat3"] - _m["lat2"] < -3.0, "guiar para a esquerda não levou a pipa para a esquerda"],
-			[_m["lat4"] - _m["lat3"] > 3.0, "guiar para a direita não levou a pipa para a direita"],
+			# Lá no alto da janela ela anda devagar: vale andar para o lado OU o bico
+			# ficar virado para aquele lado.
+			[_m["lat3"] - _m["lat2"] < -2.0 or float(_m["hl"]) < -0.8, "guiar para a esquerda não levou a pipa para a esquerda"],
+			[_m["lat4"] - _m["lat3"] > 2.0 or float(_m["hr"]) > 0.8, "guiar para a direita não levou a pipa para a direita"],
 			[mean_alt > 6.0, "a pipa não se manteve no ar"],
 			[turn_r > 25.0, "desbico de 2 toques + pausa não virou para a direita"],
 			[turn_l < -20.0, "desbico de 1 toque + pausa não virou para a esquerda"],

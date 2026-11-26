@@ -595,8 +595,8 @@ func post_frame(dt: float, h: float, substeps: int) -> void:
 			rb.add_render_kink(c.ib, c.tb)
 			if not c.hooked:
 				# A pipa de cada um passa a girar em volta deste cruzamento.
-				c.a.line_pivots.append([c.ia, c.ta])
-				c.b.line_pivots.append([c.ib, c.tb])
+				c.a.line_pivots.append([c.ia, c.ta, c.b.get_instance_id()])
+				c.b.line_pivots.append([c.ib, c.tb, c.a.get_instance_id()])
 				if not _pivot_rigs.has(c.a):
 					_pivot_rigs.append(c.a)
 				if not _pivot_rigs.has(c.b):

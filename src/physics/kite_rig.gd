@@ -356,6 +356,12 @@ func _update_spool(dt: float) -> void:
 		# mesmo com a pipa puxando pouco (alta, perto da cabeça).
 		if flight != null and grip < 0.6 and not held:
 			feed_speed = maxf(feed_speed, (0.6 - grip) / 0.6 * 2.0)
+		# A linha não corre mais rápido do que o vento leva a pipa embora: com mais de
+		# 1 m de folga ela para de sair (senão sobrava linha frouxa no ar).
+		if flight != null:
+			feed_speed = minf(feed_speed, 5.0)
+			if flight.slack > 1.0:
+				feed_speed = 0.0
 	else:
 		feed_speed = 0.0
 	var out := feed_speed * dt
