@@ -60,6 +60,7 @@ var _hand_from := Vector3.ZERO
 ## Restrição de alcance mão→pipa (comprimento total da linha) e seu multiplicador.
 var _rest_total := 0.0
 var _lam_tether := 0.0
+var _tether_ok := true
 var _hand_k := 0
 var _hand_subs := 1
 
@@ -187,6 +188,9 @@ func snapshot_frame() -> void:
 	_rest_total = 0.0
 	for r in rest:
 		_rest_total += r
+	# Com a linha apoiada em fio/galho/telhado o caminho não é reto: a restrição de
+	# alcance (distância reta mão→pipa) puxaria a pipa ATRAVÉS do obstáculo.
+	_tether_ok = contact_count() == 0
 
 
 ## Insere um nó no índice i (entre i-1 e o antigo i). Mantém todos os arrays.
@@ -398,7 +402,7 @@ func solve(h: float) -> void:
 	# num tranco e o puxão não chegava na pipa. A distância reta é sempre ≤ ao
 	# caminho da linha, então isto só age com a linha esticada (nunca atrapalha
 	# linha com barriga ou apoiada em fio/galho).
-	if hand_fixed and end_body != null and n > 0 and _rest_total > 0.0:
+	if hand_fixed and end_body != null and n > 0 and _rest_total > 0.0 and _tether_ok:
 		var r := end_body.q * end_local
 		var d := end_body.x + r - pos[0]
 		var l := d.length()

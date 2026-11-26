@@ -81,6 +81,10 @@ var drag: float = 0.0
 var resting: bool = false
 ## Voo pelo KiteFlightModel (pipa do jogador presa na linha): posição e orientação
 ## vêm do modelo; para a linha e a rabiola a pipa é um ponto de massa infinita.
+## Guiada pelo modelo de voo (pipa do jogador): a posição/orientação prevista vem do
+## modelo, mas a TRANSLAÇÃO participa das restrições (linha, contatos com outras
+## linhas, enrosco) com a massa da pipa — linha, fio e poste conseguem segurá-la.
+## A rotação é do modelo de voo (sem inércia de rotação nas restrições).
 var kinematic: bool = false
 
 var _force := Vector3.ZERO
@@ -193,7 +197,7 @@ func mul_inv_inertia(vec: Vector3) -> Vector3:
 ## Massa inversa generalizada de um ponto (offset r) na direção n.
 func inverse_mass_at(r: Vector3, n: Vector3) -> float:
 	if kinematic:
-		return 0.0
+		return 1.0 / mass
 	var rn := r.cross(n)
 	return 1.0 / mass + rn.dot(mul_inv_inertia(rn))
 
@@ -201,6 +205,7 @@ func inverse_mass_at(r: Vector3, n: Vector3) -> float:
 ## Correção posicional XPBD aplicada num ponto do corpo.
 func apply_correction(r: Vector3, corr: Vector3) -> void:
 	if kinematic:
+		x += corr / mass
 		return
 	x += corr / mass
 	var dw := mul_inv_inertia(r.cross(corr))
@@ -320,6 +325,8 @@ func _apply_steer() -> void:
 ## STEER_TAU (inércia: começa e para suave, sem overshoot). Corrige só a diferença
 ## entre o giro que a física já deu neste subpasso e o desejado.
 func steer_correct(h: float) -> void:
+	if kinematic:
+		return
 	if steer_gain <= 0.0 or steer_dir == Vector3.ZERO:
 		_steer_rate = lerpf(_steer_rate, 0.0, minf(1.0, h / 0.25))
 		return
@@ -360,6 +367,9 @@ func predict(h: float) -> void:
 ## Atualiza velocidades a partir das posições corrigidas.
 func finalize(h: float) -> void:
 	if kinematic:
+		v = (x - _x_prev) / h
+		if v.length() > 45.0:
+			v = v.normalized() * 45.0
 		return
 	v = (x - _x_prev) / h
 	var dq := q * _q_prev.inverse()

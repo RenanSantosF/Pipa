@@ -19,24 +19,33 @@ func start(p_main) -> void:
 	gc.size = Vector2(1280, 720)
 	main.player_rig.launch(main.player.global_position + Vector3(0.2, 1.18, -0.3), 30.0, 55.0, Wind.get_direction())
 	var c := Vector2(640, 420)
+	var r := c + Vector2(130, 0)
 	_steps = [
-		# Segurar à direita da pipa = cabresto para a direita.
-		[1.0, "down_rel", 0, Vector2(260, 0)], [1.5, "check_steer", 1.0], [2.0, "up", 0, c], [2.1, "check_steer", 0.0],
-		# Segurar à esquerda da pipa = cabresto para a esquerda.
-		[3.0, "down_rel", 0, Vector2(-260, 0)], [3.5, "check_steer", -1.0], [4.0, "up", 0, c],
-		# Arrastar rápido para baixo = puxão (recolhe), sem guiar.
-		[5.0, "down", 0, c], [5.04, "drag", 0, c + Vector2(0, 60)], [5.08, "drag", 0, c + Vector2(0, 140)],
-		[5.12, "check_noguide", 0], [5.3, "up", 0, c + Vector2(0, 140)], [6.2, "check_shorter", 0],
+		# Toque = desbico: 1º balança para a esquerda, 2º para a direita.
+		[1.0, "mark_taps"], [1.0, "down", 0, c], [1.08, "up", 0, c], [1.3, "check_tap", 1, -1.0],
+		[1.4, "down", 0, c + Vector2(30, 10)], [1.47, "up", 0, c + Vector2(30, 10)], [1.7, "check_tap", 2, 1.0],
+		# Segurar e arrastar para a direita = cabresto para a direita (sem desbicar).
+		[3.0, "mark_taps"], [3.0, "down", 0, c], [3.3, "drag", 0, c + Vector2(60, 0)], [3.4, "drag", 0, r],
+		[3.7, "check_steer", 1.0], [3.8, "up", 0, r], [3.95, "check_steer", 0.0], [3.95, "check_tap_same"],
+		# Segurar e arrastar para a esquerda = cabresto para a esquerda.
+		[4.5, "down", 0, c], [4.8, "drag", 0, c + Vector2(-60, 0)], [4.9, "drag", 0, c + Vector2(-130, 0)],
+		[5.2, "check_steer", -1.0], [5.3, "up", 0, c + Vector2(-130, 0)],
+		# Arrastar rápido para baixo = puxão (recolhe), sem guiar e sem desbicar.
+		[6.0, "mark_taps"], [6.0, "down", 0, c], [6.04, "drag", 0, c + Vector2(0, 60)], [6.08, "drag", 0, c + Vector2(0, 140)],
+		[6.12, "check_noguide", 0], [6.3, "up", 0, c + Vector2(0, 140)], [7.2, "check_shorter", 0], [7.2, "check_tap_same"],
 		# Guiando com um dedo + 2º dedo arrastando para baixo = puxão junto.
-		[7.0, "down_rel", 0, Vector2(240, 0)], [7.3, "down", 1, Vector2(1000, 250)], [7.34, "drag", 1, Vector2(1000, 330)],
-		[7.38, "drag", 1, Vector2(1000, 420)], [7.45, "check_steer", 1.0], [7.6, "up", 1, Vector2(1000, 420)],
-		[8.0, "check_shorter", 0], [8.2, "up", 0, c],
+		[8.0, "down", 0, c], [8.3, "drag", 0, c + Vector2(60, 0)], [8.35, "drag", 0, r],
+		[8.4, "down", 1, Vector2(1000, 250)], [8.44, "drag", 1, Vector2(1000, 330)], [8.48, "drag", 1, Vector2(1000, 420)],
+		[8.55, "check_steer", 1.0], [8.7, "up", 1, Vector2(1000, 420)], [9.1, "check_shorter", 0],
+		# 2º dedo tocando enquanto o 1º guia = desbico.
+		[9.2, "mark_taps"], [9.2, "down", 1, Vector2(1000, 300)], [9.27, "up", 1, Vector2(1000, 300)], [9.5, "check_tap_more"],
+		[9.6, "up", 0, r],
 		# Arrastar rápido para cima = dar linha.
-		[9.0, "down", 0, c], [9.04, "drag", 0, c + Vector2(0, -60)], [9.1, "drag", 0, c + Vector2(0, -140)],
-		[9.2, "check_grip", 0.3], [9.5, "up", 0, c + Vector2(0, -140)],
+		[10.5, "down", 0, c], [10.54, "drag", 0, c + Vector2(0, -60)], [10.6, "drag", 0, c + Vector2(0, -140)],
+		[10.7, "check_grip", 0.3], [11.0, "up", 0, c + Vector2(0, -140)],
 		# Faixa do topo = câmera.
-		[10.0, "down", 0, Vector2(600, 40)], [10.1, "drag", 0, Vector2(650, 40)], [10.15, "check_look", true], [10.3, "up", 0, Vector2(650, 40)],
-		[11.0, "done"],
+		[11.5, "down", 0, Vector2(600, 40)], [11.6, "drag", 0, Vector2(650, 40)], [11.65, "check_look", true], [11.8, "up", 0, Vector2(650, 40)],
+		[12.5, "done"],
 	]
 
 
@@ -72,14 +81,19 @@ func _physics_process(delta: float) -> void:
 				var hs = main.player.get("_hand")
 				_check("toque = balanço para %s" % ("a esquerda" if float(s[2]) < 0.0 else "a direita"), hs != null and float(hs.get("_tap_side")) == float(s[2]))
 			"mark_taps":
-				var hm = main.player.get("_hand")
-				_mark_taps = float(hm.get("_tap_clock")) if hm else 0.0
-			"check_taps_same":
-				var hn = main.player.get("_hand")
-				_check("sem desbico nesse gesto", hn != null and float(hn.get("_tap_clock")) == _mark_taps)
-			"check_taps_more":
-				var ho = main.player.get("_hand")
-				_check("toque do 2º dedo desbica", ho != null and float(ho.get("_tap_clock")) > _mark_taps)
+				var fm = main.player_rig.flight
+				_mark_taps = float(fm.tap_count) if fm else 0.0
+			"check_tap":
+				var ft = main.player_rig.flight
+				var n_ok: bool = ft != null and ft.taps == int(s[2]) and ft.swing_side == float(s[3])
+				_check("toque %d = balanço para %s (toques %s, lado %s)" % [s[2], "a esquerda" if float(s[3]) < 0.0 else "a direita",
+					str(ft.taps if ft else -1), str(ft.swing_side if ft else 0.0)], n_ok)
+			"check_tap_same":
+				var fs = main.player_rig.flight
+				_check("sem desbico nesse gesto", fs != null and float(fs.tap_count) == _mark_taps)
+			"check_tap_more":
+				var fo = main.player_rig.flight
+				_check("toque do 2º dedo desbica", fo != null and float(fo.tap_count) > _mark_taps)
 			"check_noguide":
 				_check("arrastar para baixo não guia", not main.input_router.intent.guide_active)
 			"check_shorter":

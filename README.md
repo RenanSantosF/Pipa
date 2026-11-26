@@ -18,28 +18,29 @@ Cada push gera um APK automaticamente (GitHub Actions):
 
 Também ficam disponíveis: o *artifact* `pipa-debug-apk` na execução do workflow e a branch `apk-builds`.
 
-## Controles (só gestos — dois comandos independentes)
+## Controles (só gestos, como no Pipa Combate)
 
 | Gesto | O que faz |
 |---|---|
-| **Segurar e mover o dedo** | **guiar (desbico)**: o dedo diz para onde a pipa deve ir, em relação a ela na tela (à esquerda dela = esquerda, acima = sobe, abaixo = desce). O cabresto inclina a pipa, ela faz a curva e vai para lá, com inércia. Soltar = segue reta |
-| **Arrastar rápido de cima para baixo** | **puxão**: recolhe linha; ela acelera, sobe e chega mais perto, sem mudar de direção. Esfregar = mais braçadas |
+| **Tocar** (qualquer dedo, em qualquer lugar) | **desbico**: cada toque é uma puxadinha — o bico balança para um lado, alternando (1º esquerda, 2º direita…). **Ritmo constante** = ela segue para onde aponta, balançando e subindo um pouco (sem chegar mais perto). **Pausa** = o último balanço rende: **1 ou 3 toques e pausa = vira para a esquerda; 2 toques e pausa = direita**. Pipão balança mais devagar e mais; pipinha mais rápido e curto |
+| **Segurar e arrastar** | **guiar**: arraste para onde o bico deve apontar (o "manche" nasce onde o dedo encostou). O cabresto inclina a pipa e ela faz a curva, com inércia |
+| **Arrastar rápido de cima para baixo** | **puxão**: recolhe linha; ela acelera reto para onde aponta, sobe e chega mais perto, sem desbicar. Esfregar = mais braçadas |
 | Arrastar rápido de baixo para cima | dar linha (ela se afasta) |
-| 2º dedo | arrastar para baixo = puxão enquanto o outro dedo guia |
+| 2º dedo | tocar = desbico (dá para alternar os polegares) · arrastar para baixo = puxão |
 | Faixa estreita no topo | olhar em volta |
-| Ícone de tubo de ensaio | **área de testes do voo** (ajustar velocidade, curva, inclinação, inércia, puxão ao vivo) |
+| Ícone de tubo de ensaio | **área de testes do voo** (balanço do desbico, arrancada, curva, puxão… ao vivo) |
 
 **Linha enroscada**: dê **trancos fortes** (segure para baixo / esfregue) para desenroscar do galho, tronco ou poste, ou **dê linha** para ela ficar frouxa e cair fora. A pipa presa num fio/galho solta com tranco.
 
-A pipa **começa na mão**: arraste para baixo algumas vezes (com a linha bem curta o tranco sai de lado, em zigue-zague, para ela pegar vento) e, com ela subindo, arraste para cima para dar linha.
+A pipa começa já no ar (toque no ícone da pipa para uma nova).
 **Rabiola**: curta = pipa arisca (desbica fácil, mais difícil de segurar); grande = estável e mais lenta.
 **Envergadura** (quanto a travessa é arqueada) muda tudo: muita envergadura = pipa estável, desbico **fino e curto**; pouca = desbico **longo**, pipa arisca.
 
 **Encostar não é enroscar**: a linha que encosta em fio, telhado, poste ou galho **desliza** com atrito (barrida). Ela só **enrosca** quando dá volta, cai por cima de um galho ou aperta forte contra a casca. Solta quando endireita, ou com tranco até o galho quebrar. No fio ela nunca trava: fica pendurada e escorrega ao longo dele. A pipa só prende se o fio/galho entrar no cabresto (ou se cair fundo na copa).
 
-PC (testes): segurar clique esquerdo/← = desbico esquerda · segurar clique direito/→ = desbico direita · F = puxão (segurar = em série) · Espaço = desbico (toque) · Tab = olhar com o mouse · E = dar linha · G = braçada lenta · Q = enrolar · R = nova pipa · T = trocar linha · Y = tamanho · U = envergadura · J = rabiola.
+PC (testes): Espaço = desbico (toque) · ←/→ segurados = guiar · F = puxão (segurar = em série) · Tab = olhar com o mouse · E = dar linha · G = braçada lenta · Q = enrolar · R = nova pipa · T = trocar linha · Y = tamanho · U = envergadura · J = rabiola.
 
-Detalhes do desbico e do puxão: `docs/DESBICO_PUXAO.md`. O que mudou na 0.7 (pipa da foto, gestos, linha fina, desempenho): `docs/V07.md`; na 0.8: `docs/V08.md`; na 0.9: `docs/V09.md`; na 0.10: `docs/V10.md`; na 0.13 (voo reconstruído: controle separado da física, cabresto → inclinação → curva, área de testes): `docs/V13.md`.
+Detalhes do desbico e do puxão: `docs/DESBICO_PUXAO.md`. O que mudou na 0.7 (pipa da foto, gestos, linha fina, desempenho): `docs/V07.md`; na 0.8: `docs/V08.md`; na 0.9: `docs/V09.md`; na 0.10: `docs/V10.md`; na 0.13 (voo reconstruído: controle separado da física, cabresto → inclinação → curva, área de testes): `docs/V13.md`; na 0.14 (desbico por toques no modelo de voo, linha que não atravessa): `docs/V14.md`.
 
 ## Como é a física (resumo)
 

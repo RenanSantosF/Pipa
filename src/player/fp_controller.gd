@@ -52,16 +52,16 @@ static func desbico_offset(t: float) -> float:
 	return 0.0
 
 
-## Guiar: zona morta em volta da pipa na tela e distância para força máxima (px).
-const GUIDE_DEAD_PX := 28.0
+## Guiar: arrasto mínimo (px) e arrasto para o cabresto todo (px).
+const GUIDE_DEAD_PX := 18.0
 ## Câmera: campo de visão normal, mínimo (zoom máximo), fração da altura da tela
 ## que a pipa deve ocupar e zona livre (fração do campo) em que ela anda sem a
 ## câmera ir atrás.
 const BASE_FOV := 72.0
-const MIN_FOV := 52.0
-const KITE_SCREEN_FRACTION := 0.07
+const MIN_FOV := 24.0
+const KITE_SCREEN_FRACTION := 0.085
 const FREE_ZONE := 0.18
-const GUIDE_FULL_PX := 240.0
+const GUIDE_FULL_PX := 110.0
 ## Erro de rumo (rad) que já pede cabresto todo para um lado.
 const STEER_FULL_ERR := 0.7
 
@@ -117,7 +117,7 @@ func _process(delta: float) -> void:
 	# desbico não aparecia). Perto (soltando da mão) volta ao campo de visão normal.
 	var target_fov := BASE_FOV
 	if rig and rig.body and not rig.held and dist > 8.0 and watch_time <= 0.0:
-		var size := rig.profile.height if rig.profile else 0.65
+		var size := (rig.profile.height if rig.profile else 0.65) * rig.visual_scale
 		target_fov = clampf(rad_to_deg(2.0 * atan(size / (2.0 * dist * KITE_SCREEN_FRACTION))), MIN_FOV, BASE_FOV)
 	camera.fov = lerpf(camera.fov, target_fov, 1.0 - exp(-1.8 * delta))
 	if input_router:
@@ -181,68 +181,88 @@ func _drive_rig(delta: float) -> void:
 	if _hand == null or _hand.rig != rig:
 		_hand = KiteHand.new(rig)
 	_hand.desbico_intensity = intent.desbico_intensity
-	for side in intent.desbico_press:
-		_hand.press_desbico(side)
+	if rig.flight == null:
+		for side in intent.desbico_press:
+			_hand.press_desbico(side)
+		if intent.desbico_release > 0:
+			_hand.release_desbico()
+		for side in intent.taps:
+			_hand.tap_desbico(side)
+	else:
+		intent.desbico_toques += intent.taps.size()
 	intent.desbico_press.clear()
-	if intent.desbico_release > 0:
-		_hand.release_desbico()
-		intent.desbico_release = 0
-	for side in intent.taps:
-		_hand.tap_desbico(side)
+	intent.desbico_release = 0
 	intent.taps.clear()
 	for _i in intent.pull_taps:
 		_hand.puxao()
 	intent.pull_taps = 0
-	# CONTROLE (separado da física): o dedo na tela, em relação à pipa na tela, diz
-	# para onde o jogador quer que ela vá. Vira só um COMANDO DE CABRESTO (−1..1)
-	# proporcional ao quanto o bico está fora dessa direção; o modelo de voo faz o
-	# resto (inclina, curva, acelera) com a inércia dele.
-	var wdir := Vector3.ZERO
-	var amount := 0.0
-	if intent.guide_active and camera and rig.body and not camera.is_position_behind(rig.body.x):
-		var ks := camera.unproject_position(rig.body.x)
-		var off := intent.guide_finger - ks
-		var dist := off.length()
-		if dist > GUIDE_DEAD_PX:
-			var ld: Vector3 = (rig.body.x - rig.hand_position()).normalized()
-			var up_t := (Vector3.UP - ld * ld.y).normalized()
-			var right_t := ld.cross(up_t).normalized()
-			if right_t.dot(camera.global_basis.x) < 0.0:
-				right_t = -right_t
-			wdir = (right_t * off.x - up_t * off.y).normalized()
-			amount = clampf((dist - GUIDE_DEAD_PX) / GUIDE_FULL_PX, 0.35, 1.0)
-	elif intent.guide_amount > 0.0:
-		wdir = intent.guide_dir
-		amount = intent.guide_amount
+	# CONTROLE (separado da física):
+	#  * TOQUE = desbico (puxadinha): o modelo de voo dá o tranco e o balanço.
+	#  * SEGURAR E ARRASTAR = guiar: a direção do arrasto (a partir de onde o dedo
+	#    encostou, como um manche em qualquer lugar da tela) é para onde o bico deve
+	#    apontar na tela. Vira só um COMANDO DE CABRESTO (−1..1); o modelo de voo
+	#    inclina, curva e acelera com a inércia dele.
 	if rig.flight != null:
+		# Cada toque entra com atraso fixo de um tick a partir da hora em que o dedo
+		# soltou: o intervalo entre toques fica exato (o ritmo é o que o jogador fez).
+		var now := Time.get_ticks_usec() / 1000000.0
+		for i in intent.desbico_toques:
+			if i < intent.desbico_times.size():
+				rig.flight.tap_at(clampf(intent.desbico_times[i] + delta - now, 0.0, delta))
+			else:
+				rig.flight.tap()
+		intent.desbico_times.clear()
 		var cmd := 0.0
-		if wdir != Vector3.ZERO:
-			var fr: Array = rig.flight.frame()
-			var target := atan2(wdir.dot(fr[2]), wdir.dot(fr[1]))
+		var target := NAN
+		var amount := 0.0
+		if intent.guide_active and intent.guide_vec.length() > GUIDE_DEAD_PX:
+			target = atan2(intent.guide_vec.x, -intent.guide_vec.y)
+			amount = clampf((intent.guide_vec.length() - GUIDE_DEAD_PX) / GUIDE_FULL_PX, 0.0, 1.0)
+		elif intent.guide_amount > 0.0 and intent.guide_dir != Vector3.ZERO:
+			var fr0: Array = rig.flight.frame()
+			target = atan2(intent.guide_dir.dot(fr0[2]), intent.guide_dir.dot(fr0[1]))
+			amount = intent.guide_amount
+		var ks := Input.get_axis(&"desbico_left", &"desbico_right") if InputMap.has_action(&"desbico_left") else 0.0
+		if ks != 0.0:
+			cmd = ks
+		elif not is_nan(target):
 			var err := wrapf(target - rig.flight.heading, -PI, PI)
 			cmd = clampf(err / STEER_FULL_ERR, -1.0, 1.0) * amount
 		rig.flight.steer = cmd
+		intent.desbico_press.clear()
+		intent.desbico_release = 0
 	else:
-		_hand.guide(wdir, amount)
-	for _i in intent.desbico_toques:
-		_hand.desbico_toque()
+		var wdir := Vector3.ZERO
+		var gamount := 0.0
+		if intent.guide_amount > 0.0:
+			wdir = intent.guide_dir
+			gamount = intent.guide_amount
+		_hand.guide(wdir, gamount)
+		for _i in intent.desbico_toques:
+			_hand.desbico_toque()
+		intent.desbico_times.clear()
 	intent.desbico_toques = 0
 	for a in intent.recolhe:
 		_hand.recolher(a)
 	intent.recolhe.clear()
 	_hand.pull_rate = intent.pull_rate
 	_hand.set_pull_held(intent.pull_held)
-	for side in intent.throws:
-		_hand.throw(side)
+	if rig.flight == null:
+		for side in intent.throws:
+			_hand.throw(side)
+		for _i in intent.double_taps:
+			_hand.double_desbico()
+	else:
+		intent.desbico_toques += intent.double_taps * 2
 	intent.throws.clear()
-	for _i in intent.double_taps:
-		_hand.double_desbico()
 	intent.double_taps = 0
 	if intent.cancel_desbico:
 		_hand.cancel()
 		intent.cancel_desbico = false
 	_hand.update(delta, intent.stroke, intent.grip, intent.reel_rate)
 	if character:
-		character.right_hand_target = rig.hand_position()
+		# Puxadinha do desbico: o braço dá o tranco (só visual; a física está no voo).
+		var tug := rig.flight.tug_visual() if rig.flight != null else 0.0
+		character.right_hand_target = rig.hand_position() + rig.stroke_dir * (0.09 * tug)
 		character.line_tension = rig.tension
 		character.reel_speed = rig.reel_rate - rig.feed_speed

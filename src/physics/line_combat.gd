@@ -13,16 +13,23 @@ extends RefCounted
 ##    material novo pelo contato e espalha o desgaste; quem fica parado concentra
 ##    num ponto e é cortado. Linha esticada corta mais fácil.
 
-const DETECT_RADIUS := 0.15
-const RELEASE_DISTANCE := 0.6
+## Contato ESPECULATIVO: todo par de trechos que pode se encontrar dentro do quadro
+## (as linhas andam até ~0,6 m por quadro a 30 Hz numa puxada forte) já ganha um
+## contato que guarda o LADO; ele só empurra quando encosta (restrição unilateral),
+## mas é checado a cada subpasso — por isso as linhas não "pulam" uma pela outra
+## entre dois quadros.
+const DETECT_RADIUS := 0.7
+const RELEASE_DISTANCE := 1.0
 const CONTACT_GAP := 0.003
 const BIN := 0.1
 const DAMAGE_SCALE := 0.22
 const GROUP := 4
 const HOOK_GAP := 0.03
-const MAX_PER_PAIR := 14
-## Correção máxima por subpasso de um contato atravessado (m).
+const MAX_PER_PAIR := 24
+## Correção máxima por subpasso: contato que já veio atravessado (pego só no fim do
+## quadro) volta aos poucos; contato especulativo (pego antes) corrige tudo.
 const MAX_PUSH := 0.12
+const MAX_PUSH_SPEC := 0.5
 ## Contato do lado errado (atravessado) só é largado se ficar absurdo de longe.
 const GIVE_UP_DISTANCE := 4.0
 
@@ -47,9 +54,15 @@ class Contact:
 	var hooked: bool = false
 	## Qual ponta está laçada: 0 = cabresto da pipa de `a`, 1 = da de `b` (−1 = antigo).
 	var hook_side: int = -1
+	## Criado depois de as linhas já terem passado uma pela outra (volta aos poucos).
+	var crossed: bool = false
+	## Encostadas de verdade no último tick (o contato especulativo existe antes).
+	var touching: bool = false
 
 
 var contacts: Array[Contact] = []
+## Pipas que receberam pontos de apoio (cruzamentos encostados) no último tick.
+var _pivot_rigs: Array = []
 ## Posições do quadro anterior (para pegar linhas que se atravessam entre quadros).
 var _prev_pts: Dictionary = {}
 const CROSS_RADIUS := 2.0
@@ -252,6 +265,7 @@ func _test_segments(ra: KiteRig, rb: KiteRig, pa: PackedVector3Array, pb: Packed
 	var d := p_b - p_a
 	if crossed_normal != Vector3.ZERO:
 		c.normal = crossed_normal  # volta cada linha para o lado de onde veio
+		c.crossed = true
 	elif d.length() > 0.00001:
 		c.normal = d.normalized()
 	else:
@@ -348,17 +362,30 @@ func solve(h: float) -> void:
 		var pa := pa_pts[0].lerp(pa_pts[1], c.ta)
 		var pb := pb_pts[0].lerp(pb_pts[1], c.tb)
 		var d := pb - pa
-		if not c.hooked:
-			# Normal = normal comum das duas linhas (ea × eb), mantendo o LADO do
-			# contato: deslizar ou girar não troca o lado; só a física pode (e o
-			# contato não deixa). Quase paralelas: segue a separação, sem inverter.
+		if not c.hooked and not c.crossed:
+			# LADO medido de forma CONTÍNUA no subpasso: compara a separação no começo
+			# do subpasso (posições já sem atravessar) com a de agora, na mesma direção.
+			# Se o sinal trocou, as linhas passaram uma pela outra neste subpasso → o
+			# contato as devolve para o lado de onde vieram. Sem memória de orientação
+			# (que podia se inverter quando os pontos mais próximos pulavam de trecho).
+			var da_s := _disp(ra, c.ia, h).lerp(_disp(ra, c.ia + 1, h), c.ta)
+			var db_s := _disp(rb, c.ib, h).lerp(_disp(rb, c.ib + 1, h), c.tb)
+			var d_prev := (pb - db_s) - (pa - da_s)
+			var interior := c.ta > 0.0 and c.ta < 1.0 and c.tb > 0.0 and c.tb < 1.0
 			var ea := pa_pts[1] - pa_pts[0]
 			var eb := pb_pts[1] - pb_pts[0]
 			var cr := ea.cross(eb)
 			var crl := cr.length()
-			if crl > 0.25 * sqrt(ea.length_squared() * eb.length_squared()):
+			if interior and crl > 0.25 * sqrt(ea.length_squared() * eb.length_squared()):
 				var n := cr / crl
-				c.normal = n if n.dot(c.normal) >= 0.0 else -n
+				var f_old := d_prev.dot(n)
+				if absf(f_old) > 1e-6:
+					c.normal = n * signf(f_old)
+				elif n.dot(c.normal) != 0.0:
+					c.normal = n * signf(n.dot(c.normal))
+			elif d_prev.length() > 1e-5:
+				# Ponta de trecho ou quase paralelas: a separação do começo do subpasso.
+				c.normal = d_prev.normalized()
 		var nrm := c.normal
 		var violation := 0.0
 		if c.hooked:
@@ -370,12 +397,11 @@ func solve(h: float) -> void:
 		else:
 			var sep := d.dot(nrm)
 			if sep >= CONTACT_GAP:
-				var dl2 := d.length()
-				if dl2 > 0.00001 and d.dot(nrm) > 0.7 * dl2:
-					c.normal = d / dl2
 				continue
 			# Atravessou muito (puxada forte): volta em alguns subpassos, sem explodir.
-			violation = minf(CONTACT_GAP - sep, MAX_PUSH)
+			violation = minf(CONTACT_GAP - sep, MAX_PUSH if c.crossed else MAX_PUSH_SPEC)
+			if sep > 0.0:
+				c.crossed = false
 		# Pesos generalizados (nós da linha ou corpo rígido da pipa na ponta).
 		var ua := 1.0 - c.ta
 		var ub := 1.0 - c.tb
@@ -388,6 +414,8 @@ func solve(h: float) -> void:
 			continue
 		var lam := violation / wsum
 		var nv := nrm * lam
+		c.a.pushed_by_line = true
+		c.b.pushed_by_line = true
 		_push(ra, c.ia, -nv * ua)
 		_push(ra, c.ia + 1, -nv * c.ta)
 		_push(rb, c.ib, nv * ub)
@@ -494,8 +522,8 @@ func _refresh(c: Contact) -> void:
 			moved = true
 		if not moved:
 			break
-	# Chegou na pipa (ponta com corpo) → laça no cabresto.
-	if not c.hooked:
+	# Chegou na pipa (ponta com corpo), ENCOSTADA → laça no cabresto.
+	if not c.hooked and c.touching:
 		if c.a.rope.end_body != null and c.ia == seg_a - 1 and c.ta >= 0.999:
 			c.hooked = true
 			c.hook_side = 0
@@ -508,6 +536,10 @@ func _refresh(c: Contact) -> void:
 
 func post_frame(dt: float, h: float, substeps: int) -> void:
 	cut_requests.clear()
+	for r in _pivot_rigs:
+		if is_instance_valid(r):
+			(r as KiteRig).line_pivots = []
+	_pivot_rigs.clear()
 	# Contatos do mesmo par que escorregaram para o mesmo lugar viram um só (senão
 	# esgotam o limite por par e um cruzamento novo ficaria sem contato).
 	for i in range(contacts.size() - 1, 0, -1):
@@ -556,9 +588,19 @@ func post_frame(dt: float, h: float, substeps: int) -> void:
 				continue
 		c.age += dt
 		c.position = (pa + pb) * 0.5
-		ra.add_render_kink(c.ia, c.ta)
-		rb.add_render_kink(c.ib, c.tb)
 		c.force = c.impulse / (h * h * float(substeps))
+		c.touching = c.hooked or c.force > 0.005 or pa.distance_to(pb) < 0.02
+		if c.touching:
+			ra.add_render_kink(c.ia, c.ta)
+			rb.add_render_kink(c.ib, c.tb)
+			if not c.hooked:
+				# A pipa de cada um passa a girar em volta deste cruzamento.
+				c.a.line_pivots.append([c.ia, c.ta])
+				c.b.line_pivots.append([c.ib, c.tb])
+				if not _pivot_rigs.has(c.a):
+					_pivot_rigs.append(c.a)
+				if not _pivot_rigs.has(c.b):
+					_pivot_rigs.append(c.b)
 		c.impulse = 0.0
 		var sa := ra.material_at(c.ia, c.ta)
 		var sb := rb.material_at(c.ib, c.tb)

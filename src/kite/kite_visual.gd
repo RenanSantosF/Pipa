@@ -12,6 +12,9 @@ const BAMBOO := Color(0.80, 0.64, 0.40)
 const BRIDLE := Color(0.95, 0.94, 0.9)
 const GRID_V := 16
 const GRID_U := 12
+## Distância (m) a partir da qual a pipa é desenhada maior, e o máximo.
+const VIS_SCALE_DIST := 26.0
+const VIS_SCALE_MAX := 1.6
 
 var rig: KiteRig
 var _paper: ShaderMaterial
@@ -45,7 +48,19 @@ func _process(_delta: float) -> void:
 	var b := rig.body
 	# Inclinação do desbico: a pipa deita em volta da vareta (só o desenho; a física
 	# do balanço já está no giro do bico).
-	global_transform = Transform3D(Basis(b.q) * Basis(Vector3.UP, rig.bank), b.x)
+	var basis := Basis(b.q) * Basis(Vector3.UP, rig.bank)
+	# Longe da câmera a pipa é DESENHADA maior (até 1,6×), em volta do nó do cabresto
+	# (a linha continua presa no mesmo ponto): no celular uma pipa de 65 cm a 40 m
+	# vira um pontinho e o balanço do desbico some.
+	var k := 1.0
+	var cam := get_viewport().get_camera_3d()
+	if cam != null:
+		k = clampf(cam.global_position.distance_to(b.x) / VIS_SCALE_DIST, 1.0, VIS_SCALE_MAX)
+	rig.visual_scale = k
+	var knot := b.world_point(b.tow_local)
+	var bs := basis.scaled(Vector3(k, k, k))
+	global_transform = Transform3D(bs, knot - bs * b.tow_local)
+	rig.visual_tail_offset = (global_transform * b.tail_local) - b.world_point(b.tail_local)
 	# Desbico: as asas batem juntas, como um pássaro (as varetas fecham e abrem).
 	var fl := rig.flap * 0.38
 	var dl := b.half_dihedral(0) + fl

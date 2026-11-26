@@ -56,10 +56,18 @@ func _process(_delta: float) -> void:
 	_im.clear_surfaces()
 	var cam_pos := cam.global_position
 	var prof := rig.profile
-	var k := prof.height / 0.65
+	var k := prof.height / 0.65 * rig.visual_scale
 	_pts.resize(0)
 	_pts.append(tail.attach_point())
 	_pts.append_array(tail.pos)
+	# Pipa desenhada maior (longe): a rabiola sai do desenho da pipa e volta para a
+	# posição da física ao longo do primeiro terço.
+	var off := rig.visual_tail_offset
+	if off.length_squared() > 1e-6:
+		var np := _pts.size()
+		for i in np:
+			var w := clampf(1.0 - float(i) / maxf(float(np - 1) * 0.35, 1.0), 0.0, 1.0)
+			_pts[i] += off * w
 	var far := cam_pos.distance_to(_pts[0]) > 45.0
 	# Curva lisa (Catmull-Rom) entre os nós: a rabiola é maleável, não um serrote.
 	_curve.resize(0)

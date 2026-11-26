@@ -2,56 +2,99 @@ class_name KiteFlightModel
 extends RefCounted
 ## MODELO DE VOO da pipa de combate (pipa do jogador), separado do controle.
 ##
-## Base: modelos de pipa de linha única usados em simulação de pipas (modelo de
-## ponto na "esfera" de raio = comprimento da linha, como nos simuladores de energia
-## eólica com pipas — KiteModels/FreeKiteSim — e a lei de curva de Erhard & Strauch:
-## giro ∝ velocidade × comando do cabresto):
+## Base física: pipa de linha única voando na "esfera" da linha (modelo de ponto dos
+## simuladores de pipa — KiteModels/FreeKiteSim — e a lei de curva de Erhard &
+## Strauch: giro ∝ velocidade × comando do cabresto), mais o comportamento da pipa
+## de combate: LINHA ESTICADA = estável, voa reto para onde o bico aponta; LINHA
+## FROUXA = instável, o bico gira. O desbico é a alternância dos dois:
 ##
-##  * A pipa anda TANGENTE à esfera, para onde o bico aponta (rumo ψ). A velocidade
-##    de equilíbrio vem do vento que bate de frente na vela (componente do vento ao
-##    longo da linha, W_n) vezes a eficiência da vela (sustentação/arrasto, E), mais o
-##    vento que corre pela esfera na direção do rumo, menos a gravidade quando ela
-##    sobe (e mais quando desce). A borda da janela de vento aparece sozinha: lá em
-##    cima W_n → 0 e ela não sobe mais.
-##  * Puxar linha (linha encurtando a r m/s) soma r ao vento aparente: ela acelera,
-##    sobe e chega mais perto. Dar linha subtrai: ela perde força e se afasta.
-##  * CABRESTO: o comando do jogador desloca o ponto de tração para um lado; a pipa
-##    INCLINA (rolagem β, com tempo de resposta) e a sustentação inclinada faz a
-##    CURVA: dψ/dt = K × (velocidade + v0) × sen β. Corpo e voo sempre ligados: o
-##    bico é o rumo, a inclinação é a do cabresto.
-##  * Inércia: velocidade e inclinação seguem o equilíbrio com constantes de tempo
-##    (pipão mais lento, pipinha mais rápida). Sem comando, a linha esticada deixa a
-##    pipa reta e a rabiola puxa o bico devagar para cima.
+##  * Cada TOQUE é uma puxadinha: o tranco estica a linha (o giro que estava
+##    acontecendo PARA na hora) e dá uma arrancada para onde o bico aponta; quando a
+##    linha volta a folgar, o bico BALANÇA para um lado. Os lados alternam sozinhos
+##    (1º esquerda, 2º direita, ...). O balanço é giro com inércia (velocidade de
+##    giro que decai), não uma animação.
+##  * RITMO constante: cada balanço é cortado pelo tranco seguinte antes de render,
+##    e os dois lados se anulam: ela segue para onde aponta, balançando e subindo um
+##    pouco a cada arrancada (sem chegar mais perto: a linha não é recolhida).
+##  * PAUSA depois de um toque: aquele balanço rende inteiro e ela vira para aquele
+##    lado. 1 ou 3 toques e pausa = esquerda; 2 toques e pausa = direita.
+##  * PIPÃO balança mais devagar e mais (forte); PIPINHA mais rápido e curto.
+##  * PUXÃO: linha encurtando soma ao vento aparente — ela acelera reto pelo bico,
+##    sobe e chega mais perto; a linha esticada trava o giro (não desbica).
+##  * GUIAR (arrastar o dedo): comando de cabresto → inclinação → curva.
+##
+## A pipa gira em volta do PONTO DE APOIO da linha mais perto dela: a mão, ou o fio /
+## galho / telhado / linha de outro em que a linha está encostada. Ela não atravessa
+## poste, fio, galho nem casa (movimento contínuo, escorrega na superfície), e a
+## translação participa das restrições da linha (KiteRigidBody.kinematic).
 ##
 ## Os parâmetros são estáticos para a área de testes ajustar ao vivo.
 
 ## Eficiência da vela (sustentação/arrasto) e peso equivalente (m/s).
 static var E := 1.8
 static var G := 3.0
-## Curva: ganho, velocidade somada, inclinação máxima do cabresto (rad).
+## Guiar: ganho da curva, velocidade somada, inclinação máxima do cabresto (rad).
 static var TURN_K := 0.5
 static var TURN_V0 := 6.0
 static var BANK_MAX := 0.62
 ## Tempos de resposta (s) para a pipa M; P × 0,7 e G × 1,5.
 static var SPEED_TAU := 0.35
 static var BANK_TAU := 0.16
-## A rabiola puxa o bico para cima quando não há comando (rad/s por sen ψ).
-static var UP_RESTORE := 0.35
+## A rabiola puxa o bico para cima quando o jogador para (rad/s por sen ψ), depois
+## de RESTORE_DELAY s sem comando.
+static var UP_RESTORE := 0.16
+static var RESTORE_DELAY := 2.0
 ## Força do puxão (quanto a velocidade de recolher soma ao vento aparente).
 static var PULL_GAIN := 1.8
+## DESBICO (pipa M): giro de um balanço que rende inteiro (rad), tempo do balanço (s),
+## arrancada de cada puxadinha (m/s) e pausa que recomeça a sequência pela esquerda.
+static var SWING_AMP := 0.87
+static var SWING_TAU := 0.26
+static var TUG_DV := 2.0
+static var TAP_RESET := 0.45
+## Quanto o primeiro balanço da sequência rende (centra o vaivém no rumo).
+static var FIRST_SWING := 0.6
 ## Folga da linha em relação ao comprimento (a linha faz barriga).
 const SAG := 0.985
 const SIZE_SCALE := [0.7, 1.0, 1.5]
 const SIZE_TURN := [1.3, 1.0, 0.75]
+const SIZE_SWING_AMP := [0.75, 1.0, 1.25]
+const SIZE_SWING_TAU := [0.7, 1.0, 1.45]
+const SIZE_TUG := [0.85, 1.0, 1.15]
+## Tranco: o giro anterior para em LOCK_TIME (linha esticada).
+const LOCK_TIME := 0.045
+## Inclinação visual por velocidade de giro do balanço (rad por rad/s).
+const ROLL_PER_W := 0.1
+## Dando linha, a pipa se afasta no máximo a esta velocidade (m/s).
+const V_OUT_MAX := 6.0
 
 var rig: KiteRig
 var heading := 0.0       ## rumo do bico (rad): 0 = para cima, + = direita do pipeiro
+var yaw_rate := 0.0      ## velocidade de giro do bico (rad/s) — o balanço do desbico
 var speed := 0.0         ## velocidade tangente (m/s), negativa = cai para trás
-var bank := 0.0          ## inclinação (rad) imposta pelo cabresto
+var bank := 0.0          ## inclinação total (rad): cabresto + balanço
 var steer := 0.0         ## comando do cabresto (−1..1), escrito pelo controle
+var steer_bank := 0.0
 var tension := 0.0       ## tração na linha (N)
-var _radius := 0.0
+## Sequência de toques: quantos desde a última pausa e lado do balanço atual.
+var taps := 0
+var swing_side := 0.0
+## Total de toques desde o lançamento (testes).
+var tap_count := 0
+## Ponto de apoio atual (mão, obstáculo ou linha de outro) e comprimento até a pipa.
+var pivot := Vector3.ZERO
+var pivot_len := 0.0
 var _pull_rate := 0.0
+var _since_tap := 10.0
+var _since_input := 10.0
+var _lock := 0.0
+var _pending := 0.0
+var _pending_dv := 0.0
+var _tug := 0.0
+var _x_set := Vector3.ZERO
+var _hd_last := Vector3.ZERO
+var _pivot_key := -1
+var _tap_queue: Array[float] = []
 
 
 func _init(p_rig: KiteRig) -> void:
@@ -60,17 +103,49 @@ func _init(p_rig: KiteRig) -> void:
 	var fr := frame()
 	var nose: Vector3 = b.q * Vector3.UP
 	heading = atan2(nose.dot(fr[2]), nose.dot(fr[1]))
-	_radius = (b.world_point(b.tow_local) - _hand()).length()
 
 
-func _hand() -> Vector3:
-	return rig.rope.pos[0] if rig.rope != null and rig.rope.pos.size() > 0 else rig.hand_position()
+func _size() -> int:
+	return clampi(rig.profile.size_class, 0, 2) if rig.profile else 1
 
 
-## [direção da linha (mão→pipa), cima da janela, direita da janela].
+## Ponto de apoio da linha mais perto da pipa: [ponto, comprimento até a pipa, chave].
+func _pivot() -> Array:
+	var r := rig.rope
+	if r == null or r.pos.is_empty():
+		return [rig.hand_position(), (rig.body.world_point(rig.body.tow_local) - rig.hand_position()).length(), -1]
+	var best_s := r._rest_total if r._rest_total > 0.0 else r.length()
+	var best_p := r.pos[0]
+	var key := -1
+	# Nós encostados em fio/galho/telhado (ou presos).
+	for k in range(1, r.pos.size()):
+		if r.pin_obstacle[k] >= 0 or r.pinned[k] == 1:
+			var s: float = r.mat_s[k]
+			if s > 0.3 and s < best_s:
+				best_s = s
+				best_p = r.pos[k]
+				key = k
+	# Linha de outra pipa encostada (cruzou): a pipa gira em volta do cruzamento.
+	var segs := r.segment_count()
+	for lp in rig.line_pivots:
+		var ia: int = lp[0]
+		if ia < 0 or ia >= segs:
+			continue
+		var ta: float = lp[1]
+		var s2 := r.material_at(ia, ta)
+		if s2 > 0.3 and s2 < best_s:
+			var sp := r.segment_points(ia)
+			best_s = s2
+			best_p = sp[0].lerp(sp[1], ta)
+			key = 1000 + ia
+	return [best_p, best_s, key]
+
+
+## [direção da linha (apoio→pipa), cima da janela, direita da janela].
 func frame() -> Array:
 	var b := rig.body
-	var ld := b.world_point(b.tow_local) - _hand()
+	var pv := _pivot()
+	var ld: Vector3 = b.world_point(b.tow_local) - (pv[0] as Vector3)
 	ld = ld.normalized() if ld.length() > 0.01 else Vector3.UP
 	var up_t := Vector3.UP - ld * ld.y
 	up_t = up_t.normalized() if up_t.length() > 0.02 else Vector3.FORWARD
@@ -83,24 +158,80 @@ func heading_dir() -> Vector3:
 	return (fr[1] as Vector3) * cos(heading) + (fr[2] as Vector3) * sin(heading)
 
 
-## Um subpasso de voo.
+## DESBICO com atraso (s) dentro do tick: o toque chega na hora certa do subpasso
+## (a física roda a 30 Hz; sem isso o ritmo dos toques ficava desigual e o rumo ia
+## escorregando para um lado).
+func tap_at(delay: float) -> void:
+	if delay <= 0.0005:
+		tap()
+	else:
+		_tap_queue.append(delay)
+
+
+## DESBICO: um toque = uma puxadinha (tranco + balanço para o próximo lado).
+func tap() -> void:
+	var sz := _size()
+	if _since_tap > TAP_RESET:
+		taps = 0
+	taps += 1
+	tap_count += 1
+	swing_side = -1.0 if taps % 2 == 1 else 1.0
+	var amp := SWING_AMP * float(SIZE_SWING_AMP[sz]) * (FIRST_SWING if taps == 1 else 1.0)
+	_pending = swing_side * amp / (SWING_TAU * float(SIZE_SWING_TAU[sz]))
+	_pending_dv = TUG_DV * float(SIZE_TUG[sz])
+	_lock = LOCK_TIME
+	_since_tap = 0.0
+	_since_input = 0.0
+	_tug = 1.0
+
+
+## Raio da pipa para bater em poste/fio/galho/casa (m).
+func kite_radius() -> float:
+	return maxf(rig.profile.height * 0.32, 0.14)
+
+
+## Pulso do braço na puxadinha (0..1), só para o visual da mão.
+func tug_visual() -> float:
+	return sin(PI * (1.0 - _tug)) if _tug > 0.0 else 0.0
+
+
+## Um subpasso de voo: escreve a posição/orientação PREVISTAS da pipa (as restrições
+## da linha e os contatos ainda corrigem a posição depois).
 func step(h: float) -> void:
 	var b := rig.body
 	var prof := rig.profile
-	var sz := clampi(prof.size_class, 0, 2)
+	var sz := _size()
 	var tsc: float = SIZE_SCALE[sz]
-	var hand := _hand()
-	var fr := frame()
-	var ld: Vector3 = fr[0]
-	var up_t: Vector3 = fr[1]
-	var right_t: Vector3 = fr[2]
-	# Raio = comprimento da linha (com barriga). Encurtando = puxando.
-	var target_r := maxf(rig.rope._rest_total * SAG, 1.0) if rig.rope != null else _radius
-	var dr := target_r - _radius
-	_pull_rate = lerpf(_pull_rate, -dr / h, minf(1.0, h / 0.12))
-	_radius = target_r
-	# Vento.
 	var p := b.world_point(b.tow_local)
+	# Empurrada pela linha/contato desde o último subpasso: contra o movimento = freou.
+	if _x_set != Vector3.ZERO:
+		# (Só empurrões de verdade — linha presa, contato com outra linha; o vaivém
+		# miúdo da linha não freia.)
+		var push := p - _x_set
+		var along := push.dot(_hd_last)
+		if along < -0.006:
+			speed = maxf(speed + (along + 0.006) / h * 0.5, minf(speed, 0.0))
+	var pv := _pivot()
+	pivot = pv[0]
+	pivot_len = pv[1]
+	var key: int = pv[2]
+	var ld := p - pivot
+	var d0 := ld.length()
+	ld = ld / d0 if d0 > 0.01 else Vector3.UP
+	var up_t := Vector3.UP - ld * ld.y
+	up_t = up_t.normalized() if up_t.length() > 0.02 else Vector3.FORWARD
+	var right_t := ld.cross(up_t).normalized()
+	if key != _pivot_key:
+		# Mudou o ponto de apoio: o rumo é remedido no novo referencial (o bico não pula).
+		var nose: Vector3 = b.q * Vector3.UP
+		heading = atan2(nose.dot(right_t), nose.dot(up_t))
+		_pivot_key = key
+	var r_t := maxf(pivot_len * SAG, 0.8)
+	# Velocidade com que a linha puxa a pipa (mão indo para trás, linha recolhida);
+	# negativa = linha saindo (dando linha).
+	var u := (d0 - r_t) / h
+	_pull_rate = lerpf(_pull_rate, clampf(u, -8.0, 12.0), minf(1.0, h / 0.1))
+	# Vento.
 	var wind := Wind.sample(p)
 	var w_n := wind.dot(ld)
 	var w_t := wind - ld * w_n
@@ -110,26 +241,76 @@ func step(h: float) -> void:
 	var s_eq := E * w_eff + w_t.dot(hd) - G * mass_k * Vector3.UP.dot(hd)
 	s_eq = maxf(s_eq, -3.0)
 	speed += (s_eq - speed) * minf(1.0, h / (SPEED_TAU * tsc))
-	# Cabresto → inclinação → curva.
-	bank += (steer * BANK_MAX - bank) * minf(1.0, h / (BANK_TAU * tsc))
-	var turn := TURN_K * float(SIZE_TURN[sz]) * (maxf(speed, 0.0) + TURN_V0) * sin(bank)
-	var restore := -UP_RESTORE * sin(heading) * (1.0 - absf(steer)) * clampf(prof.tail_length / 2.6, 0.5, 1.6)
-	heading = wrapf(heading + (turn + restore) * h, -PI, PI)
+	# --- DESBICO: tranco trava o giro, depois balança para o lado da vez. ---
+	var qi := 0
+	while qi < _tap_queue.size():
+		_tap_queue[qi] -= h
+		if _tap_queue[qi] <= 0.0:
+			_tap_queue.remove_at(qi)
+			tap()
+		else:
+			qi += 1
+	_since_tap += h
+	_since_input += h
+	if _lock > 0.0:
+		_lock -= h
+		yaw_rate *= exp(-h / 0.012)
+		if _lock <= 0.0:
+			yaw_rate += _pending
+			speed += _pending_dv
+			_pending = 0.0
+			_pending_dv = 0.0
+	var tau := SWING_TAU * float(SIZE_SWING_TAU[sz])
+	if _pull_rate > 0.6:
+		tau = minf(tau, 0.07)      # puxando: linha esticada, vai reta
+	elif _pull_rate < -0.8:
+		tau *= 1.5                 # dando linha: frouxa, o bico gira mais solto
+	yaw_rate *= exp(-h / tau)
+	# --- GUIAR: cabresto → inclinação → curva. ---
+	steer_bank += (steer * BANK_MAX - steer_bank) * minf(1.0, h / (BANK_TAU * tsc))
+	var turn := TURN_K * float(SIZE_TURN[sz]) * (maxf(speed, 0.0) + TURN_V0) * sin(steer_bank)
+	if absf(steer) > 0.05:
+		_since_input = 0.0
+	# Parado (sem toque, sem guiar, sem puxar): a rabiola endireita o bico devagar.
+	var restore := 0.0
+	if _since_input > RESTORE_DELAY and _pull_rate < 0.6:
+		var ramp := minf((_since_input - RESTORE_DELAY) / 1.0, 1.0)
+		restore = -UP_RESTORE * sin(heading) * clampf(prof.tail_length / 2.6, 0.5, 1.6) * ramp
+	heading = wrapf(heading + (yaw_rate + turn + restore) * h, -PI, PI)
 	hd = up_t * cos(heading) + right_t * sin(heading)
-	# Anda na esfera.
+	# --- Movimento na esfera em volta do apoio. ---
 	var np := p + hd * speed * h
+	var rel := np - pivot
+	var rl := rel.length()
+	var r_new := r_t
+	if d0 < r_t:
+		r_new = minf(r_t, d0 + V_OUT_MAX * h)
+	if rl > 0.01:
+		np = pivot + rel / rl * r_new
+	# Poste, fio, galho, casa: não atravessa (para no toque e escorrega). O teste é
+	# no CENTRO da vela (o nó do cabresto fica uns 20–30 cm à frente dela).
+	var obs: WorldObstacles = rig.rope.obstacles if rig.rope != null else null
+	if obs != null:
+		var off := b.x - p
+		var sw := obs.kite_sweep(p + off, np + off, kite_radius())
+		var n: Vector3 = sw[1]
+		if n != Vector3.ZERO:
+			np = (sw[0] as Vector3) - off
+			var vn := hd.dot(n)
+			if vn < 0.0:
+				speed *= 1.0 + vn
 	var g_y := Ground.height_at(np.x, np.z) + 0.4
 	if np.y < g_y:
 		np.y = g_y
 		speed = minf(speed, 0.0) * 0.3
-	var rel := np - hand
-	if rel.length() > 0.01:
-		np = hand + rel.normalized() * _radius
-	# Orientação: frente da vela voltada para a mão, bico = rumo, inclinação = cabresto.
-	var ld2 := (np - hand).normalized()
-	var y_axis := (hd - ld2 * hd.dot(ld2)).normalized()
+	# Orientação: frente da vela voltada para o apoio, bico = rumo, inclinação =
+	# cabresto + balanço do desbico (deita para o lado em que gira).
+	var ld2 := (np - pivot).normalized()
+	var y_axis := hd - ld2 * hd.dot(ld2)
+	y_axis = y_axis.normalized() if y_axis.length() > 0.01 else up_t
 	var z_axis := -ld2
 	var x_axis := y_axis.cross(z_axis).normalized()
+	bank = clampf(steer_bank + yaw_rate * ROLL_PER_W, -0.9, 0.9)
 	var basis := Basis(x_axis, y_axis, z_axis) * Basis(Vector3.UP, bank)
 	var q_new := basis.get_rotation_quaternion()
 	var x_new := np - q_new * b.tow_local
@@ -143,9 +324,16 @@ func step(h: float) -> void:
 	b.q = q_new
 	b.airspeed = sqrt(w_eff * w_eff + speed * speed)
 	b.angle_of_attack = atan2(w_eff, maxf(absf(speed), 0.1))
-	# Tração na linha (pressão dinâmica × área × coeficiente).
+	_x_set = np
+	_hd_last = hd
+	# Asas batendo na puxadinha (as varetas envergam com o tranco).
+	_tug = maxf(_tug - h / 0.16, 0.0)
+	rig.flap = tug_visual()
+	rig.bank = 0.0
+	# Tração na linha (pressão dinâmica × área × coeficiente) + tranco do toque.
 	var w_line := maxf(w_n + _pull_rate, 0.0)
 	tension = 0.5 * KiteRigidBody.RHO * (w_line * w_line + 0.5 * speed * speed) * (b._half_area[0] + b._half_area[1]) * 2.2
+	tension += tug_visual() * (2.5 + 1.5 * float(sz))
 
 
 ## Área de testes: ler/escrever parâmetro pelo nome.
@@ -160,6 +348,10 @@ static func param(key: String) -> float:
 		"BANK_TAU": return BANK_TAU
 		"UP_RESTORE": return UP_RESTORE
 		"PULL_GAIN": return PULL_GAIN
+		"SWING_AMP": return SWING_AMP
+		"SWING_TAU": return SWING_TAU
+		"TUG_DV": return TUG_DV
+		"TAP_RESET": return TAP_RESET
 	return 0.0
 
 
@@ -174,3 +366,7 @@ static func set_param(key: String, v: float) -> void:
 		"BANK_TAU": BANK_TAU = v
 		"UP_RESTORE": UP_RESTORE = v
 		"PULL_GAIN": PULL_GAIN = v
+		"SWING_AMP": SWING_AMP = v
+		"SWING_TAU": SWING_TAU = v
+		"TUG_DV": TUG_DV = v
+		"TAP_RESET": TAP_RESET = v

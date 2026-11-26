@@ -19,9 +19,14 @@ extends RefCounted
 ## Cada material tem sua regra (MATERIALS): nada de colisão genérica.
 
 const CELL := 8.0
-const MAX_CONTACTS := 20
-## Nós de contato por obstáculo (2 bastam para uma volta completa).
+const MAX_CONTACTS := 32
+## Linha solta (pipa cortada, sobra caída): menos nós de contato (só precisa deitar
+## no telhado / pendurar no fio).
+const MAX_CONTACTS_LOOSE := 10
+## Nós de contato por obstáculo: fio/galho/poste (uma volta completa) e caixa (a
+## linha deitada num telhado comprido e descendo pela beirada).
 const MAX_PER_OBSTACLE := 4
+const MAX_PER_BOX := 12
 const LINE_RADIUS := 0.0015
 
 enum Kind { CANOPY, CAPSULE, BOX }
@@ -46,6 +51,10 @@ const MATERIALS := {
 ##  CAPSULE: [kind, a, b, raio, nome]
 ##  BOX:     [kind, AABB, nome]
 var entries: Array = []
+## Caixa envolvente de cada entrada e, sob demanda, as entradas que se sobrepõem a
+## ela (fio que nasce dentro do poste, galho que sai do tronco, cruzeta no poste).
+var _boxes: Array[AABB] = []
+var _overlaps: Dictionary = {}
 var _grid: Dictionary = {}
 ## Altura do topo mais alto de cada célula: linha acima disso nem é testada.
 var _cell_top: Dictionary = {}
@@ -82,6 +91,7 @@ func add_box(center: Vector3, size: Vector3, what: String = "telhado") -> void:
 func _insert(e: Array, mn: Vector3, mx: Vector3) -> void:
 	var idx := entries.size()
 	entries.append(e)
+	_boxes.append(AABB(mn, mx - mn))
 	for gx in range(floori(mn.x / CELL), floori(mx.x / CELL) + 1):
 		for gz in range(floori(mn.z / CELL), floori(mx.z / CELL) + 1):
 			var key := Vector2i(gx, gz)
@@ -239,6 +249,45 @@ static func _box_exit(box: AABB, p: Vector3) -> Array:
 
 # --- Linha: restrição por subpasso -------------------------------------------
 
+func _overlaps_of(idx: int) -> PackedInt32Array:
+	if _overlaps.has(idx):
+		return _overlaps[idx]
+	var out := PackedInt32Array()
+	# Vizinhos que se sobrepõem OU estão a menos de 30 cm (laje logo acima do corpo
+	# da casa, fio que nasce no poste): o nó apoiado num não pode entrar no outro.
+	var box := _boxes[idx].grow(0.3)
+	for gx in range(floori(box.position.x / CELL), floori(box.end.x / CELL) + 1):
+		for gz in range(floori(box.position.z / CELL), floori(box.end.z / CELL) + 1):
+			for j in _grid.get(Vector2i(gx, gz), PackedInt32Array()):
+				if j != idx and not out.has(j) and (entries[j] as Array)[0] != Kind.CANOPY and _boxes[j].intersects(box):
+					out.append(j)
+	_overlaps[idx] = out
+	return out
+
+
+## Nó de contato também não pode ficar dentro de um obstáculo vizinho que se
+## sobrepõe ao seu (senão a linha "passa por dentro" do poste ao apoiar no fio), nem
+## dentro de outra caixa ali perto (escorregou do corpo da casa para dentro da laje).
+func _push_out_of_overlaps(idx: int, p: Vector3) -> Vector3:
+	for j in _overlaps_of(idx):
+		if not _boxes[j].grow(0.02).has_point(p):
+			continue
+		var o: Array = entries[j]
+		match o[0]:
+			Kind.CAPSULE:
+				var r: float = float(o[3]) + LINE_RADIUS
+				var q: Vector3 = _axis_point(o[1], o[2], p)[0]
+				var d := p - q
+				var dl := d.length()
+				if dl < r:
+					p = q + _capsule_side(o[1], o[2], p, Vector3.UP) * (r + 0.001)
+			Kind.BOX:
+				var bx: AABB = o[1]
+				if bx.size.y > 0.3 and bx.has_point(p):
+					p = _box_exit(bx, p)[0]
+	return p
+
+
 ## Chamado pela Rope no fim de cada subpasso: mantém os nós de contato na
 ## superfície do obstáculo e aplica atrito de Coulomb ao deslizar.
 func solve_contacts(rope: Rope) -> void:
@@ -304,6 +353,9 @@ func solve_contacts(rope: Rope) -> void:
 					nrm = ex[1]
 		if corr == Vector3.ZERO:
 			rope.c_normal[i] = nrm
+			var po := _push_out_of_overlaps(idx, p)
+			if po != p:
+				rope.pos[i] = po
 			continue
 		p += corr
 		# Atrito de Coulomb posicional: o deslocamento tangencial do subpasso é
@@ -317,7 +369,7 @@ func solve_contacts(rope: Rope) -> void:
 				p -= tang
 			else:
 				p -= tang * (mu * dn / tl)
-		rope.pos[i] = p
+		rope.pos[i] = _push_out_of_overlaps(idx, p)
 		rope.c_normal[i] = nrm
 
 
@@ -330,7 +382,7 @@ func update_rope(rope: Rope, dt: float) -> String:
 	_foliage_drag(rope, dt)
 	var snag := _update_contacts(rope, dt)
 	_absorb_nodes(rope)
-	if rope.contact_count() < MAX_CONTACTS:
+	if rope.contact_count() < (MAX_CONTACTS if rope.hand_fixed else MAX_CONTACTS_LOOSE):
 		_detect(rope)
 	return snag
 
@@ -345,6 +397,8 @@ func _foliage_drag(rope: Rope, dt: float) -> void:
 		if not below_top(p):
 			continue
 		for idx in query(p):
+			if not _boxes[idx].has_point(p):
+				continue
 			var e: Array = entries[idx]
 			if e[0] == Kind.CANOPY and p.distance_to(e[1]) < float(e[2]):
 				var k := exp(-3.5 * dt)
@@ -364,7 +418,9 @@ func _absorb_nodes(rope: Rope) -> void:
 		if not below_top(p):
 			continue
 		for idx in query(p):
-			if _contacts_on(rope, idx) >= MAX_PER_OBSTACLE:
+			if not _boxes[idx].has_point(p):
+				continue
+			if _contacts_on(rope, idx) >= _limit_for(idx):
 				continue
 			var e: Array = entries[idx]
 			match e[0]:
@@ -383,6 +439,9 @@ func _absorb_nodes(rope: Rope) -> void:
 ## Segmentos que cruzam um obstáculo ganham um nó de contato no ponto de toque.
 ## Teste contínuo: compara com as posições do começo do quadro (mesmo material),
 ## para a linha não atravessar um fio de 1 cm entre dois quadros.
+## Um trecho pode cruzar VÁRIOS obstáculos no mesmo quadro (3 fios lado a lado):
+## cada um ganha o seu nó. Trecho que já encosta num obstáculo por uma ponta também
+## é testado (a linha que dá a volta no fio, ou desce do telhado cortando o canto).
 func _detect(rope: Rope) -> void:
 	var n := rope.pos.size()
 	var seg_n := rope.segment_count()
@@ -398,11 +457,23 @@ func _detect(rope: Rope) -> void:
 		var ids := query_segment(a, b)
 		if ids.is_empty():
 			continue
+		var a0 := a
+		var b0 := b
+		if has_prev:
+			a0 = rope.frame_pos[i]
+			b0 = rope.frame_pos[i + 1] if i + 1 < n else rope.frame_end
+		var seg_len := maxf(a.distance_to(b), 0.001)
+		# Caixa envolvente do trecho (agora e no começo do quadro): filtro barato antes
+		# dos testes de verdade.
+		var smin := Vector3(minf(minf(a.x, b.x), minf(a0.x, b0.x)), minf(minf(a.y, b.y), minf(a0.y, b0.y)), minf(minf(a.z, b.z), minf(a0.z, b0.z)))
+		var smax := Vector3(maxf(maxf(a.x, b.x), maxf(a0.x, b0.x)), maxf(maxf(a.y, b.y), maxf(a0.y, b0.y)), maxf(maxf(a.z, b.z), maxf(a0.z, b0.z)))
+		var seg_box := AABB(smin, smax - smin).grow(0.05)
 		for idx in ids:
-			if (i > 0 and rope.pin_obstacle[i] == idx) or (i + 1 < n and rope.pin_obstacle[i + 1] == idx):
-				continue  # já tem contato com este obstáculo neste trecho
-			if _contacts_on(rope, idx) >= MAX_PER_OBSTACLE:
+			if not _boxes[idx].intersects(seg_box):
 				continue
+			# Ponta do trecho que já é nó de contato neste obstáculo (−1 = nenhuma).
+			var start_on := i > 0 and rope.pin_obstacle[i] == idx
+			var end_on := i + 1 < n and rope.pin_obstacle[i + 1] == idx
 			var e: Array = entries[idx]
 			var hit: Array = []
 			match e[0]:
@@ -410,65 +481,160 @@ func _detect(rope: Rope) -> void:
 					var ca: Vector3 = e[1]
 					var cb: Vector3 = e[2]
 					var r: float = float(e[3]) + LINE_RADIUS
-					var res := LineCombat.closest_segments(a, b, ca, cb)
-					var t: float = res[0]
-					var sp := a.lerp(b, t)
-					var ap := ca.lerp(cb, res[1])
-					# Lado da linha em relação ao obstáculo medido na NORMAL COMUM (⟂ às
-					# duas direções): é o sinal dela que troca quando uma atravessa a outra.
-					var nc := (b - a).cross(cb - ca)
-					if nc.length() < 1e-6:
-						nc = _capsule_side(ca, cb, sp, Vector3.UP)
-					nc = nc.normalized()
-					var s_now := (sp - ap).dot(nc)
-					var s_old := s_now
-					if has_prev:
-						var a0 := rope.frame_pos[i]
-						var b0 := rope.frame_pos[i + 1] if i + 1 < n else rope.frame_end
-						s_old = (a0.lerp(b0, t) - ap).dot(nc)
-					var from_side := nc * (1.0 if s_old >= 0.0 else -1.0)
-					if float(res[2]) < r:
-						hit = [t, ap + from_side * (r + 0.001), from_side]
-					elif has_prev and float(res[2]) < 4.0 and s_old * s_now < 0.0:
-						# Atravessou entre quadros (puxada forte): o cruzamento das RETAS tem
-						# que cair dentro dos dois trechos (com folga nas pontas).
-						var lp := LineCombat._line_params(a, b - a, ca, cb - ca)
-						if lp.x > -0.05 and lp.x < 1.05 and lp.y > -0.02 and lp.y < 1.02:
-							var tt := clampf(lp.x, 0.02, 0.98)
-							var apx := ca.lerp(cb, clampf(lp.y, 0.0, 1.0))
-							hit = [tt, apx + from_side * (r + 0.001), from_side]
+					if start_on and end_on:
+						# Dois nós no mesmo fio/galho: se ficaram em lados muito diferentes
+						# (a linha deu a volta), o trecho reto entre eles cortaria o fio —
+						# ganha um nó no meio, na superfície.
+						var n1: Vector3 = rope.c_normal[i]
+						var n2: Vector3 = rope.c_normal[i + 1]
+						if n1.dot(n2) < 0.0 and _contacts_on(rope, idx) < MAX_PER_OBSTACLE:
+							var mpt := (a + b) * 0.5
+							var q: Vector3 = _axis_point(ca, cb, mpt)[0]
+							var nm := n1 + n2
+							var axn := (cb - ca).normalized()
+							nm -= axn * nm.dot(axn)
+							if nm.length() < 1e-3:
+								nm = _capsule_side(ca, cb, mpt, n1)
+							nm = nm.normalized()
+							hit = [0.5, q + nm * (r + 0.001), nm]
+					else:
+						var res := LineCombat.closest_segments(a, b, ca, cb)
+						var t: float = res[0]
+						# Perto do nó que já está neste obstáculo: é o próprio contato.
+						var near_node := (start_on and t * seg_len < 0.12) or (end_on and (1.0 - t) * seg_len < 0.12)
+						var sp := a.lerp(b, t)
+						var ap := ca.lerp(cb, res[1])
+						# Lado da linha em relação ao obstáculo medido na NORMAL COMUM (⟂ às
+						# duas direções): é o sinal dela que troca quando uma atravessa a outra.
+						var nc := (b - a).cross(cb - ca)
+						if nc.length() < 1e-6:
+							nc = _capsule_side(ca, cb, sp, Vector3.UP)
+						nc = nc.normalized()
+						var s_now := (sp - ap).dot(nc)
+						var s_old := s_now
+						if has_prev:
+							s_old = (a0.lerp(b0, t) - ap).dot(nc)
+						var from_side := nc * (1.0 if s_old >= 0.0 else -1.0)
+						if float(res[2]) < r and not near_node:
+							hit = [t, ap + from_side * (r + 0.001), from_side]
+						elif has_prev and float(res[2]) < 4.0 and s_old * s_now < 0.0:
+							# Atravessou entre quadros (puxada forte): o cruzamento das RETAS tem
+							# que cair dentro dos dois trechos (com folga nas pontas).
+							var lp := LineCombat._line_params(a, b - a, ca, cb - ca)
+							var tt := clampf(lp.x, 0.0, 1.0)
+							var far_node := not ((start_on and tt * seg_len < 0.12) or (end_on and (1.0 - tt) * seg_len < 0.12))
+							if far_node and lp.x > -0.05 and lp.x < 1.05 and lp.y > -0.02 and lp.y < 1.02:
+								var apx := ca.lerp(cb, clampf(lp.y, 0.0, 1.0))
+								hit = [tt, apx + from_side * (r + 0.001), from_side]
 				Kind.BOX:
 					var box: AABB = e[1]
 					if box.size.y > 0.3:
-						var bh := _segment_box(a, b, box.grow(0.01))
+						# Testa contra a caixa um pouco MENOR: as pontas apoiadas na superfície
+						# (nó de contato nesta ou numa caixa vizinha) não contam; cortar o canto
+						# por dentro ou atravessar a caixa conta.
+						var bh := _seg_box_inside(a, b, box)
 						if not bh.is_empty():
 							hit = bh
-						elif has_prev:
+						elif has_prev and not (start_on or end_on):
 							# Passou inteira por um muro/telhado entre dois quadros: o meio do
 							# trecho "varreu" a caixa → contato na face por onde entrou.
-							var a0 := rope.frame_pos[i]
-							var b0 := rope.frame_pos[i + 1] if i + 1 < n else rope.frame_end
 							var sw := _segment_box((a0 + b0) * 0.5, (a + b) * 0.5, box.grow(0.01))
 							if not sw.is_empty():
 								hit = [0.5, sw[1], sw[2]]
 			if hit.is_empty():
 				continue
-			var t2: float = hit[0]
-			# Não cria colado na mão nem no cabresto.
-			if (i == 0 and rope.hand_fixed and t2 < 0.15) or (i == seg_n - 1 and t2 > 0.9):
+			if _contacts_on(rope, idx) >= _limit_for(idx):
 				continue
-			hits.append([i, t2, hit[1], idx, hit[2]])
-			break
-	# Insere do fim para o começo (os índices anteriores não mudam).
-	hits.sort_custom(func(x, y) -> bool: return x[0] > y[0])
+			hits.append([i, float(hit[0]), hit[1], idx, hit[2]])
+	# Insere do fim para o começo (os índices anteriores não mudam). No mesmo trecho,
+	# do maior t para o menor (o trecho vai encurtando a cada nó inserido).
+	hits.sort_custom(func(x, y) -> bool: return x[0] > y[0] or (x[0] == y[0] and x[1] > y[1]))
+	var last_i := -1
+	var last_t := 1.0
 	for h in hits:
 		if rope.contact_count() >= MAX_CONTACTS:
 			break
 		var i: int = h[0]
-		var t: float = h[1]
+		# Fração para dividir o comprimento de repouso (o nó vai para o ponto de toque;
+		# perto das pontas só não deixa um trecho minúsculo).
+		var t: float = clampf(h[1], 0.06, 0.94)
+		if i != last_i:
+			last_i = i
+			last_t = 1.0
+		if t >= last_t - 0.03:
+			continue   # dois toques quase no mesmo ponto do trecho
+		var frac := t / last_t
 		var l := rope.rest[i]
-		rope.insert_node(i + 1, h[2], rope.velocity_at(i, t), l * t, l * (1.0 - t))
+		rope.insert_node(i + 1, h[2], rope.velocity_at(i, frac), l * frac, l * (1.0 - frac))
 		rope.set_contact(i + 1, h[3], h[4])
+		last_t = t
+
+
+## Trecho a–b entra na caixa (encolhida um pouco)? [t em a→b, ponto, normal].
+## O nó novo vai para a QUINA por onde a linha deveria dobrar (entre a face de
+## entrada e a de saída) — assim a linha apoiada na parede passa a dobrar na beirada
+## do telhado/muro em vez de cortar o canto por dentro.
+static func _seg_box_inside(a: Vector3, b: Vector3, box: AABB) -> Array:
+	var shrink := minf(0.025, minf(box.size.x, minf(box.size.y, box.size.z)) * 0.2)
+	var inner := box.grow(-shrink)
+	var e1 := _segment_box(a, b, inner)
+	var e2 := _segment_box(b, a, inner)
+	if e1.is_empty() and e2.is_empty():
+		return []
+	if e1.is_empty() or e2.is_empty():
+		# Uma ponta já está dentro: nó na face por onde a outra entra.
+		var ee: Array = e1 if not e1.is_empty() else e2
+		var nn: Vector3 = ee[2]
+		var tt: float = ee[0] if not e1.is_empty() else 1.0 - float(ee[0])
+		if tt <= 0.002 or tt >= 0.998:
+			return []
+		return [tt, (ee[1] as Vector3) + nn * shrink, nn]
+	var t_in: float = e1[0]
+	var t_out: float = 1.0 - float(e2[0])
+	if t_out - t_in < 0.002:
+		return []
+	var n_in: Vector3 = e1[2]
+	var n_out: Vector3 = e2[2]
+	var tm := (t_in + t_out) * 0.5
+	var d := a.lerp(b, tm)
+	var ax_in := _axis_of(n_in)
+	var ax_out := _axis_of(n_out)
+	if ax_in != ax_out:
+		var p := d
+		p[ax_in] = box.end[ax_in] if n_in[ax_in] > 0.0 else box.position[ax_in]
+		p[ax_out] = box.end[ax_out] if n_out[ax_out] > 0.0 else box.position[ax_out]
+		var n := (n_in + n_out).normalized()
+		return [tm, p + n * 0.004, n]
+	# Entra e sai por faces opostas (atravessou um muro inteiro): passa por cima /
+	# pela lateral mais perto.
+	var best := INF
+	var out := d
+	var nrm := Vector3.UP
+	for axis in 3:
+		if axis == ax_in:
+			continue
+		for sg in [-1.0, 1.0]:
+			if axis == 1 and sg < 0.0:
+				continue
+			var face: float = box.end[axis] if sg > 0.0 else box.position[axis]
+			var dist := absf(face - d[axis])
+			if dist < best:
+				best = dist
+				out = d
+				out[axis] = face + sg * 0.004
+				nrm = Vector3.ZERO
+				nrm[axis] = sg
+	return [tm, out, nrm]
+
+
+static func _axis_of(n: Vector3) -> int:
+	if absf(n.x) >= absf(n.y) and absf(n.x) >= absf(n.z):
+		return 0
+	return 1 if absf(n.y) >= absf(n.z) else 2
+
+
+func _limit_for(idx: int) -> int:
+	return MAX_PER_BOX if (entries[idx] as Array)[0] == Kind.BOX else MAX_PER_OBSTACLE
 
 
 func _contacts_on(rope: Rope, idx: int) -> int:
@@ -552,8 +718,10 @@ func _update_contacts(rope: Rope, dt: float) -> String:
 				_capstan(rope, i, dev, t_hand, t_kite, rope.pin_mu[i], dt)
 				i -= 1
 				continue
-		# CONTATO DESLIZANTE.
-		if (dev < 0.04 and off_surface > 0.01) or slipped_off or off_surface > 0.35:
+		# CONTATO DESLIZANTE. Linha reta deitada no meio de um telhado/laje não precisa
+		# de nó de contato (só apoia): solta para não esgotar o limite da caixa.
+		var flat_on_top: bool = e[0] == Kind.BOX and dev < 0.03 and rope.c_normal[i].y > 0.9
+		if (dev < 0.04 and off_surface > 0.01) or slipped_off or off_surface > 0.35 or flat_on_top:
 			rope.clear_contact(i)
 			# Nó criado só para o contato (trecho curto) volta a ser um segmento só.
 			if i < rope.rest.size() and minf(rope.rest[i - 1], rope.rest[i]) < rope.segment_target * 0.7:
@@ -677,6 +845,141 @@ func kite_contact(body: KiteRigidBody, knot: Vector3, anchors: PackedVector3Arra
 						body.v -= nrm * vn * 1.4   # quica
 					body.v *= 0.85
 	return []
+
+
+## Movimento CONTÍNUO da pipa guiada pelo modelo de voo, de p até np (subpasso),
+## como uma esfera de raio `rad`: não atravessa poste, fio, galho, tronco nem casa —
+## para no ponto de toque e escorrega pela superfície com o que sobrar do movimento.
+## Retorna [ponto final, normal do toque (ZERO = livre), nome do obstáculo].
+func kite_sweep(p: Vector3, np: Vector3, rad: float) -> Array:
+	var out := np
+	var nrm := Vector3.ZERO
+	var what := ""
+	if not (below_top(p, rad + 0.5) or below_top(np, rad + 0.5)):
+		return [out, nrm, what]
+	var ids := query_segment(p, np)
+	for _pass in 2:
+		var hit_any := false
+		for idx in ids:
+			var e: Array = entries[idx]
+			match e[0]:
+				Kind.CAPSULE:
+					var ca: Vector3 = e[1]
+					var cb: Vector3 = e[2]
+					var rr: float = float(e[3]) + rad
+					var res := LineCombat.closest_segments(p, out, ca, cb)
+					if float(res[2]) >= rr:
+						continue
+					# Ponto de entrada: busca binária no trecho p→out.
+					var lo := 0.0
+					var hi: float = res[0]
+					if _dist_axis(ca, cb, p) < rr:
+						hi = 0.0
+					for _k in 6:
+						var mid := (lo + hi) * 0.5
+						if _dist_axis(ca, cb, p.lerp(out, mid)) < rr:
+							hi = mid
+						else:
+							lo = mid
+					var entry := p.lerp(out, lo)
+					var q: Vector3 = _axis_point(ca, cb, entry)[0]
+					var n := _capsule_side(ca, cb, entry, (p - out).normalized())
+					# Escorrega: tira do resto do movimento a parte que entra na superfície.
+					var rest := out - entry
+					var into := rest.dot(n)
+					if into < 0.0:
+						rest -= n * into
+					var cand := entry + rest
+					var qd: Vector3 = _axis_point(ca, cb, cand)[0]
+					var dc := cand - qd
+					if dc.length() < rr:
+						cand = qd + _capsule_side(ca, cb, cand, n) * (rr + 0.002)
+					out = cand
+					nrm = n
+					what = e[4]
+					hit_any = true
+				Kind.BOX:
+					var box: AABB = e[1]
+					if box.size.y < 0.3:
+						continue
+					var gb := box.grow(rad)
+					if not gb.has_point(out):
+						continue
+					var bh := _segment_box(p, out, gb)
+					var n2: Vector3
+					if bh.is_empty():
+						var ex := _box_exit(gb, out)
+						out = ex[0]
+						n2 = ex[1]
+					else:
+						n2 = bh[2]
+						var axis := 0 if absf(n2.x) > 0.5 else (1 if absf(n2.y) > 0.5 else 2)
+						var face := gb.end[axis] if n2[axis] > 0.0 else gb.position[axis]
+						out[axis] = face + n2[axis] * 0.004
+					nrm = n2
+					what = e[2]
+					hit_any = true
+		if not hit_any:
+			break
+	return [out, nrm, what]
+
+
+## Empurra a pipa (esfera de raio `rad`) para fora de poste, fio, galho e casa —
+## depois das restrições da linha (a linha apoiada no telhado não a puxa para dentro).
+## Caixas encostadas (corpo da casa + laje, muro + casa): sai para o ponto mais perto
+## que não esteja dentro de NENHUMA delas (senão sair de uma jogava dentro da outra).
+func kite_push_out(p: Vector3, rad: float) -> Vector3:
+	if not below_top(p, rad + 0.3):
+		return p
+	var ids := query(p)
+	for idx in ids:
+		var e: Array = entries[idx]
+		if e[0] != Kind.CAPSULE or not _boxes[idx].grow(rad).has_point(p):
+			continue
+		var rr: float = float(e[3]) + rad
+		var q: Vector3 = _axis_point(e[1], e[2], p)[0]
+		if p.distance_to(q) < rr:
+			p = q + _capsule_side(e[1], e[2], p, Vector3.UP) * (rr + 0.002)
+	var inside: Array[AABB] = []
+	for idx in ids:
+		var e2: Array = entries[idx]
+		if e2[0] == Kind.BOX:
+			var box: AABB = e2[1]
+			if box.size.y >= 0.3 and box.grow(rad).has_point(p):
+				inside.append(box.grow(rad))
+	if inside.is_empty():
+		return p
+	var best := p + Vector3.UP * 50.0
+	var best_d := INF
+	for gb in inside:
+		for axis in 3:
+			for sg in [-1.0, 1.0]:
+				if axis == 1 and sg < 0.0:
+					continue
+				var c := p
+				c[axis] = (gb.end[axis] if sg > 0.0 else gb.position[axis]) + sg * 0.004
+				var d := c.distance_squared_to(p)
+				if d >= best_d:
+					continue
+				var free := true
+				for other in inside:
+					if other.has_point(c):
+						free = false
+						break
+				if free:
+					best = c
+					best_d = d
+	if best_d == INF:
+		# Cercada: sobe acima da caixa mais alta.
+		var top := p.y
+		for gb2 in inside:
+			top = maxf(top, gb2.end.y + 0.004)
+		best = Vector3(p.x, top, p.z)
+	return best
+
+
+static func _dist_axis(a: Vector3, b: Vector3, p: Vector3) -> float:
+	return p.distance_to(_axis_point(a, b, p)[0])
 
 
 ## Segmento × triângulo (Möller–Trumbore).

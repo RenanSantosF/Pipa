@@ -32,11 +32,15 @@ var throws: Array[float] = []
 ## GUIAR (dedo segurado): posição do dedo na tela (a pipa vira o bico para ele).
 var guide_active: bool = false
 var guide_finger := Vector2.ZERO
+## Arrasto do dedo que guia, a partir de onde encostou (px; x direita, y para baixo).
+var guide_vec := Vector2.ZERO
 ## Guiar por direção no mundo (testes/teclado): usado se guide_active for falso.
 var guide_dir := Vector3.ZERO
 var guide_amount: float = 0.0
 ## DESBICOS por toque desde a última leitura (os lados alternam sozinhos).
 var desbico_toques: int = 0
+## Hora de cada toque (s, relógio do sistema) — o voo aplica cada um na hora certa.
+var desbico_times: Array[float] = []
 ## PUXÕES de recolher (arrastar de cima para baixo): tamanho de cada arrasto 0..1.
 var recolhe: Array[float] = []
 ## Puxada contínua (segurar arrastado para baixo): 0..1 = ritmo da mão sobre mão.

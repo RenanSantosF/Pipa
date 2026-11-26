@@ -5,11 +5,15 @@ extends PanelContainer
 ## velocidade, comando do cabresto e tração da pipa do jogador.
 
 const PARAMS := [
+	["SWING_AMP", "Desbico: tamanho do balanço (rad)", 0.3, 1.8],
+	["SWING_TAU", "Desbico: tempo do balanço (s)", 0.08, 0.7],
+	["TUG_DV", "Desbico: arrancada do toque (m/s)", 0.0, 6.0],
+	["TAP_RESET", "Desbico: pausa que recomeça (s)", 0.2, 1.0],
 	["E", "Velocidade (eficiência da vela)", 0.8, 3.5],
-	["TURN_K", "Curva (giro por velocidade)", 0.15, 1.2],
-	["TURN_V0", "Curva com pouca velocidade", 0.0, 12.0],
-	["BANK_MAX", "Inclinação máx. do cabresto (rad)", 0.2, 1.1],
-	["BANK_TAU", "Resposta do cabresto (s)", 0.04, 0.5],
+	["TURN_K", "Guiar: curva (giro por velocidade)", 0.15, 1.2],
+	["TURN_V0", "Guiar: curva com pouca velocidade", 0.0, 12.0],
+	["BANK_MAX", "Guiar: inclinação do cabresto (rad)", 0.2, 1.1],
+	["BANK_TAU", "Guiar: resposta do cabresto (s)", 0.04, 0.5],
 	["SPEED_TAU", "Inércia da velocidade (s)", 0.08, 1.2],
 	["PULL_GAIN", "Força do puxão", 0.3, 3.5],
 	["UP_RESTORE", "Rabiola endireita o bico", 0.0, 1.5],
@@ -85,5 +89,6 @@ func _process(_delta: float) -> void:
 	if not visible or rig == null or rig.flight == null:
 		return
 	var f := rig.flight
-	_readout.text = "rumo %+4.0f°  inclinação %+3.0f°  velocidade %4.1f m/s  cabresto %+.2f  tração %4.1f N  linha %4.1f m" % [
-		rad_to_deg(f.heading), rad_to_deg(f.bank), f.speed, f.steer, f.tension, rig.flying_length()]
+	_readout.text = "rumo %+4.0f°  giro %+4.0f°/s  inclinação %+3.0f°  velocidade %4.1f m/s\ncabresto %+.2f  toques %d (%s)  tração %4.1f N  linha %4.1f m" % [
+		rad_to_deg(f.heading), rad_to_deg(f.yaw_rate), rad_to_deg(f.bank), f.speed, f.steer, f.taps,
+		"esq" if f.swing_side < 0.0 else ("dir" if f.swing_side > 0.0 else "-"), f.tension, rig.flying_length()]

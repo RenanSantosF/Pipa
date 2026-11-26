@@ -82,10 +82,14 @@ func solve(_h: float) -> void:
 	var l := d.length()
 	if l > seg_len and l > 0.00001:
 		var nrm := d / l
-		var wsum := inv_m + body.inverse_mass_at(r, nrm)
+		# Pipa guiada pelo modelo de voo: a rabiola já entra no peso dele; ela segue
+		# a pipa sem empurrá-la (senão o puxão da rabiola contava duas vezes).
+		var wb := 0.0 if body.kinematic else body.inverse_mass_at(r, nrm)
+		var wsum := inv_m + wb
 		var dl := -(l - seg_len) / wsum
 		pos[0] += nrm * (dl * inv_m)
-		body.apply_correction(r, -nrm * dl)
+		if not body.kinematic:
+			body.apply_correction(r, -nrm * dl)
 	for i in range(1, n):
 		var dd := pos[i] - pos[i - 1]
 		var ll := dd.length()

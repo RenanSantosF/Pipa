@@ -182,6 +182,12 @@ func _ready() -> void:
 	if args.has("--autotest"):
 		_attach("res://src/main/autotest.gd")
 		return
+	if args.has("--tapprobe"):
+		_attach("res://src/main/tap_probe.gd")
+		return
+	if args.has("--passprobe"):
+		_attach("res://src/main/pass_probe.gd")
+		return
 	if args.has("--crossprobe"):
 		_attach("res://src/main/cross_probe.gd")
 		return

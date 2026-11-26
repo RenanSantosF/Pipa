@@ -151,6 +151,21 @@ func _phase_flight(_delta: float) -> void:
 		it.guide_dir = _window_dir(Vector2(1, 0))    # guiar para a direita
 		it.guide_amount = 1.0
 		_m["lat4"] = lat
+	elif _t < 21.0:
+		it.guide_dir = _window_dir(Vector2(0, 1))    # bico para cima de novo
+		it.guide_amount = 1.0
+		_m["h5"] = rig.flight.heading if rig.flight else 0.0
+	elif _t < 24.6:
+		# DESBICO: 2 toques + pausa (três vezes) → vira para a DIREITA.
+		var k := fmod(_t - 21.0, 1.2)
+		if _every(1.2, 21.0) or (k >= 0.25 and k - _dt < 0.25):
+			it.desbico_toques += 1
+		_m["h6"] = rig.flight.heading if rig.flight else 0.0
+	elif _t < 27.0:
+		# 1 toque + pausa (duas vezes) → vira para a ESQUERDA.
+		if _every(1.2, 24.6):
+			it.desbico_toques += 1
+		_m["h7"] = rig.flight.heading if rig.flight else 0.0
 	if _t > 26.0:
 		_alt_sum += b.x.y - main.player.global_position.y
 		_alt_n += 1
@@ -159,8 +174,10 @@ func _phase_flight(_delta: float) -> void:
 			_t, b.x.y - main.player.global_position.y, el, lat, rig.tension, rig.flying_length(), main.physics_world.frame_ms])
 	if _t >= 30.0:
 		var mean_alt := _alt_sum / maxf(float(_alt_n), 1.0)
-		print("AUTOTEST voo: dar linha %.1f → %.1f m · puxar %.1f → %.1f m (elevação %.0f° → %.0f°) · esquerda %+.1f m · direita %+.1f m · altura final %.1f m" % [
-			_m["len0"], _m["len1"], _m["len1"], _m["len2"], _m["el1"], _m["el2"], _m["lat3"] - _m["lat2"], _m["lat4"] - _m["lat3"], mean_alt])
+		var turn_r := rad_to_deg(wrapf(float(_m["h6"]) - float(_m["h5"]), -PI, PI))
+		var turn_l := rad_to_deg(wrapf(float(_m["h7"]) - float(_m["h6"]), -PI, PI))
+		print("AUTOTEST voo: dar linha %.1f → %.1f m · puxar %.1f → %.1f m (elevação %.0f° → %.0f°) · esquerda %+.1f m · direita %+.1f m · desbico 2 toques %+.0f° · 1 toque %+.0f° · altura final %.1f m" % [
+			_m["len0"], _m["len1"], _m["len1"], _m["len2"], _m["el1"], _m["el2"], _m["lat3"] - _m["lat2"], _m["lat4"] - _m["lat3"], turn_r, turn_l, mean_alt])
 		var checks := [
 			[_m["len1"] > _m["len0"] + 2.0, "dar linha não deu linha"],
 			[_m["len2"] < _m["len1"] - 2.0, "puxar não recolheu linha"],
@@ -168,6 +185,8 @@ func _phase_flight(_delta: float) -> void:
 			[_m["lat3"] - _m["lat2"] < -3.0, "guiar para a esquerda não levou a pipa para a esquerda"],
 			[_m["lat4"] - _m["lat3"] > 3.0, "guiar para a direita não levou a pipa para a direita"],
 			[mean_alt > 6.0, "a pipa não se manteve no ar"],
+			[turn_r > 25.0, "desbico de 2 toques + pausa não virou para a direita"],
+			[turn_l < -20.0, "desbico de 1 toque + pausa não virou para a esquerda"],
 		]
 		for c in checks:
 			if not c[0]:

@@ -18,6 +18,7 @@ var frame_ms: float = 0.0
 ## Parte do quadro gasta com o cenário (contatos da linha com obstáculos).
 var world_ms: float = 0.0
 var obstacles: WorldObstacles
+var _world_tick := 0
 
 
 func _ready() -> void:
@@ -43,7 +44,21 @@ func _physics_process(dt: float) -> void:
 			r.predict(h)
 		for r in rigs:
 			r.solve(h)
+			r.pushed_by_line = false
 		combat.solve(h)
+		# O cenário é rígido: depois do empurra-empurra entre linhas, os nós apoiados
+		# em fio/poste/telhado voltam para fora (uma linha não empurra a outra para
+		# dentro da casa).
+		for r in rigs:
+			if r.rope != null and r.rope.obstacles != null and r.pushed_by_line:
+				r.rope.obstacles.solve_contacts(r.rope)
+			if r.rope != null and r.rope.obstacles != null:
+				# Pipa do jogador (modelo de voo): também é sólida para o cenário depois
+				# das restrições da linha.
+				if r.flight != null and r.body != null and not r.snagged:
+					var po := r.rope.obstacles.kite_push_out(r.body.x, r.flight.kite_radius())
+					if po != r.body.x:
+						r.body.x = po
 		for r in rigs:
 			r.finalize(h)
 	combat.post_frame(dt, h, sub)
@@ -80,10 +95,14 @@ func _collide_with_world() -> void:
 			return
 		obstacles = sb.get("obstacles")
 	var dt := get_physics_process_delta_time()
+	_world_tick += 1
 	for r in rigs:
 		if r.rope != null:
+			# Linha solta (pipa voada / sobra caída): cenário a cada 2 quadros.
+			if not r.rope.hand_fixed and (_world_tick + r.get_instance_id()) % 2 == 0:
+				continue
 			obstacles.last_freed = ""
-			var snag := obstacles.update_rope(r.rope, dt)
+			var snag := obstacles.update_rope(r.rope, dt * (1.0 if r.rope.hand_fixed else 2.0))
 			if snag != "" and r.is_flying():
 				EventBus.kite_snagged.emit(r, snag)
 			if obstacles.last_freed != "" and r.is_flying():
@@ -97,6 +116,8 @@ func _collide_with_world() -> void:
 
 func _opponent_in_contact(rig: KiteRig) -> KiteRig:
 	for c in combat.contacts:
+		if not c.touching:
+			continue
 		if c.a == rig:
 			return c.b
 		if c.b == rig:
@@ -134,6 +155,6 @@ func _cleanup() -> void:
 func strongest_contact_for(rig: KiteRig) -> LineCombat.Contact:
 	var best: LineCombat.Contact = null
 	for c in combat.contacts:
-		if (c.a == rig or c.b == rig) and (best == null or c.force * c.slide > best.force * best.slide):
+		if c.touching and (c.a == rig or c.b == rig) and (best == null or c.force * c.slide > best.force * best.slide):
 			best = c
 	return best

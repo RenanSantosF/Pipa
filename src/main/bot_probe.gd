@@ -37,7 +37,15 @@ func _physics_process(delta: float) -> void:
 				for p in pr.rope.pos:
 					d = minf(d, p.distance_to(r.body.x))
 			line += " | %s est=%d alt=%.0f L=%.0f dist_linha=%.1f" % [r.display_name if r else "-", bot._state, (r.body.x.y - Ground.height_at(r.body.x.x, r.body.x.z)) if r and r.body else -1.0, r.flying_length() if r else 0.0, d]
-		print("BOTS t=%4.0f física=%.1fms cenário=%.1fms contatos=%d%s" % [_t, main.physics_world.frame_ms, main.physics_world.world_ms, main.physics_world.combat.contacts.size(), line])
+		var nr := 0
+		var nn := 0
+		var nc := 0
+		for rg in (main.physics_world as KitePhysicsWorld).rigs:
+			if rg.rope != null:
+				nr += 1
+				nn += rg.rope.pos.size()
+				nc += rg.rope.contact_count()
+		print("BOTS t=%4.0f física=%.1fms cenário=%.1fms contatos=%d linhas=%d nós=%d nós_contato=%d%s" % [_t, main.physics_world.frame_ms, main.physics_world.world_ms, main.physics_world.combat.contacts.size(), nr, nn, nc, line])
 	if _t > 70.0:
 		print("BOTS cortes: ", _cuts)
 		get_tree().quit(0)

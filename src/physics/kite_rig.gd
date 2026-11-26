@@ -64,6 +64,14 @@ var push_accel := Vector3.ZERO
 var bank: float = 0.0
 ## Modelo de voo (pipa do jogador presa na linha); nulo = física de corpo rígido.
 var flight: KiteFlightModel = null
+## Cruzamentos com outras linhas encostadas no último tick: [trecho, t] (LineCombat).
+var line_pivots: Array = []
+## Escala do DESENHO da pipa (longe da câmera ela é desenhada um pouco maior para o
+## desbico ser visível no celular; a física não muda). Escrita pelo KiteVisual.
+var visual_scale: float = 1.0
+## A linha foi empurrada por outra linha neste subpasso (refaz o contato com o cenário).
+var pushed_by_line: bool = false
+var visual_tail_offset := Vector3.ZERO
 var _t_steady: float = 5.0
 ## A mão voltando da braçada joga a linha no chão? (falso no desbico: a linha escorrega)
 var shorten_on_return: bool = true
@@ -370,14 +378,15 @@ func _update_spool(dt: float) -> void:
 
 func predict(h: float) -> void:
 	if body != null:
-		if flight != null and (loose or held or snagged or rope == null or rope.end_body != body):
+		if flight != null and (loose or rope == null or rope.end_body != body):
 			# Cortada/solta: volta a ser corpo rígido livre (cai de verdade).
-			if not held:
-				body.kinematic = false
-				flight = null
-		if flight != null and not held:
+			body.kinematic = false
+			flight = null
+		if flight != null:
 			body.predict(h)   # só guarda a posição anterior
-			flight.step(h)
+			# Enroscada (fio, galho) ou na mão: o voo espera; volta quando soltar.
+			if not held and not snagged:
+				flight.step(h)
 		else:
 			body.compute_forces()
 			body.predict(h)
@@ -417,8 +426,9 @@ func finalize(h: float) -> void:
 func post_frame(dt: float, h: float) -> void:
 	if rope != null:
 		rope.finish_tick(h)
-		if flight != null and rope.end_body == body:
-			# Tração vem do modelo de voo (a pipa é um ponto fixo para a linha).
+		if flight != null and rope.end_body == body and not snagged:
+			# Tração vem do modelo de voo (aerodinâmica + puxão + tranco do desbico).
+			# Enroscada, vale a tensão de verdade da linha (é ela que solta o enrosco).
 			rope.tension_hand = flight.tension
 			rope.tension_end = flight.tension
 		tension = lerpf(tension, rope.tension_hand if rope.hand_fixed else 0.0, 1.0 - exp(-12.0 * dt))

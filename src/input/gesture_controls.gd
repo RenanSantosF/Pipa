@@ -1,16 +1,19 @@
 class_name GestureControls
 extends Control
-## Controles por GESTOS (sem botões de jogo), dois comandos independentes:
+## Controles por GESTOS (sem botões de jogo), como no Pipa Combate:
 ##
-##   SEGURAR e MOVER o dedo    → GUIAR (desbico): o dedo diz para onde a pipa deve ir,
-##                               em relação a ela na tela (à esquerda dela = esquerda,
-##                               acima = sobe, abaixo = desce). Vira um comando de
-##                               cabresto: a pipa inclina, faz a curva e vai para lá,
-##                               com inércia. Soltar = ela segue reta.
+##   TOCAR (qualquer dedo)     → DESBICO: cada toque é uma puxadinha; o bico balança
+##                               para um lado, alternando (1º esquerda, 2º direita…).
+##                               Ritmo constante = segue reto balançando; pausa =
+##                               o último balanço rende (1 ou 3 toques = esquerda,
+##                               2 = direita).
+##   SEGURAR E ARRASTAR        → GUIAR: arraste para onde o bico deve apontar (como um
+##                               manche que nasce onde o dedo encostou).
 ##   ARRASTAR RÁPIDO P/ BAIXO  → PUXÃO: recolhe linha; ela acelera, sobe e chega perto,
-##                               sem mudar de direção. Esfregar = mais braçadas.
+##                               sem desbicar. Esfregar = mais braçadas.
 ##   Arrastar rápido p/ CIMA   → dar linha (abrir a mão)
-##   2º dedo                   → arrastar p/ baixo = puxão enquanto o 1º guia
+##   2º dedo                   → toque = desbico; arrastar p/ baixo = puxão; arrasto
+##                               lento = olhar em volta
 ##   Faixa estreita no topo → olhar em volta · Canto inferior esquerdo → andar
 
 signal reset_pressed
@@ -28,9 +31,13 @@ const LOOK_ZONE := 0.15
 ## Joystick: canto inferior esquerdo.
 const MOVE_ZONE_X := 0.2
 const MOVE_ZONE_Y := 0.6
-## Classificação do gesto.
+## Classificação do gesto: toque = soltou rápido e quase sem mexer; guiar = segurou
+## ou arrastou além disso (sem ser o arrasto vertical rápido do puxão).
 const CLASSIFY_PX := 16.0
-const TAP_TIME := 0.28
+const TAP_TIME := 0.32
+const TAP_PX := 38.0
+const GUIDE_PX := 40.0
+const GUIDE_HOLD := 0.24
 ## Dois toques dentro desta janela (s) = jogar para o lado.
 const DOUBLE_WINDOW := 0.32
 ## Puxada contínua: dedo abaixo da origem (px) para começar / para o ritmo máximo.
@@ -73,6 +80,8 @@ var bow_level: int = 1
 var tail_level: int = 1
 
 var _joy_index: int = -1
+var _aux_t0: float = 0.0
+var _aux_origin := Vector2.ZERO
 var _look_index: int = -1
 ## Segundo dedo (toque = puxão; arrasto = câmera).
 var _second_index: int = -1
@@ -154,11 +163,15 @@ func _down(index: int, pos: Vector2) -> void:
 		if _joy_index == -1:
 			_joy_index = index
 			joystick.begin(pos)
+			_aux_t0 = _time
+			_aux_origin = pos
 		return
 	# Faixa de cima = câmera.
 	if pos.y < size.y * LOOK_ZONE:
 		if _look_index == -1:
 			_look_index = index
+			_aux_t0 = _time
+			_aux_origin = pos
 		return
 	# Segundo dedo com o primeiro na tela: puxão / dar linha (combinação).
 	if _kite_index != -1:
@@ -174,10 +187,10 @@ func _down(index: int, pos: Vector2) -> void:
 	_finger = pos
 	_t0 = _time
 	_scrub_top = pos.y
-	# Guia já no toque (resposta imediata); se virar arrasto vertical rápido nos
-	# primeiros instantes, é puxão / dar linha e o guiar é cancelado.
+	# Ainda não se sabe: toque (desbico), segurar/arrastar (guiar) ou puxão.
 	_mode = ""
-	intent.guide_active = true
+	intent.guide_active = false
+	intent.guide_vec = Vector2.ZERO
 	intent.guide_finger = pos
 
 
@@ -206,14 +219,17 @@ func _up(index: int, pos: Vector2) -> void:
 	if index == _joy_index:
 		_joy_index = -1
 		joystick.end()
+		if _time - _aux_t0 < TAP_TIME and pos.distance_to(_aux_origin) < TAP_PX:
+			_tap(pos)   # toque rápido no canto também desbica
 	if index == _look_index:
 		_look_index = -1
 		intent.look_active = false
+		if _time - _aux_t0 < TAP_TIME and pos.distance_to(_aux_origin) < TAP_PX:
+			_tap(pos)
 	if index == _second_index:
 		_second_index = -1
-		if _second_mode == "" and _time - _second_t0 < TAP_TIME:
-			intent.recolhe.append(0.45)   # toque do 2º dedo = puxão curto
-			_fx.append([pos, 0.0, Color(1.0, 0.82, 0.35)])
+		if _second_mode == "" and _time - _second_t0 < TAP_TIME and pos.distance_to(_second_origin) < TAP_PX:
+			_tap(pos)   # toque do 2º dedo também é desbico (dá para alternar os polegares)
 		if _second_mode == "soltar":
 			intent.grip = 1.0
 		intent.pull_held = false
@@ -221,9 +237,11 @@ func _up(index: int, pos: Vector2) -> void:
 		_dirty = true
 	if index == _kite_index:
 		_kite_index = -1
-		intent.guide_active = false
+		if _mode == "" and _time - _t0 < TAP_TIME and pos.distance_to(_origin) < TAP_PX:
+			_tap(pos)
 		_mode = ""
 		intent.guide_active = false
+		intent.guide_vec = Vector2.ZERO
 		intent.stroke = 0.0
 		intent.grip = 1.0
 		intent.reel_rate = 0.0
@@ -246,22 +264,42 @@ func _swipe_kind(origin: Vector2, pos: Vector2, velocity: Vector2, t0: float) ->
 	return "puxar" if d.y > 0.0 else "soltar"
 
 
+## DESBICO: um toque = uma puxadinha.
+func _tap(pos: Vector2) -> void:
+	intent.desbico_toques += 1
+	intent.desbico_times.append(Time.get_ticks_usec() / 1000000.0)
+	_fx.append([pos, 0.0, Color(0.55, 0.85, 1.0)])
+	_dirty = true
+
+
 func _kite_drag(pos: Vector2, velocity: Vector2) -> void:
 	_finger = pos
 	_dirty = true
 	if _mode == "":
 		var k := _swipe_kind(_origin, pos, velocity, _t0)
-		if k == "":
-			intent.guide_finger = pos
+		if k != "":
+			_mode = k
+			intent.guide_active = false
+			_scrub_top = pos.y
+			if k == "puxar":
+				_pull_from_swipe(pos)
 			return
-		_mode = k
-		intent.guide_active = false
+		var dist := pos.distance_to(_origin)
+		if dist > GUIDE_PX or (_time - _t0 > GUIDE_HOLD and dist > CLASSIFY_PX):
+			_start_guide()
+		return
+	if _mode == "guiar":
+		intent.guide_vec = pos - _origin
 		intent.guide_finger = pos
-		_scrub_top = pos.y
-		if k == "puxar":
-			_pull_from_swipe(pos)
 		return
 	_vertical(pos, _origin, true)
+
+
+func _start_guide() -> void:
+	_mode = "guiar"
+	intent.guide_active = true
+	intent.guide_vec = _finger - _origin
+	intent.guide_finger = _finger
 
 
 ## Puxar / dar linha com o dedo `pos` (comum ao 1º e ao 2º dedo).
@@ -317,6 +355,9 @@ func _process(delta: float) -> void:
 	if intent == null:
 		return
 	intent.gesture_mode = _mode if _kite_index != -1 else ""
+	# Segurou parado: vira guiar (o manche nasce ali; mexer o dedo dá a direção).
+	if _kite_index != -1 and _mode == "" and _time - _t0 > GUIDE_HOLD:
+		_start_guide()
 	for fx in _fx:
 		fx[1] += delta
 	if not _fx.is_empty():
@@ -395,7 +436,11 @@ func _draw() -> void:
 			colm = Color(0.55, 0.85, 1.0, 0.7)
 		"enrolar":
 			colm = Color(0.6, 1.0, 0.55, 0.7)
-	if _mode == "enrolar":
+	if _mode == "guiar":
+		draw_arc(_origin, GUIDE_PX + 70.0, 0.0, TAU, 40, Color(1, 1, 1, 0.22), 2.0, true)
+		draw_line(_origin, _finger, Color(1, 1, 1, 0.55), 3.0, true)
+		draw_circle(_finger, 16.0, Color(1, 1, 1, 0.22))
+	elif _mode == "enrolar":
 		draw_arc(_finger, 34.0, _reel_angle, _reel_angle + 4.5, 24, colm, 3.0, true)
 	else:
 		draw_line(_origin, _finger, colm, 3.0, true)

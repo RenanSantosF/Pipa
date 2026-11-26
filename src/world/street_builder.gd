@@ -161,12 +161,15 @@ func foliage_batch(z: float, species: String) -> MeshBatch:
 	return _foliage_batches[key]
 
 
-func add_collider(xf: Transform3D, size: Vector3) -> void:
+## `line_obstacle` falso: o objeto já tem um obstáculo próprio para a linha (cápsula do
+## poste/tronco/trave). Duas formas sobrepostas para a mesma coisa faziam a linha
+## ficar presa entre elas (cada uma empurrando o nó para dentro da outra).
+func add_collider(xf: Transform3D, size: Vector3, line_obstacle: bool = true) -> void:
 	var shape := PhysicsServer3D.box_shape_create()
 	PhysicsServer3D.shape_set_data(shape, size * 0.5)
 	_shape_rids.append(shape)
 	PhysicsServer3D.body_add_shape(_collision_body_at(xf.origin), shape, xf)
-	if size.x > 60.0 or size.z > 60.0:
+	if size.x > 60.0 or size.z > 60.0 or not line_obstacle:
 		return
 	# Obstáculo para a linha: caixa alinhada que envolve a caixa girada.
 	var h := size * 0.5
@@ -537,7 +540,7 @@ func _build_campinho() -> void:
 		for dx in [-1.5, 1.5]:
 			var post := Vector3(c.x + float(dx), y + 1.0, float(gz))
 			batch_for(zc).add_cylinder(Transform3D(Basis.IDENTITY, post), 0.05, 2.0, 6, white)
-			add_collider(Transform3D(Basis.IDENTITY, post), Vector3(0.1, 2.0, 0.1))
+			add_collider(Transform3D(Basis.IDENTITY, post), Vector3(0.1, 2.0, 0.1), false)
 			obstacles.add_cylinder(Vector3(post.x, y, post.z), 2.0, 0.06, "trave")
 		batch_for(zc).add_box(Transform3D(Basis.IDENTITY, Vector3(c.x, y + 2.0, float(gz))), Vector3(3.1, 0.1, 0.1), white)
 	_occupied.append([c, maxf(_pad.size.x, _pad.size.y) * 0.5])
@@ -604,7 +607,7 @@ func _tree_palm(base: Vector3, h: float) -> void:
 		b.add_cylinder(Transform3D(Basis(_arc(Vector3.UP, d.normalized())), (p + prev) * 0.5), 0.17 - 0.04 * t, d.length() + 0.05, 7, Color(0.95, 0.92, 0.85))
 		prev = p
 	obstacles.add_cylinder(base, h, 0.18, "coqueiro")
-	add_collider(Transform3D(Basis.IDENTITY, base + Vector3(0, h * 0.5, 0)), Vector3(0.34, h, 0.34))
+	add_collider(Transform3D(Basis.IDENTITY, base + Vector3(0, h * 0.5, 0)), Vector3(0.34, h, 0.34), false)
 	var fb := foliage_batch(base.z, "palm")
 	var phase := _rng.randf() * TAU
 	var n := 11 + _rng.randi() % 4
@@ -699,9 +702,11 @@ func _build_poles() -> void:
 			var n := t.cross(Vector3.UP).normalized()
 			var p := pts[i] + n * off
 			var base := Vector3(p.x, Ground.height_at(p.x, p.z), p.z)
-			add_collider(Transform3D(Basis.IDENTITY, base + Vector3(0, POLE_TOP * 0.5, 0)), Vector3(0.3, POLE_TOP, 0.3))
+			add_collider(Transform3D(Basis.IDENTITY, base + Vector3(0, POLE_TOP * 0.5, 0)), Vector3(0.3, POLE_TOP, 0.3), false)
 			obstacles.add_cylinder(base, POLE_TOP, 0.14, "poste")
-			obstacles.add_capsule(base - n * 1.0 + Vector3.UP * (WIRE_HIGH - 0.08), base + n * 1.0 + Vector3.UP * (WIRE_HIGH - 0.08), 0.05, "cruzeta")
+			# Cruzeta em duas metades que começam na superfície do poste (não por dentro).
+			obstacles.add_capsule(base - n * 0.2 + Vector3.UP * (WIRE_HIGH - 0.08), base - n * 1.0 + Vector3.UP * (WIRE_HIGH - 0.08), 0.05, "cruzeta")
+			obstacles.add_capsule(base + n * 0.2 + Vector3.UP * (WIRE_HIGH - 0.08), base + n * 1.0 + Vector3.UP * (WIRE_HIGH - 0.08), 0.05, "cruzeta")
 			_concrete_pole(base, n, k)
 			tops.append(base)
 			k += 1
@@ -756,12 +761,23 @@ func _pole_cross(pts: PackedVector3Array, p: Vector3) -> Vector3:
 func _add_wire(a: Vector3, b: Vector3, sag: float) -> void:
 	var segments := 10
 	var prev := a
+	# Para a linha, o fio começa/termina 25 cm antes das pontas (que ficam dentro do
+	# poste ou na parede da casa): obstáculos sobrepostos prendiam a linha entre eles.
+	var trim := 0.25 / maxf(a.distance_to(b), 0.5)
 	for i in range(1, segments + 1):
 		var t := float(i) / float(segments)
 		var p := a.lerp(b, t) + Vector3.DOWN * sag * 4.0 * t * (1.0 - t)
 		_wire_points.append(prev)
 		_wire_points.append(p)
-		obstacles.add_wire(prev, p)
+		var t0 := float(i - 1) / float(segments)
+		var pa := prev
+		var pb := p
+		if t0 < trim:
+			pa = a.lerp(b, trim) + Vector3.DOWN * sag * 4.0 * trim * (1.0 - trim)
+		if t > 1.0 - trim:
+			var t1 := 1.0 - trim
+			pb = a.lerp(b, t1) + Vector3.DOWN * sag * 4.0 * t1 * (1.0 - t1)
+		obstacles.add_wire(pa, pb)
 		prev = p
 
 

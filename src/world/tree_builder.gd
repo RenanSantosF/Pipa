@@ -74,7 +74,7 @@ func build(base: Vector3, species: String, size_class: int = -1, street: bool = 
 			var c := base + Vector3(cos(ang), 0.0, sin(ang)) * cs + up * 0.05
 			var xf := Transform3D(Basis(up, ang), c)
 			plain.add_box(xf, Vector3(0.07, 0.1, cs * 2.0 + 0.07), CURB)
-	_sb.add_collider(Transform3D(Basis.IDENTITY, base + up * (fork_h * 0.5)), Vector3(r0 * 2.0, fork_h, r0 * 2.0))
+	_sb.add_collider(Transform3D(Basis.IDENTITY, base + up * (fork_h * 0.5)), Vector3(r0 * 2.0, fork_h, r0 * 2.0), false)
 	_sb.obstacles.add_capsule(base, p_fork, r0, "árvore")
 
 	# Galhos primários e secundários; aglomerados de folhas nas pontas.
