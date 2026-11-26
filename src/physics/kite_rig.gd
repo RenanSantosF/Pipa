@@ -71,6 +71,10 @@ var line_pivots: Array = []
 var visual_scale: float = 1.0
 ## A linha foi empurrada por outra linha neste subpasso (refaz o contato com o cenário).
 var pushed_by_line: bool = false
+## Pose da pipa no começo do tick (fim do anterior): o desenho interpola entre ela e a
+## atual, para ficar liso a 60 quadros/s com a física a 30 Hz.
+var vis_prev_x := Vector3.ZERO
+var vis_prev_q := Quaternion.IDENTITY
 var visual_tail_offset := Vector3.ZERO
 var _t_steady: float = 5.0
 ## A mão voltando da braçada joga a linha no chão? (falso no desbico: a linha escorrega)
@@ -161,6 +165,7 @@ func launch(hand: Vector3, length: float, elevation_deg: float, direction: Vecto
 	var tow := hand + d * (length * 0.995)
 	body.x = tow - body.q * body.tow_local
 	rope = Rope.new(line_type)
+	rope.owner_id = get_instance_id()
 	rope.max_nodes = GameConfig.rope_max_nodes(is_local_player)
 	rope.setup(hand, body, body.tow_local, length)
 	tail = TailChain.new(body, profile)
@@ -211,7 +216,7 @@ func try_snag(obstacles: WorldObstacles, dt: float) -> void:
 		body.world_point(Vector3(0, c[1].y, 0)),
 		body.world_point(c[4]),
 		body.world_point(c[2])])
-	var hit := obstacles.kite_contact(body, knot, anchors, dt)
+	var hit := obstacles.kite_contact(body, knot, anchors, dt, get_instance_id())
 	if obstacles.kite_in_canopy and not _in_leaves:
 		_impact(body.v.length(), "folhas")
 	_in_leaves = obstacles.kite_in_canopy
@@ -303,8 +308,21 @@ func adopt_loose(p_body: KiteRigidBody, p_tail: TailChain, p_rope: Rope) -> void
 	line_renderer.bind(rope, line_type)
 
 
+## Pose interpolada da pipa para desenhar (entre o tick anterior e o atual).
+func visual_pose() -> Transform3D:
+	if body == null:
+		return Transform3D.IDENTITY
+	var f := clampf(Engine.get_physics_interpolation_fraction(), 0.0, 1.0)
+	if vis_prev_x == Vector3.ZERO or vis_prev_x.distance_to(body.x) > 5.0:
+		return Transform3D(Basis(body.q), body.x)
+	return Transform3D(Basis(vis_prev_q.slerp(body.q, f)), vis_prev_x.lerp(body.x, f))
+
+
 func pre_frame(dt: float) -> void:
 	age += dt
+	if body != null:
+		vis_prev_x = body.x
+		vis_prev_q = body.q
 	if rope != null:
 		if not loose and rope.hand_fixed:
 			_update_spool(dt)
@@ -354,6 +372,11 @@ func _update_spool(dt: float) -> void:
 	# A mão não segura mais que ~70% do que a linha aguenta: num tranco forte a linha
 	# escorrega na mão em vez de arrebentar (o pipeiro sente e alivia).
 	var f_cap := 0.7 * line_type.break_tension
+	# Pipa do jogador: a tração do voo nunca passa de 85% da resistência e a mão
+	# fechada segura isso — puxando, a linha NÃO escorrega (antes, puxão forte fazia a
+	# linha correr para fora e a pipa "não vinha").
+	if flight != null and not snagged:
+		f_cap = 0.97 * line_type.break_tension
 	if (grip < 0.98 or rope.tension_hand > f_cap) and pile + spool > 0.05:
 		# Atrito da mão cresce com o quadrado da pegada (mão quase aberta = linha corre fácil).
 		var f_grip := minf(grip * grip * GRIP_MAX, f_cap)

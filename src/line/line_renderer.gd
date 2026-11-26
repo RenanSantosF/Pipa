@@ -51,15 +51,29 @@ func _process(_delta: float) -> void:
 	var cam := get_viewport().get_camera_3d()
 	if cam == null:
 		return
-	# Linha toda longe (vizinhos): redesenha a cada 2 quadros (metade da CPU).
+	# Linha toda longe (vizinhos): redesenha a cada 2 quadros (metade da CPU). A sua
+	# linha (que sai da sua mão) é sempre redesenhada — senão ela "trepidava".
 	var mid_pt := rope.pos[rope.pos.size() / 2]
-	if cam.global_position.distance_to(mid_pt) > 45.0 and (Engine.get_process_frames() + get_instance_id()) % 2 == 0:
+	var near_pt := minf(cam.global_position.distance_to(rope.pos[0]), cam.global_position.distance_to(mid_pt))
+	if near_pt > 45.0 and (Engine.get_process_frames() + get_instance_id()) % 2 == 0:
 		return
 	_im.clear_surfaces()
 	_pts.resize(0)
-	_pts.append_array(rope.pos)
+	# Interpolado entre os ticks da física (liso a 60 quadros/s, sem trepidar).
+	var fr := clampf(Engine.get_physics_interpolation_fraction(), 0.0, 1.0)
+	if rope.frame_pos.size() == rope.pos.size():
+		for i in rope.pos.size():
+			_pts.append(rope.frame_pos[i].lerp(rope.pos[i], fr))
+	else:
+		_pts.append_array(rope.pos)
 	if rope.end_body != null:
-		_pts.append(rope.end_point())
+		_pts.append(rope.frame_end.lerp(rope.end_point(), fr) if rope.frame_end != Vector3.ZERO else rope.end_point())
+	# Linha no chão: desenhada um pouco acima dele (não some dentro da terra).
+	for i in _pts.size():
+		var gp := _pts[i]
+		var gy := Ground.height_at(gp.x, gp.z) + 0.05
+		if gp.y < gy:
+			_pts[i] = Vector3(gp.x, gy, gp.z)
 	var n := _pts.size()
 	_px_scale = 1.5 if GameConfig.quality == GameConfig.Quality.LOW else 1.0
 	var cam_pos := cam.global_position
@@ -105,9 +119,9 @@ func _process(_delta: float) -> void:
 		# quando ela balança (de longe é o que mais denuncia a linha no céu).
 		var tn := tangent.normalized() if tangent.length_squared() > 1e-10 else Vector3.UP
 		var hv := (to_sun + to_cam / maxf(dist, 0.001)).normalized()
-		var g := pow(clampf(1.0 - absf(tn.dot(hv)), 0.0, 1.0), 14.0)
-		alpha = maxf(alpha, g * 0.75)
-		var col := Color(1.0 + 0.6 * g, 1.0 + 0.55 * g, 1.0 + 0.4 * g, alpha)
+		var g := pow(clampf(1.0 - absf(tn.dot(hv)), 0.0, 1.0), 6.0) * 0.5
+		alpha = maxf(alpha, g * 0.7)
+		var col := Color(1.0 + 0.5 * g, 1.0 + 0.45 * g, 1.0 + 0.35 * g, alpha)
 		_im.surface_set_color(col)
 		_im.surface_set_uv(Vector2(-1.0, 0.0))
 		_im.surface_add_vertex(p - side)

@@ -57,8 +57,10 @@ const GUIDE_DEAD_PX := 18.0
 ## Câmera: campo de visão normal, mínimo (zoom máximo), fração da altura da tela
 ## que a pipa deve ocupar e zona livre (fração do campo) em que ela anda sem a
 ## câmera ir atrás.
-const BASE_FOV := 72.0
-const MIN_FOV := 46.0
+const BASE_FOV := 74.0
+const MIN_FOV := 60.0
+## Quanto do campo de visão a câmera mira abaixo da pipa (0,22 = pipa a ~28% do topo).
+const AIM_BELOW := 0.22
 const KITE_SCREEN_FRACTION := 0.06
 const FREE_ZONE := 0.18
 const GUIDE_FULL_PX := 110.0
@@ -96,7 +98,7 @@ func focus_point() -> Vector3:
 		return watch_target.body.x
 	if rig and rig.body:
 		# Pipa no chão/perto dos pés: olha para a frente, não para o pé.
-		var k := rig.body.x
+		var k := rig.visual_pose().origin
 		if k.y < head.global_position.y + 0.5 and k.distance_to(global_position) < 6.0:
 			return head.global_position + (Vector3(k.x, head.global_position.y, k.z) - head.global_position).normalized() * 10.0 + Vector3.UP * 1.5
 		return k
@@ -112,7 +114,10 @@ func _process(delta: float) -> void:
 		to = to.normalized()
 		var k := 1.0 - exp(-follow_rate * delta)
 		_base_yaw = lerp_angle(_base_yaw, atan2(-to.x, -to.z), k)
-		_base_pitch = lerpf(_base_pitch, maxf(asin(clampf(to.y, -1.0, 1.0)), deg_to_rad(-15.0)), k)
+		# A câmera mira um pouco ABAIXO da pipa: ela fica no terço de cima da tela e
+		# sobra tela para o bairro, as outras pipas e as linhas.
+		var aim_down := deg_to_rad(camera.fov) * AIM_BELOW if rig and rig.body and not rig.held else 0.0
+		_base_pitch = lerpf(_base_pitch, maxf(asin(clampf(to.y, -1.0, 1.0)) - aim_down, deg_to_rad(-15.0)), k)
 	# ZOOM: aproxima a pipa conforme a distância (de longe ela ficava com ~10 px e o
 	# desbico não aparecia). Perto (soltando da mão) volta ao campo de visão normal.
 	var target_fov := BASE_FOV

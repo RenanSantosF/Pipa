@@ -56,8 +56,13 @@ func attach_point() -> Vector3:
 var _wind := Vector3.ZERO
 
 
+## Posições no começo do tick (o desenho interpola entre elas e as atuais).
+var tick_prev: PackedVector3Array = PackedVector3Array()
+
+
 func compute_forces() -> void:
 	_wind = Wind.sample(attach_point())
+	tick_prev = pos.duplicate()
 
 
 ## Arrasto SEMI-IMPLÍCITO a cada subpasso: v' = (v + g·h + k·h·vento)/(1 + k·h),

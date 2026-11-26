@@ -43,6 +43,7 @@ var near_ll := 0
 var near_cap := 0
 
 var _phase := 0
+var _give_mode := false
 var _tapping := false
 var _tap_int := 0.25
 var _tap_clock := 0.0
@@ -64,6 +65,8 @@ func start(p_main) -> void:
 			_dur = float(a.substr(6))
 		elif a.begins_with("--seed="):
 			seed = int(a.substr(7))
+		elif a == "--give":
+			_give_mode = true
 	_rng.seed = seed
 	Wind.direction_wander_deg = 0.0
 	Wind.gust_strength = 0.15
@@ -221,7 +224,7 @@ func _pilot(delta: float) -> void:
 				_g = Vector2(signf(_rng.randf() - 0.5), _rng.randf_range(-0.4, 0.4))
 			else:
 				_g = Vector2(_rng.randf_range(-0.5, 0.5), _rng.randf_range(-1.0, 1.0))
-		_grip = 0.25 if _rng.randf() < 0.15 else 1.0
+		_grip = 0.0 if _rng.randf() < (0.5 if _give_mode else 0.15) else 1.0
 		# Às vezes desbica por toques em vez de guiar (ritmo ou pares com pausa).
 		_tapping = _rng.randf() < 0.45
 		_tap_int = _rng.randf_range(0.18, 0.32)
@@ -247,7 +250,7 @@ func _pilot(delta: float) -> void:
 		rig.flight.steer = clampf(err / 0.7, -1.0, 1.0)
 	rig.hand_rest = _hand_a
 	hand.update(delta, 0.0, _grip if not pulling else 1.0, 0.0)
-	if rig.flying_length() > 45.0:
+	if rig.flying_length() > 60.0:
 		_grip = 1.0
 
 

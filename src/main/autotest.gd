@@ -169,8 +169,9 @@ func _phase_flight(_delta: float) -> void:
 			it.desbico_toques += 1
 		_m["h6"] = rig.flight.heading if rig.flight else 0.0
 	elif _t < 27.0:
-		# 1 toque + pausa (duas vezes) → vira para a ESQUERDA.
-		if _every(1.2, 24.6):
+		# 1 toque + pausa → depois de um par (último balanço para a direita) o próximo
+		# é para a ESQUERDA (os lados sempre alternam) e ela vira para a esquerda.
+		if _t - _dt < 24.6:
 			it.desbico_toques += 1
 		_m["h7"] = rig.flight.heading if rig.flight else 0.0
 	if _t > 26.0:

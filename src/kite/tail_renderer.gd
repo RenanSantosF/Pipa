@@ -16,6 +16,8 @@ const STRIP_SEGS := 4
 const FLUTTER := 0.55
 ## Tirinhas da mesma cor seguidas.
 const BLOCK := 4
+## Barbante sem tirinhas entre a pipa e o começo da rabiola (m, pipa M).
+const GAP := 0.3
 
 var rig: KiteRig
 var _im := ImmediateMesh.new()
@@ -64,8 +66,14 @@ func _process(_delta: float) -> void:
 	var prof := rig.profile
 	var k := prof.height / 0.65 * rig.visual_scale
 	_pts.resize(0)
-	_pts.append(tail.attach_point())
-	_pts.append_array(tail.pos)
+	# Interpolado entre os ticks da física (liso a 60 quadros/s).
+	var fr := clampf(Engine.get_physics_interpolation_fraction(), 0.0, 1.0)
+	_pts.append(rig.visual_pose() * rig.body.tail_local)
+	if tail.tick_prev.size() == tail.pos.size():
+		for i in tail.pos.size():
+			_pts.append(tail.tick_prev[i].lerp(tail.pos[i], fr))
+	else:
+		_pts.append_array(tail.pos)
 	# Pipa desenhada maior (longe): a rabiola sai do desenho da pipa e volta para a
 	# posição da física ao longo do primeiro terço.
 	var off := rig.visual_tail_offset
@@ -74,7 +82,12 @@ func _process(_delta: float) -> void:
 		for i in np:
 			var w := clampf(1.0 - float(i) / maxf(float(np - 1) * 0.35, 1.0), 0.0, 1.0)
 			_pts[i] += off * w
-	var far := cam_pos.distance_to(_pts[0]) > 45.0
+	# Detalhe pelo TAMANHO NA TELA: tirinha com menos de ~6 px vira fita contínua (as
+	# tirinhas de 1 cm viravam pontinhos piscando de longe).
+	var vp_h := maxf(get_viewport().get_visible_rect().size.y, 1.0)
+	var px_ang := deg_to_rad(cam.fov) / (vp_h * get_viewport().scaling_3d_scale)
+	var strip_px := STRIP_LEN * k / maxf(cam_pos.distance_to(_pts[0]) * px_ang, 1e-5)
+	var far := strip_px < 6.0
 	# Curva lisa (Catmull-Rom) entre os nós: a rabiola é maleável, não um serrote.
 	_curve.resize(0)
 	var n := _pts.size()
@@ -104,16 +117,20 @@ func _process(_delta: float) -> void:
 		_im.surface_begin(Mesh.PRIMITIVE_TRIANGLES, _mat_far)
 		var col_far := prof.tail_color_a.lerp(prof.tail_color_b, 0.5)
 		var nc := _curve.size()
+		var walked := 0.0
 		for i in nc - 1:
 			var a0 := _curve[i]
 			var b0 := _curve[i + 1]
+			walked += a0.distance_to(b0)
+			if walked < GAP * k:
+				continue   # o pedacinho de barbante entre a pipa e as tirinhas
 			var u0 := float(i) / float(nc - 1)
 			var u1 := float(i + 1) / float(nc - 1)
-			var wa := maxf(cam_pos.distance_to(a0) * 0.0021, STRIP_LEN * k * 0.12) * (1.0 - 0.65 * u0)
-			var wb := maxf(cam_pos.distance_to(b0) * 0.0021, STRIP_LEN * k * 0.12) * (1.0 - 0.65 * u1)
+			var wa := maxf(cam_pos.distance_to(a0) * px_ang * 0.9, STRIP_LEN * k * 0.3) * (1.0 - 0.55 * u0)
+			var wb := maxf(cam_pos.distance_to(b0) * px_ang * 0.9, STRIP_LEN * k * 0.3) * (1.0 - 0.55 * u1)
 			var dir := (b0 - a0).cross(cam_pos - a0).normalized()
-			var ca := Color(col_far, 0.85 - 0.45 * u0)
-			var cb := Color(col_far, 0.85 - 0.45 * u1)
+			var ca := Color(col_far, 0.7 - 0.4 * u0)
+			var cb := Color(col_far, 0.7 - 0.4 * u1)
 			_im.surface_set_color(ca)
 			_im.surface_add_vertex(a0 - dir * wa)
 			_im.surface_set_color(ca)
@@ -131,7 +148,8 @@ func _process(_delta: float) -> void:
 	var t_now := Time.get_ticks_msec() / 1000.0
 	var wind := clampf(Wind.get_reference_speed() / 6.0, 0.4, 1.8)
 	var step := KNOT_STEP * k
-	var acc := step * 0.6
+	# Primeiras tirinhas só depois de um pedaço de barbante (como na rabiola de verdade).
+	var acc := GAP * k
 	var knot := 0
 	for i in _curve.size() - 1:
 		var a := _curve[i]

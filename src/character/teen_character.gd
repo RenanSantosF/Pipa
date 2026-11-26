@@ -95,7 +95,7 @@ func _build_model(scene: PackedScene) -> void:
 
 	var head := skeleton.find_bone("Head")
 	if head >= 0:
-		eye_height = (skeleton.get_bone_global_rest(head).origin.y * model.scale.y) + 0.07
+		eye_height = (skeleton.get_bone_global_rest(head).origin.y * model.scale.y) + 0.11
 	_ok = true
 
 

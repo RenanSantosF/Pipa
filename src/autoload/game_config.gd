@@ -62,12 +62,13 @@ func apply_quality(q: int) -> void:
 		Quality.LOW:
 			vp.scaling_3d_scale = 0.55
 			vp.msaa_3d = Viewport.MSAA_DISABLED
-			Engine.max_fps = 30
+			# 60 quadros/s com a física a 30 Hz: pipa, linha e rabiola são interpoladas.
+			Engine.max_fps = 60
 			Engine.physics_ticks_per_second = 30
 		Quality.MEDIUM:
 			vp.scaling_3d_scale = 0.75
 			vp.msaa_3d = Viewport.MSAA_DISABLED
-			Engine.max_fps = 30
+			Engine.max_fps = 60
 			Engine.physics_ticks_per_second = 30
 		Quality.HIGH:
 			vp.scaling_3d_scale = 1.0

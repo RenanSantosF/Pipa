@@ -243,7 +243,7 @@ func puxao() -> void:
 	if rig.held:
 		rig.release_hold()
 	if _pulling and _pull_t < (windup_time if _wu > 0.0 else 0.0) + pull_time:
-		_pull_pending = mini(_pull_pending + 1, 2)   # pediu no meio do arranque: emenda
+		_pull_pending = mini(_pull_pending + 1, 3)   # pediu no meio do arranque: emenda
 		return
 	_start_pull()
 

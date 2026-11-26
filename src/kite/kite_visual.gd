@@ -47,9 +47,11 @@ func _process(_delta: float) -> void:
 	if rig == null or rig.body == null or _paper == null:
 		return
 	var b := rig.body
+	# Pose INTERPOLADA entre os ticks da física (lisa a 60 quadros/s).
+	var pose := rig.visual_pose()
 	# Inclinação do desbico: a pipa deita em volta da vareta (só o desenho; a física
 	# do balanço já está no giro do bico).
-	var basis := Basis(b.q) * Basis(Vector3.UP, rig.bank)
+	var basis := pose.basis * Basis(Vector3.UP, rig.bank)
 	# Longe da câmera a pipa é DESENHADA maior (até 3×), em volta do nó do cabresto
 	# (a linha continua presa no mesmo ponto): no celular uma pipa de 65 cm a 40 m
 	# vira um pontinho e o balanço do desbico some.
@@ -58,7 +60,7 @@ func _process(_delta: float) -> void:
 	if cam != null:
 		k = clampf(cam.global_position.distance_to(b.x) / VIS_SCALE_DIST, 1.0, VIS_SCALE_MAX)
 	rig.visual_scale = k
-	var knot := b.world_point(b.tow_local)
+	var knot := pose.origin + pose.basis * b.tow_local
 	var bs := basis.scaled(Vector3(k, k, k))
 	global_transform = Transform3D(bs, knot - bs * b.tow_local)
 	rig.visual_tail_offset = (global_transform * b.tail_local) - b.world_point(b.tail_local)

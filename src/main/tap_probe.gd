@@ -106,7 +106,7 @@ func start(p_main) -> void:
 			for k in 8:
 				_events.append([s + k * 0.4, "pull"])
 	_events.sort_custom(func(a, b) -> bool: return float(a[0]) < float(b[0]))
-	print("TAP seq=%s intervalo=%.2f tamanho=%s" % [_seq, _int, rig.profile.size_class])
+	print("TAP seq=%s intervalo=%.2f tamanho=%s olho=%.2f m" % [_seq, _int, rig.profile.size_class, main.player.head.position.y])
 	if _film:
 		_film_dir = ProjectSettings.globalize_path("res://build/film")
 		DirAccess.make_dir_recursive_absolute(_film_dir)

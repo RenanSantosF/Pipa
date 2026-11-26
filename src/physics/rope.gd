@@ -17,7 +17,7 @@ const GRAVITY := Vector3(0.0, -9.8, 0.0)
 const CD_NORMAL := 1.1
 ## Linha mais "mole" no visual: o vento faz barriga (linha de pipa de verdade nunca
 ## fica reta como arame). Multiplica o arrasto do vento na linha.
-const LINE_BELLY := 3.0
+const LINE_BELLY := 2.2
 const CF_TANGENT := 0.02
 
 var type: LineType
@@ -50,6 +50,8 @@ var frame_end := Vector3.ZERO
 var seg_tension: PackedFloat32Array = PackedFloat32Array()
 var _lam_sum: PackedFloat32Array = PackedFloat32Array()
 
+## Dono (instance id da KiteRig): o corpo do próprio vizinho não segura a linha dele.
+var owner_id: int = 0
 ## Corpo preso na ponta (pipa) ou null.
 var end_body: KiteRigidBody = null
 var end_local := Vector3.ZERO
@@ -417,7 +419,7 @@ func solve(h: float) -> void:
 	# Chão.
 	for i in n:
 		var p := pos[i]
-		var gy := Ground.height_at(p.x, p.z) + 0.02
+		var gy := Ground.height_at(p.x, p.z) + 0.035
 		if p.y < gy:
 			p.y = gy
 			pos[i] = p

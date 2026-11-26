@@ -52,7 +52,7 @@ const SWIPE_PX := 34.0
 const SWIPE_SPEED := 420.0
 const SWIPE_DECIDE := 0.22
 ## Esfregar no puxão: descida mínima para mais um puxão.
-const SCRUB_PULL_PX := 55.0
+const SCRUB_PULL_PX := 36.0
 var _second_mode: String = ""
 var _second_index_last: int = -1
 var _second_top: float = 0.0
@@ -272,8 +272,12 @@ func _tap(pos: Vector2) -> void:
 	_dirty = true
 
 
+var _last_vel_y := 0.0
+
+
 func _kite_drag(pos: Vector2, velocity: Vector2) -> void:
 	_finger = pos
+	_last_vel_y = velocity.y
 	_dirty = true
 	if _mode == "":
 		var k := _swipe_kind(_origin, pos, velocity, _t0)
@@ -312,7 +316,9 @@ func _vertical(pos: Vector2, origin: Vector2, first: bool) -> void:
 		if pos.y < top:
 			top = pos.y
 		elif pos.y - top > SCRUB_PULL_PX:
-			intent.recolhe.append(clampf((pos.y - top) / 200.0, 0.3, 1.0))
+			# Esfregar mais rápido = braçadas mais longas e mais seguidas (puxa mais rápido).
+			var spd := absf(_last_vel_y)
+			intent.recolhe.append(clampf((pos.y - top) / 200.0 + spd / 2600.0, 0.3, 1.0))
 			_fx.append([pos, 0.0, Color(1.0, 0.82, 0.35)])
 			top = pos.y
 		if first:
@@ -332,6 +338,7 @@ func _pull_from_swipe(pos: Vector2) -> void:
 
 
 func _second_drag(pos: Vector2, velocity: Vector2) -> void:
+	_last_vel_y = velocity.y
 	if _second_mode == "":
 		var k := _swipe_kind(_second_origin, pos, velocity, _second_t0)
 		if k == "":

@@ -31,31 +31,31 @@ extends RefCounted
 ## Os parâmetros são estáticos para a área de testes ajustar ao vivo.
 
 ## Eficiência da vela (sustentação/arrasto) e peso equivalente (m/s).
-static var E := 2.1
+static var E := 1.8
 static var G := 3.0
 ## Guiar: ganho da curva, velocidade somada, inclinação máxima do cabresto (rad).
 static var TURN_K := 0.5
 static var TURN_V0 := 6.0
 static var BANK_MAX := 0.62
 ## Tempos de resposta (s) para a pipa M; P × 0,7 e G × 1,5.
-static var SPEED_TAU := 0.28
+static var SPEED_TAU := 0.5
 static var BANK_TAU := 0.16
 ## Parou de mexer: a rabiola endireita o bico (rad/s por sen do erro) e a pipa volta
 ## para o meio da janela, depois de RESTORE_DELAY s sem comando.
 static var UP_RESTORE := 1.2
 static var RESTORE_DELAY := 0.6
 ## Força do puxão (quanto a velocidade de recolher soma ao vento aparente).
-static var PULL_GAIN := 2.4
+static var PULL_GAIN := 2.0
 ## DESBICO (pipa M): giro de um balanço que rende inteiro (rad), tempo do balanço (s),
 ## arrancada de cada puxadinha (m/s) e pausa que recomeça a sequência pela esquerda.
 static var SWING_AMP := 1.15
-static var SWING_TAU := 0.28
-static var TUG_DV := 3.2
+static var SWING_TAU := 0.36
+static var TUG_DV := 2.2
 static var TAP_RESET := 0.45
 ## Quanto o primeiro balanço da sequência rende (centra o vaivém no rumo).
 static var FIRST_SWING := 0.6
 ## Folga da linha em relação ao comprimento (a linha faz barriga).
-const SAG := 0.985
+const SAG := 0.993
 const SIZE_SCALE := [0.7, 1.0, 1.5]
 const SIZE_TURN := [1.3, 1.0, 0.75]
 const SIZE_SWING_AMP := [0.75, 1.0, 1.25]
@@ -73,6 +73,9 @@ const WOB_GAIN := 0.14
 ## Mola da inclinação (frequência natural rad/s, amortecimento).
 const ROLL_W := 13.0
 const ROLL_Z := 0.45
+## O vento empurra a pipa pela esfera (fração do vento tangente): sem comando ela é
+## levada a favor do vento, e ir contra o vento custa.
+const WIND_DRIFT := 0.15
 ## Dando linha, a pipa se afasta no máximo a esta velocidade (m/s).
 const V_OUT_MAX := 4.0
 
@@ -305,11 +308,12 @@ func step(h: float) -> void:
 	var restore := 0.0
 	if _since_input > RESTORE_DELAY and _pull_rate < 0.6:
 		var ramp := minf((_since_input - RESTORE_DELAY) / 0.5, 1.0)
-		var wd := Vector3(wind.x, 0.0, wind.z)
-		var lat := 0.0
-		if wd.length() > 0.1:
-			lat = ld.dot(wd.normalized().cross(Vector3.UP))
-		var target := clampf(-lat * 1.3, -0.7, 0.7)
+		# Cata-vento: a rabiola vai com o vento aparente (vento menos a velocidade da
+		# pipa) e o bico aponta CONTRA ele — como a rabiola já mostra.
+		var wa := w_t - hd * speed
+		var target := 0.0
+		if wa.length() > 0.3:
+			target = atan2(-wa.dot(right_t), -wa.dot(up_t))
 		restore = -UP_RESTORE * sin(heading - target) * clampf(prof.tail_length / 2.6, 0.6, 1.5) * ramp
 	# Tremida do vento (rajada lateral força um oscilador leve no bico).
 	var w_lat := w_t.dot(right_t)
@@ -320,17 +324,18 @@ func step(h: float) -> void:
 	heading = wrapf(heading + (yaw_rate + turn + restore) * h, -PI, PI)
 	hd = up_t * cos(heading) + right_t * sin(heading)
 	# --- Movimento na esfera em volta do apoio. ---
-	var np := p + hd * speed * h
+	var np := p + hd * speed * h + w_t * (WIND_DRIFT * h)
 	var r_new := r_t
 	if _pivot_blend > 0.0:
 		r_new = move_toward(d0, r_t, 2.5 * h)
 	elif d0 < r_t:
 		# Linha saindo (descarregando): a pipa vai para trás COM O VENTO (perde um pouco
 		# de altura e afasta), não reto ao longo da linha.
+		# Descarregando, sem tração ela também vai CAINDO aos poucos.
 		var wh := Vector3(wind.x, 0.0, wind.z)
 		var out_dir := ld
 		if wh.length() > 0.3:
-			out_dir = (ld + wh.normalized() * 0.6).normalized()
+			out_dir = (ld + wh.normalized() * 0.6 + Vector3.DOWN * 0.45).normalized()
 		np += out_dir * minf(V_OUT_MAX * h, r_t - d0)
 		r_new = minf(r_t, (np - pivot).length())
 	var rel := np - pivot
@@ -395,7 +400,7 @@ func step(h: float) -> void:
 	var base := 0.5 * KiteRigidBody.RHO * (w_air * w_air + 0.35 * speed * speed) * area * 1.1
 	var brk := rig.line_type.break_tension if rig.line_type else 40.0
 	base = minf(base, 0.5 * brk)
-	var pull_extra := 0.5 * KiteRigidBody.RHO * maxf(_pull_rate, 0.0) * (2.0 * w_air + maxf(_pull_rate, 0.0)) * area * 1.1
+	var pull_extra := 0.5 * KiteRigidBody.RHO * maxf(_pull_rate, 0.0) * (2.0 * w_air + maxf(_pull_rate, 0.0)) * area * 0.7
 	# Nunca passa de 85% do que a linha aguenta pelo voo/puxão/tranco: a linha só
 	# arrebenta no combate (cerol) ou puxando a pipa enroscada.
 	tension = minf(base + pull_extra + tug_visual() * (2.5 + 1.5 * float(sz)), 0.85 * brk)

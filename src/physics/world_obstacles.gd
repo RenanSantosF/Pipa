@@ -62,16 +62,19 @@ var _dyn: PackedInt32Array = PackedInt32Array()
 
 ## Corpo dos vizinhos (pés de cada um): a linha encosta e escorrega neles em vez de
 ## atravessar o personagem.
-func set_people(feet: Array) -> void:
+func set_people(feet: Array, owners: Array = []) -> void:
 	while _dyn.size() < feet.size():
 		_dyn.append(entries.size())
-		entries.append([Kind.CAPSULE, Vector3(0, -1000, 0), Vector3(0, -999, 0), 0.22, "pessoa"])
+		entries.append([Kind.CAPSULE, Vector3(0, -1000, 0), Vector3(0, -999, 0), 0.22, "pessoa", 0])
 		_boxes.append(AABB(Vector3(0, -1001, 0), Vector3.ONE))
 	for k in _dyn.size():
 		var idx := _dyn[k]
 		var e: Array = entries[idx]
 		if k < feet.size():
 			var f: Vector3 = feet[k]
+			# Dono: a linha e a pipa do PRÓPRIO vizinho não batem no corpo dele (a
+			# pipa nasce na mão, colada nele).
+			e[5] = int(owners[k]) if k < owners.size() else 0
 			e[1] = f + Vector3.UP * 0.32
 			e[2] = f + Vector3.UP * 1.5
 			_boxes[idx] = AABB(f + Vector3(-0.24, 0.08, -0.24), Vector3(0.48, 1.66, 0.48))
@@ -79,6 +82,14 @@ func set_people(feet: Array) -> void:
 			e[1] = Vector3(0, -1000, 0)
 			e[2] = Vector3(0, -999, 0)
 			_boxes[idx] = AABB(Vector3(0, -1001, 0), Vector3.ONE)
+
+
+## Cápsula de pessoa que é o dono desta linha/pipa (ignorada para ela).
+func _own_body(idx: int, owner_id: int) -> bool:
+	if owner_id == 0:
+		return false
+	var e: Array = entries[idx]
+	return e.size() > 5 and int(e[5]) == owner_id
 
 
 func _dyn_near(box: AABB, out: PackedInt32Array) -> PackedInt32Array:
@@ -480,7 +491,7 @@ func _absorb_nodes(rope: Rope) -> void:
 		if not below_top(p):
 			continue
 		for idx in query(p):
-			if not _boxes[idx].has_point(p):
+			if not _boxes[idx].has_point(p) or _own_body(idx, rope.owner_id):
 				continue
 			# Nó DENTRO de casa/muro sempre vira contato (sem limite: linha dentro da
 			# caixa é pior do que um nó a mais); no fio/galho respeita o limite.
@@ -541,7 +552,7 @@ func _detect(rope: Rope) -> void:
 		var smax := Vector3(maxf(maxf(a.x, b.x), maxf(a0.x, b0.x)), maxf(maxf(a.y, b.y), maxf(a0.y, b0.y)), maxf(maxf(a.z, b.z), maxf(a0.z, b0.z)))
 		var seg_box := AABB(smin, smax - smin).grow(0.05)
 		for idx in ids:
-			if not _boxes[idx].intersects(seg_box):
+			if not _boxes[idx].intersects(seg_box) or _own_body(idx, rope.owner_id):
 				continue
 			# Ponta do trecho que já é nó de contato neste obstáculo (−1 = nenhuma).
 			var start_on := i > 0 and rope.pin_obstacle[i] == idx
@@ -884,11 +895,13 @@ func _capstan(rope: Rope, i: int, dev: float, t_hand: float, t_kite: float, mu: 
 ## escorrega) e retorna [nome, ponto] só quando ela PRENDE de verdade:
 ##  - o fio/galho passou entre o cabresto e a vela (o cabresto enganchou);
 ##  - entrou fundo na copa, devagar (presa na folhagem).
-func kite_contact(body: KiteRigidBody, knot: Vector3, anchors: PackedVector3Array, dt: float) -> Array:
+func kite_contact(body: KiteRigidBody, knot: Vector3, anchors: PackedVector3Array, dt: float, owner_id: int = 0) -> Array:
 	kite_in_canopy = false
 	var x := body.x
 	var rad := body.profile.height * 0.45
 	for idx in query(x):
+		if _own_body(idx, owner_id):
+			continue
 		var e: Array = entries[idx]
 		match e[0]:
 			Kind.CANOPY:
