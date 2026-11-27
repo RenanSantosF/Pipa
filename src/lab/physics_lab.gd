@@ -43,6 +43,13 @@ var _swings: Array = []         # lados dos balanços (sinal do giro do bico) ap
 var _last_tap_t := -1.0
 var _rate_hist: Array = []
 var _pmul := {}
+var _hs: Array = []
+var _tap_int := 0.25
+var _loose: KiteRig = null
+var _other: KiteRig = null
+var _other_hand := Vector3.ZERO
+var _other_sweep := false
+var _evlog: Array = []
 var _flex := -1.0
 var _tail := 1
 var _flexrest := -1.0
@@ -86,6 +93,12 @@ func _ready() -> void:
 			LineHand.TUG_DOWN = float(v[5])
 		elif a.begins_with("--tail="):
 			_tail = int(a.substr(7))
+		elif a.begins_with("--int="):
+			_tap_int = float(a.substr(6))
+		elif a.begins_with("--far="):
+			LineHand.FAR_GAIN = float(a.substr(6))
+		elif a.begins_with("--belly="):
+			Rope.LINE_BELLY = float(a.substr(8))
 		elif a.begins_with("--tailmul="):
 			KiteRig.TAIL_PHYSICAL_OVERRIDE = float(a.substr(10))
 		elif a.begins_with("--tailit="):
@@ -176,6 +189,25 @@ func _launch() -> void:
 	_p0 = rig.body.x
 
 
+func _make_other(hand_pos: Vector3, length: float, elev: float) -> KiteRig:
+	var o := KiteRig.new()
+	o.name = "Outra"
+	o.display_name = "Outra"
+	o.profile = (load("res://src/kite/profiles/pipa_adversario.tres") as KiteProfile).duplicate()
+	o.profile.apply_size(1)
+	o.line_type = load("res://src/physics/lines/pura.tres")
+	o.physical = true
+	add_child(o)
+	world.register(o)
+	o.launch(hand_pos, length, elev, Wind.get_direction())
+	o.hand_rest = hand_pos
+	_other_hand = hand_pos
+	for sg in ["loose_kite_hooked", "kite_caught", "tail_grabbed"]:
+		EventBus.connect(sg, func(a: Node, b: Node) -> void: print("LAB EVENTO %s t=%.2f %s → %s" % [sg, _t, a.name, b.name]))
+	EventBus.tail_cut.connect(func(a: Node, b: Node, _p: Vector3) -> void: print("LAB EVENTO tail_cut t=%.2f %s → %s (rabiola com %d nós)" % [_t, a.name, b.name, (b as KiteRig).tail.pos.size() if (b as KiteRig).tail else -1]))
+	return o
+
+
 # --- Sequências de medição -------------------------------------------------------
 
 func _ev(t: float, what: String, val: float = 0.0) -> void:
@@ -209,7 +241,7 @@ func _plan(seq: String) -> void:
 			var t2 := s
 			while t2 < s + 5.0:
 				_ev(t2, "tap")
-				t2 += 0.25
+				t2 += _tap_int
 			_log_every = 0.1
 			_end_t = s + 9.0
 		"pausa":
@@ -241,6 +273,39 @@ func _plan(seq: String) -> void:
 				_ev(s + 0.6, "grip", 1.0)
 			_log_every = 0.05
 			_end_t = s + 3.0
+		"voada":
+			# Outra pipa atrás de mim (contra o vento), mais alta; aos 12 s a linha dela é
+			# cortada: a pipa voada e a linha dela caem sobre a minha. Eu recolho.
+			_other = _make_other(HAND + Vector3(0.0, 0.0, 14.0), 48.0, 62.0)
+			_ev(s, "cutother")
+			for k in 120:
+				_ev(s + 3.0 + k * 0.1, "linepull_if_hooked", 0.25)
+			_log_every = 0.5
+			_end_t = s + 18.0
+		"rabiola":
+			# Linha de outra pipa (pura, sem cerol) varrendo de lado na altura da minha rabiola.
+			_other = _make_other(HAND + Vector3(12.0, 11.0, -14.0), 30.0, 50.0)
+			_other_sweep = true
+			_log_every = 0.5
+			_end_t = s + 14.0
+		"rabiolacerol":
+			_other = _make_other(HAND + Vector3(12.0, 11.0, -14.0), 30.0, 50.0)
+			_other.line_type = load("res://src/physics/lines/cerol.tres")
+			_other.rope.type = _other.line_type
+			_other_sweep = true
+			_log_every = 0.5
+			_end_t = s + 14.0
+		"corte":
+			_ev(s, "cut")
+			_log_every = 0.5
+			_end_t = s + 20.0
+		"dedo":
+			# Dedo puxando a linha: 6 arrastos de 0,5 m (0,15 s cada) com a mão voltando.
+			for k in 6:
+				for j in 5:
+					_ev(s + k * 0.45 + j * 0.03, "linepull", 0.1)
+			_log_every = 0.1
+			_end_t = s + 8.0
 		"folga":
 			_ev(s, "arm", -1.0)
 			_ev(s + 1.0, "arm", 0.0)
@@ -291,7 +356,19 @@ func _log_line() -> void:
 
 func _physics_process(delta: float) -> void:
 	_t += delta
+	if _seq == "corte" and _loose != null and is_instance_valid(_loose) and _loose.body != null and _t - _log_t >= _log_every:
+		_log_t = _t
+		var lb := _loose.body
+		var d := lb.x - HAND
+		print("LAB VOADA t=%5.2f alt=%5.1f m longe=%5.1f m (a favor do vento %5.1f m) vel=%4.1f m/s desce=%+4.1f m/s ataque=%3.0f° rumo_bico=%+4.0f° linha=%4.1f m" % [
+			_t, lb.x.y, Vector2(d.x, d.z).length(), -d.z, lb.v.length(), lb.v.y, rad_to_deg(lb.angle_of_attack),
+			rad_to_deg(atan2((lb.q * Vector3.UP).x, (lb.q * Vector3.UP).y)), _loose.rope.length() if _loose.rope else 0.0])
+		if _t >= _end_t:
+			get_tree().quit()
+		return
 	if rig.body == null:
+		if _t >= _end_t:
+			get_tree().quit()
 		return
 	if _seq == "":
 		_interactive_input()
@@ -310,10 +387,44 @@ func _physics_process(delta: float) -> void:
 					_reel = ev[2]
 				"arm":
 					hand.arm = ev[2]
+				"cut":
+					_loose = rig.cut(rig.rope.length() - 1.0)
+					print("LAB CORTE: linha cortada a 1 m da mão; pipa voada com %.1f m de linha" % (_loose.rope.length() if _loose.rope else 0.0))
+				"cutother":
+					if _other != null and _other.is_flying():
+						_loose = _other.cut(_other.rope.length() - 1.0)
+						print("LAB: linha da outra pipa cortada (voada com %.0f m de linha)" % (_loose.rope.length() if _loose.rope else 0.0))
+				"linepull_if_hooked":
+					for g in world.grabs.grabs:
+						if g.catcher == rig:
+							hand.pull_line(float(ev[2]))
+							break
+				"linepull":
+					hand.pull_line(float(ev[2]))
 				"kick":
 					rig.body.w += (rig.body.q * Vector3.BACK) * float(ev[2])
 				"kickrol":
 					rig.body.w += (rig.body.q * Vector3.UP) * float(ev[2])
+	if _other_sweep and _other != null and is_instance_valid(_other) and _other.is_flying():
+		var u := clampf((_t - 12.0) / 8.0, 0.0, 1.0)
+		_other.hand_rest = _other_hand + Vector3(-24.0 * u, 0.0, 0.0)
+		_other.grip = 1.0
+	if _seq in ["rabiola", "rabiolacerol"] and _t - _log_t >= _log_every and rig.tail != null:
+		var g := world.grabs.grabbed_tail_of(rig)
+		print("LAB t=%5.2f rabiola %d nós · presa=%s força=%.2f N · minha pipa alt %.1f az %+.0f°" % [_t, rig.tail.pos.size(), str(g != null), g.force if g else 0.0, rig.body.x.y if rig.body else -1.0, measure()[2] if rig.body else 0.0])
+	if _seq == "voada" and _loose == null and _other != null and fmod(_t, 1.0) < delta:
+		var ob := _other.body
+		print("LAB outra t=%.1f voando=%s alt=%.1f T=%.2f enganches=%d" % [_t, str(_other.is_flying()), ob.x.y if ob else -1.0, _other.tension, world.grabs.grabs.size()])
+		for g in world.grabs.grabs:
+			print("   enganche tipo=%d %s → %s" % [g.kind, g.catcher.name, g.target.name])
+	if _loose != null and _seq == "voada" and _t - _log_t >= _log_every and is_instance_valid(_loose):
+		var lb := _loose.body
+		var gg := ""
+		for g in world.grabs.grabs:
+			gg = "enganchada em s=%.1f m (minha linha %.1f m) força %.2f N" % [g.s, rig.flying_length(), g.force]
+		print("LAB t=%5.2f voada alt=%.1f %s" % [_t, lb.x.y if lb else -1.0, gg])
+	if rig.body == null:
+		return
 	hand.update(delta, _grip, _reel)
 	if _seq != "":
 		_collect(delta)
@@ -337,6 +448,7 @@ func _collect(delta: float) -> void:
 	if _t > 12.0 and _t < 17.0:
 		_stats["rt2"] = _stats.get("rt2", 0.0) + rate * rate
 		_stats["rtn"] = _stats.get("rtn", 0) + 1
+		_hs.append(h)
 	if _t > 8.0 and _t < 12.0:
 		_stats["el_sum"] = _stats.get("el_sum", 0.0) + float(m[1])
 		_stats["el_n"] = _stats.get("el_n", 0) + 1
@@ -392,6 +504,19 @@ func _report() -> void:
 		txt += "%+.0f " % pk
 	print("LAB balanços (picos de giro °/s): %s" % txt)
 	var n2: int = maxi(_stats.get("n2", 1), 1)
+	# Amplitude dos balanços: média das diferenças entre picos e vales consecutivos do rumo.
+	var swings := []
+	for i in range(1, _hs.size() - 1):
+		if (_hs[i] > _hs[i - 1] and _hs[i] >= _hs[i + 1]) or (_hs[i] < _hs[i - 1] and _hs[i] <= _hs[i + 1]):
+			swings.append(_hs[i])
+	var amp := 0.0
+	var na := 0
+	for i in range(1, swings.size()):
+		var dd := absf(float(swings[i]) - float(swings[i - 1]))
+		if dd > 3.0:
+			amp += dd
+			na += 1
+	print("LAB BALANÇO médio %.0f° (%d balanços)" % [amp / maxf(na, 1), na])
 	print("LAB GIRO parado=%.0f°/s toques=%.0f°/s" % [sqrt(_stats.get("ri2", 0.0) / maxf(_stats.get("rin", 1), 1)), sqrt(_stats.get("rt2", 0.0) / maxf(_stats.get("rtn", 1), 1))])
 	print("LAB SCORE elev=%.1f rumo_rms=%.1f aoa=%.1f y_min=%.1f invertida=%.0f%% picos=%d" % [
 		_stats.get("el2_sum", 0.0) / n2, sqrt(_stats.get("h2_sum", 0.0) / n2), _stats.get("aoa2_sum", 0.0) / n2,

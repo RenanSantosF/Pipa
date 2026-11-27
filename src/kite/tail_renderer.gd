@@ -102,6 +102,8 @@ func _process(_delta: float) -> void:
 	_curve.append(_pts[n - 1])
 
 	_im.surface_begin(Mesh.PRIMITIVE_TRIANGLES, _mat)
+	# Triângulo vazio: a superfície nunca fica sem vértices (rabiola cortada curtinha).
+	_tri(_pts[0], _pts[0], _pts[0], Color(0, 0, 0, 0))
 	# Barbante (bem fino).
 	var string_col := Color(0.92, 0.9, 0.84)
 	for i in _curve.size() - 1:
@@ -115,6 +117,9 @@ func _process(_delta: float) -> void:
 		# cor misturada (os blocos de cor serrilhavam e piscavam com a resolução baixa).
 		_im.surface_end()
 		_im.surface_begin(Mesh.PRIMITIVE_TRIANGLES, _mat_far)
+		for _d in 3:
+			_im.surface_set_color(Color(0, 0, 0, 0))
+			_im.surface_add_vertex(_pts[0])
 		var col_far := prof.tail_color_a.lerp(prof.tail_color_b, 0.5)
 		var nc := _curve.size()
 		var walked := 0.0

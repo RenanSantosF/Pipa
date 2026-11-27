@@ -15,9 +15,10 @@ extends RefCounted
 const RHO := 1.225
 const GRAVITY := Vector3(0.0, -9.8, 0.0)
 const CD_NORMAL := 1.1
-## Linha mais "mole" no visual: o vento faz barriga (linha de pipa de verdade nunca
-## fica reta como arame). Multiplica o arrasto do vento na linha.
-const LINE_BELLY := 2.2
+## Multiplicador do arrasto do vento na linha. Era 2,2 (barriga exagerada para o
+## visual); na física real é 1: com 2,2 a linha comprida engolia o tranco da mão e a
+## pipa voava baixa e instável a 60 m (laboratório, v0.19).
+static var LINE_BELLY := 1.0
 const CF_TANGENT := 0.02
 
 var type: LineType

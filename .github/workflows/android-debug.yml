@@ -111,6 +111,15 @@ jobs:
           # Gestos (toques sintéticos).
           timeout 120 ~/godot/godot --headless --path . --fixed-fps 60 -- --gestureprobe 2>&1 | tee gestures.log || true
           grep -q "GESTOS OK" gestures.log || { echo "::error::Teste de gestos falhou"; exit 1; }
+          # Laboratório da física: aparar pipa voada; linha pura pega a rabiola; cerol corta.
+          LAB="res://src/lab/physics_lab.tscn"
+          timeout 180 ~/godot/godot --headless --fixed-fps 30 --path . $LAB -- --quality=0 --seq=voada 2>&1 | tee lab_voada.log || true
+          grep -q "EVENTO kite_caught" lab_voada.log || { echo "::error::Laboratório: não aparou a pipa voada"; exit 1; }
+          timeout 180 ~/godot/godot --headless --fixed-fps 30 --path . $LAB -- --quality=0 --seq=rabiola 2>&1 | tee lab_rabiola.log || true
+          grep -q "EVENTO tail_grabbed" lab_rabiola.log || { echo "::error::Laboratório: linha não pegou a rabiola"; exit 1; }
+          timeout 180 ~/godot/godot --headless --fixed-fps 30 --path . $LAB -- --quality=0 --seq=rabiolacerol 2>&1 | tee lab_cerol.log || true
+          grep -q "EVENTO tail_cut" lab_cerol.log || { echo "::error::Laboratório: cerol não cortou a rabiola"; exit 1; }
+          if grep -nE "SCRIPT ERROR|Parse Error" lab_*.log; then echo "::error::Erros de script no laboratório"; exit 1; fi
 
       - name: Capturas de tela renderizadas (Vulkan por software)
         run: |

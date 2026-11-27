@@ -149,6 +149,19 @@ func _solve_once(n: int) -> void:
 			pos[i] = p
 
 
+## Rabiola cortada/arrebentada no nó i: fica só o pedaço junto da pipa (nós 0..i-1).
+func cut_at(i: int) -> void:
+	i = clampi(i, 1, pos.size())
+	pos.resize(i)
+	prev.resize(i)
+	vel.resize(i)
+	acc.resize(i)
+	if tick_prev.size() > i:
+		tick_prev.resize(i)
+	if pinned_index >= i:
+		pinned_index = -1
+
+
 ## Rabiola engancha em fio ou galho; solta com tranco forte ou com o tempo (balançando).
 func try_snag(obstacles: WorldObstacles, pull: float, dt: float) -> void:
 	if pinned_index >= 0:

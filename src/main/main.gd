@@ -86,7 +86,8 @@ func _spawn_bot(pos: Vector3, i: int) -> void:
 	prof.pattern = (i + 1) % 4
 	prof.apply_size(randi() % 3)
 	prof.apply_bow(randi() % 3)
-	prof.apply_tail(randi() % 3)
+	# Física real: a rabiola curta deixa a pipinha arisca demais para o vizinho.
+	prof.apply_tail((1 + randi() % 2) if GameConfig.physical_flight else randi() % 3)
 	var tails := [[Color(0.95, 0.95, 0.95), Color(0.85, 0.15, 0.15)], [Color(0.1, 0.1, 0.1), Color(0.98, 0.84, 0.12)],
 		[Color(0.2, 0.45, 0.9), Color(0.95, 0.95, 0.95)], [Color(0.1, 0.6, 0.25), Color(0.98, 0.84, 0.12)]]
 	var tc: Array = tails[i % tails.size()]
@@ -95,6 +96,7 @@ func _spawn_bot(pos: Vector3, i: int) -> void:
 	r.profile = prof
 	r.line_type = load("res://src/physics/lines/%s.tres" % BOT_LINES[randi() % BOT_LINES.size()])
 	r.display_name = "Vizinho %d" % (i + 2)
+	r.physical = GameConfig.physical_flight
 	add_child(r)
 	physics_world.register(r)
 	var b := BotFlyer.new()
@@ -151,6 +153,9 @@ func _ready() -> void:
 	player.rig = player_rig
 	player_rig.is_local_player = true
 	player_rig.physical = GameConfig.physical_flight
+	bot_rig.physical = GameConfig.physical_flight
+	if GameConfig.physical_flight and bot_rig.profile:
+		bot_rig.profile.apply_tail(1 + randi() % 2)
 	physics_world.register(player_rig)
 	physics_world.register(bot_rig)
 	bot.rig = bot_rig
@@ -182,6 +187,9 @@ func _ready() -> void:
 		return
 	if args.has("--autotest"):
 		_attach("res://src/main/autotest.gd")
+		return
+	if args.has("--launchprobe"):
+		_attach("res://src/main/launch_probe.gd")
 		return
 	if args.has("--tapprobe"):
 		_attach("res://src/main/tap_probe.gd")

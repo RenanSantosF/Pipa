@@ -23,6 +23,8 @@ const FEED_MASS := 0.06      # inércia da linha + lata girando
 const FEED_DAMP := 2.5
 const MIN_LENGTH := 2.0
 const REEL_HARD_TENSION := 25.0
+## Amortecimento residual de rotação da pipa física (balanços do desbico claros).
+static var ROT_DAMP_PHYSICAL := 0.4
 ## Comprimento da rabiola na pipa física (× o do perfil), por rabiola [curta, média,
 ## grande]. Na física real é a rabiola que segura a pipa: a curta do perfil (55%)
 ## deixava a pipinha e a média instáveis (davam looping e caíam).
@@ -198,6 +200,7 @@ func launch(hand: Vector3, length: float, elevation_deg: float, direction: Vecto
 		tmul = TAIL_PHYSICAL_OVERRIDE
 	tail = TailChain.new(body, profile, tmul if physical else 1.0)
 	if physical:
+		body.rot_damp_scale = ROT_DAMP_PHYSICAL
 		tail.flutter_scale = 0.5
 		body.flex_per_n = flex_per_n
 		body.flex_rest = flex_rest
@@ -388,6 +391,15 @@ func pre_frame(dt: float) -> void:
 		body.steer_gain = steer_gain
 		body.steer_ff = steer_ff
 		body.push_accel = Vector3.ZERO if loose else push_accel
+		if physical:
+			# Física real: nenhum atuador artificial chega na pipa, venha de onde vier
+			# (a mão antiga ainda escreve esses campos em sondas e no teste de combate).
+			body.sail_asym = 0.0
+			body.spin_bias = 0.0
+			body.steer_dir = Vector3.ZERO
+			body.steer_gain = 0.0
+			body.steer_ff = 0.0
+			body.push_accel = Vector3.ZERO
 		if rope != null and rope.hand_fixed:
 			var ld := body.x - hand_position()
 			if ld.length() > 0.01:

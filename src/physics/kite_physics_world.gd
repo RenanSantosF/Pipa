@@ -14,6 +14,8 @@ const LOOSE_LIFETIME := 45.0
 
 var rigs: Array[KiteRig] = []
 var combat := LineCombat.new()
+## Enganches: aparar pipa voada; pegar/cortar rabiola.
+var grabs := LineGrabs.new()
 var frame_ms: float = 0.0
 ## Parte do quadro gasta com o cenário (contatos da linha com obstáculos).
 var world_ms: float = 0.0
@@ -48,6 +50,7 @@ func _physics_process(dt: float) -> void:
 	for r in rigs:
 		r.pre_frame(dt)
 	combat.detect(rigs)
+	grabs.detect(rigs)
 	for _i in sub:
 		for r in rigs:
 			r.predict(h)
@@ -55,6 +58,7 @@ func _physics_process(dt: float) -> void:
 			r.solve(h)
 			r.pushed_by_line = false
 		combat.solve(h)
+		grabs.solve(h)
 		# O cenário é rígido: depois do empurra-empurra entre linhas, os nós apoiados
 		# em fio/poste/telhado voltam para fora (uma linha não empurra a outra para
 		# dentro da casa).
@@ -71,6 +75,8 @@ func _physics_process(dt: float) -> void:
 		for r in rigs:
 			r.finalize(h)
 	combat.post_frame(dt, h, sub)
+	var collected := grabs.post_frame(dt, h, sub)
+	_grab_events(collected)
 	var tw := Time.get_ticks_usec()
 	_collide_with_world()
 	world_ms = float(Time.get_ticks_usec() - tw) / 1000.0
@@ -154,10 +160,43 @@ func _cleanup() -> void:
 			continue
 		if r.loose and r.body != null:
 			var far := Vector2(r.body.x.x, r.body.x.z).length() > 260.0
-			if r.age > LOOSE_LIFETIME or far:
+			# Pipa voada presa numa linha não some (vai ser aparada ou cair).
+			var hooked := false
+			for g in grabs.grabs:
+				if g.target == r:
+					hooked = true
+			if (r.age > LOOSE_LIFETIME and not hooked) or far:
 				combat.clear_for(r)
+				grabs.clear_for(r)
 				rigs.remove_at(i)
 				r.queue_free()
+
+
+## Eventos dos enganches → avisos; pipas aparadas saem do céu (ficam com quem aparou);
+## pedaços de rabiola cortados caem sozinhos.
+func _grab_events(collected: Array) -> void:
+	for ev in grabs.events:
+		match ev[0]:
+			"enroscou_voada":
+				EventBus.loose_kite_hooked.emit(ev[1], ev[2])
+			"aparou":
+				EventBus.kite_caught.emit(ev[1], ev[2])
+			"pegou_rabiola":
+				EventBus.tail_grabbed.emit(ev[1], ev[2])
+			"cortou_rabiola", "arrebentou_rabiola":
+				EventBus.tail_cut.emit(ev[1], ev[2], ev[3])
+	for pc in grabs.cut_pieces:
+		var rg: KiteRig = pc[2]
+		var fr := FallingRibbon.new()
+		fr.setup(pc[0], pc[1], rg.profile, rg.tail.seg_len if rg.tail else 0.3)
+		add_child(fr)
+	for pair in collected:
+		var t: KiteRig = pair[1]
+		if is_instance_valid(t):
+			combat.clear_for(t)
+			grabs.clear_for(t)
+			rigs.erase(t)
+			t.queue_free()
 
 
 ## Contato mais forte agora (para som/vibração/HUD).

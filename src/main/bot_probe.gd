@@ -5,11 +5,15 @@ extends Node
 var main
 var _t: float = 0.0
 var _cuts: Array = []
+var _secs := 70.0
 
 
 func start(p_main) -> void:
 	main = p_main
 	main.input_router.autopilot = true
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--secs="):
+			_secs = float(a.substr(7))
 	var r: KiteRig = main.player_rig
 	r.launch(main.player.global_position + Vector3(0.2, 1.18, -0.3), 35.0, 55.0, Wind.get_direction())
 	main.player.rig = null
@@ -46,6 +50,6 @@ func _physics_process(delta: float) -> void:
 				nn += rg.rope.pos.size()
 				nc += rg.rope.contact_count()
 		print("BOTS t=%4.0f física=%.1fms cenário=%.1fms contatos=%d linhas=%d nós=%d nós_contato=%d%s" % [_t, main.physics_world.frame_ms, main.physics_world.world_ms, main.physics_world.combat.contacts.size(), nr, nn, nc, line])
-	if _t > 70.0:
+	if _t > _secs:
 		print("BOTS cortes: ", _cuts)
 		get_tree().quit(0)

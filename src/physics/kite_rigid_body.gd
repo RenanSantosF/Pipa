@@ -56,6 +56,9 @@ var spin_bias: float = 0.0
 ## mais carregado verga mais e alivia a si mesmo.
 ## flex_per_n = rad por N de força normal na meia-vela (0 = desligado: diedro fixo).
 var flex_per_n: float = 0.0
+## Escala do amortecimento residual de rotação (pipa física: 0,4 — o giro do bico em
+## volta da linha quase não empurra ar; o amortecimento de verdade vem da rabiola).
+var rot_damp_scale: float = 1.0
 var flex_rest: float = 0.0
 var flex: PackedFloat32Array = PackedFloat32Array([0.0, 0.0])
 const FLEX_TAU := 0.035
@@ -312,7 +315,7 @@ func compute_forces() -> void:
 		var qa := 0.5 * RHO * airspeed * airspeed * (_half_area[0] + _half_area[1]) * profile.height
 		_torque += (q * Vector3.BACK) * (-spin_bias * profile.spin_coef * qa * relax)
 	var span := profile.width * profile.height * 0.5 * profile.height * profile.height
-	_torque -= w * (profile.rotational_damping * 0.5 * RHO * maxf(airspeed, 1.0) * span)
+	_torque -= w * (profile.rotational_damping * rot_damp_scale * 0.5 * RHO * maxf(airspeed, 1.0) * span)
 	# Rolagem (asas subindo/descendo em volta da vareta): uma placa larga girando
 	# assim empurra muito ar — amortecimento forte. Sem isto o giro do bico no
 	# desbico acoplava (diedro) numa rolagem que parecia a pipa "batendo as asas".

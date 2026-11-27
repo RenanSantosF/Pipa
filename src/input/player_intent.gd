@@ -51,6 +51,9 @@ var cancel_desbico: bool = false
 var size_cycle: int = 0
 var bow_cycle: int = 0
 var tail_cycle: int = 0
+## FÍSICA REAL: linha puxada pelo dedo desde a última leitura (m). O dedo é a mão na
+## linha: arrastar para baixo puxa na velocidade do dedo; subir é a mão voltando.
+var line_pull: float = 0.0
 ## Modo do gesto atual (para feedback visual): "", "puxar", "soltar", "enrolar".
 var gesture_mode: String = ""
 

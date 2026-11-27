@@ -14,3 +14,10 @@ signal kite_snagged(rig: Node, what: String)
 ## A linha desenroscou (tranco ou linha frouxa).
 signal line_freed(rig: Node, what: String)
 signal reset_requested
+## A linha de `catcher` enroscou numa pipa voada (`kite`) / trouxe ela até a mão (aparou).
+signal loose_kite_hooked(catcher: Node, kite: Node)
+signal kite_caught(catcher: Node, kite: Node)
+## A linha de `catcher` pegou a rabiola de `target` (sem cerol: arrasta pela rabiola).
+signal tail_grabbed(catcher: Node, target: Node)
+## A rabiola de `target` foi cortada (cerol) ou arrebentou presa na linha de `by`.
+signal tail_cut(by: Node, target: Node, position: Vector3)

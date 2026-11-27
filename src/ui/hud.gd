@@ -24,6 +24,22 @@ func _ready() -> void:
 	EventBus.line_freed.connect(func(r: Node, _w: String) -> void:
 		if r == rig:
 			toast("snag", "soltou", Color(0.6, 1.0, 0.6), 1.6))
+	EventBus.loose_kite_hooked.connect(func(c: Node, _k: Node) -> void:
+		if c == rig:
+			toast("cut", "enroscou a voada! recolhe", Color(0.6, 0.9, 1.0), 2.5))
+	EventBus.kite_caught.connect(func(c: Node, _k: Node) -> void:
+		if c == rig:
+			toast("cut", "aparou!", Color(0.55, 1.0, 0.55), 3.0))
+	EventBus.tail_grabbed.connect(func(c: Node, t: Node) -> void:
+		if t == rig:
+			toast("snag", "pegaram sua rabiola", Color(1.0, 0.8, 0.35), 2.5)
+		elif c == rig:
+			toast("snag", "pegou a rabiola!", Color(0.55, 1.0, 0.55), 2.5))
+	EventBus.tail_cut.connect(func(by: Node, t: Node, _p: Vector3) -> void:
+		if t == rig:
+			toast("cut", "cortaram sua rabiola", Color(1.0, 0.45, 0.4), 2.5)
+		elif by == rig:
+			toast("cut", "cortou a rabiola!", Color(0.55, 1.0, 0.55), 2.5))
 
 
 func setup(p_rig: KiteRig, p_world: KitePhysicsWorld) -> void:

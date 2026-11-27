@@ -25,12 +25,18 @@ linha e rabiola, e os gestos só mexem a **mão na linha** (detalhes em `docs/V1
 
 | Gesto | Mão na linha | O que a física faz |
 |---|---|---|
-| **Tocar** | desbico "dá e puxa": o braço dá folga e puxa curto | sem tração a travessa desenverga e o bico fica solto; o tranco estica e a rabiola (pêndulo) devolve o bico — cada toque balança para um lado, alternando |
-| **Arrastar rápido para baixo** | braçada (recolhe ~0,6 m) | pico de tração: ela vai para onde o bico aponta e sobe |
-| **Segurar para baixo** | braçadas em série | recolhe e sobe |
-| **Arrastar para cima** | mão abre | a linha corre com a tração: ela vai embora e desce aos poucos |
-| **Segurar e arrastar devagar** | braço à frente (folga) / para trás (estica) | folga = ela solta; estica = firma |
+| **Tocar** | desbico "dá e puxa": o braço dá folga e puxa curto (maior com a pipa longe) | sem tração a travessa desenverga e o bico fica solto; o tranco estica e a rabiola (pêndulo) devolve o bico — cada toque balança para um lado, alternando |
+| **Arrastar para baixo** (qualquer velocidade) | o dedo é a MÃO NA LINHA: a linha entra na velocidade do dedo | pico de tração: ela vai para onde o bico aponta e sobe; mais rápido = tranco maior |
+| **Esfregar** (baixo, volta, baixo…) | mão sobre mão (voltando, a outra mão segura) | recolhe sem parar |
+| **Arrastar um pouco para cima** | mão entreaberta: a linha só corre quando a pipa puxa | ela sobe ganhando linha (é assim que se solta da mão) |
+| **Arrastar bem para cima** | mão aberta | descarregar: a linha corre solta, ela vai embora e desce aos poucos |
 | Enrolar (Q no PC) | lata enrola | apara a linha |
+
+**Combate na física real:** a sua linha encostando numa **pipa voada** (ou na linha
+dela) enrosca — recolha e ela vem até a mão (**aparou!**). Linha **sem cerol** encostando
+numa rabiola **pega a rabiola** e arrasta a pipa por ela (até o barbante arrebentar
+num tranco); com **cerol** ela **corta a rabiola** (o pedaço cai e a pipa fica arisca).
+Pipa cortada **voa com o vento** arrastando a linha e desce aos poucos.
 
 A chave **Física real** fica no topo da área de testes (tubo de ensaio); desligada, volta
 o modelo de voo antigo, com os controles da tabela abaixo.
@@ -62,7 +68,7 @@ A pipa **começa na mão**, com a linha curta: **desbique** (toques) para ela su
 
 PC (testes): Espaço = desbico (toque) · ←/→ segurados = guiar · F = puxão (segurar = em série) · Tab = olhar com o mouse · E = dar linha · G = braçada lenta · Q = enrolar · R = nova pipa · T = trocar linha · Y = tamanho · U = envergadura · J = rabiola.
 
-Detalhes do desbico e do puxão: `docs/DESBICO_PUXAO.md`. O que mudou na 0.7 (pipa da foto, gestos, linha fina, desempenho): `docs/V07.md`; na 0.8: `docs/V08.md`; na 0.9: `docs/V09.md`; na 0.10: `docs/V10.md`; na 0.13 (voo reconstruído: controle separado da física, cabresto → inclinação → curva, área de testes): `docs/V13.md`; na 0.14 (desbico por toques no modelo de voo, linha que não atravessa): `docs/V14.md`; na 0.15 (pipa viva, volta reta, começa na mão, linha não arrebenta sozinha): `docs/V15.md`; na 0.16 (escala real, cabresto de linha, linha no corpo dos vizinhos): `docs/V16.md`; na 0.17 (mais lenta, levada pelo vento, 60 quadros/s): `docs/V17.md`; na 0.18 (física real: laboratório, cabresto de linha, pipa corpo rígido, controle só pela linha): `docs/V18.md` e a análise `docs/ANALISE_FISICA.md`.
+Detalhes do desbico e do puxão: `docs/DESBICO_PUXAO.md`. O que mudou na 0.7 (pipa da foto, gestos, linha fina, desempenho): `docs/V07.md`; na 0.8: `docs/V08.md`; na 0.9: `docs/V09.md`; na 0.10: `docs/V10.md`; na 0.13 (voo reconstruído: controle separado da física, cabresto → inclinação → curva, área de testes): `docs/V13.md`; na 0.14 (desbico por toques no modelo de voo, linha que não atravessa): `docs/V14.md`; na 0.15 (pipa viva, volta reta, começa na mão, linha não arrebenta sozinha): `docs/V15.md`; na 0.16 (escala real, cabresto de linha, linha no corpo dos vizinhos): `docs/V16.md`; na 0.17 (mais lenta, levada pelo vento, 60 quadros/s): `docs/V17.md`; na 0.18 (física real: laboratório, cabresto de linha, pipa corpo rígido, controle só pela linha): `docs/V18.md` e a análise `docs/ANALISE_FISICA.md`; na 0.19 (puxar com o dedo, desbico de longe, aparar pipa voada, rabiola pega/cortada, vizinhos com física real): `docs/V19.md`.
 
 ## Como é a física (resumo)
 

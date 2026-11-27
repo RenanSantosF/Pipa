@@ -66,6 +66,9 @@ func launch() -> void:
 func _physics_process(delta: float) -> void:
 	if rig == null:
 		return
+	if rig.physical:
+		_physical_update(delta)
+		return
 	if _hand == null or _hand.rig != rig:
 		_hand = KiteHand.new(rig)
 	_timer -= delta
@@ -225,3 +228,157 @@ func _combo(side: float, amount: float) -> void:
 	get_tree().create_timer(hold + lerpf(0.12, 0.05, skill), true, true).timeout.connect(func() -> void:
 		if _hand != null and rig != null and rig.is_flying():
 			_hand.puxao())
+
+
+# --- FÍSICA REAL (v0.19): o vizinho usa a mesma mão na linha do jogador -------------
+## Só o que a mão de verdade faz: toques (desbico), puxar linha, dar linha, enrolar.
+## Para ir para um lado ele desbica até o bico apontar para lá e então PUXA (a pipa sai
+## para onde o bico aponta). Para subir puxa; para descer/ir longe dá linha. Cruzado
+## com a sua linha, rela: dá linha (espalha o desgaste) ou puxa rápido.
+
+var _lh: LineHand
+var _pull_timer: float = 0.0
+
+
+func _physical_update(delta: float) -> void:
+	if _lh == null or _lh.rig != rig:
+		_lh = LineHand.new(rig)
+	_timer -= delta
+	_tap_timer -= delta
+	_pull_timer -= delta
+	var grip := 1.0
+	var reel := 0.0
+	if not rig.is_flying():
+		if rig.rope != null:
+			reel = 3.0
+			if _state != State.WAIT:
+				_state = State.WAIT
+				_timer = 6.0
+			elif _timer <= 0.0:
+				rig.rope = null
+				rig.line_renderer.bind(null, rig.line_type)
+				_timer = _rng.randf_range(1.0, 3.0)
+		elif _state != State.WAIT:
+			_state = State.WAIT
+			_timer = _rng.randf_range(3.0, 7.0)
+		elif _timer <= 0.0:
+			launch()
+	else:
+		var to_kite := rig.body.x - global_position
+		rotation.y = lerp_angle(rotation.y, atan2(-to_kite.x, -to_kite.z), 1.0 - exp(-2.0 * delta))
+		var alt := rig.body.x.y - rig.hand_position().y
+		var in_contact := world != null and world.strongest_contact_for(rig) != null
+		if alt > _best_alt + 0.5:
+			_best_alt = alt
+			_stall_time = 0.0
+		elif _state == State.CLIMB or rig.snagged:
+			_stall_time += delta
+		if _stall_time > 12.0 or _recovering:
+			_recovering = true
+			reel = 4.0
+			if rig.flying_length() < 3.0:
+				rig.stow()
+				_state = State.WAIT
+				_timer = _rng.randf_range(1.0, 3.0)
+				_recovering = false
+		elif in_contact:
+			_state = State.ENGAGE
+		elif _state == State.ENGAGE:
+			_state = State.HUNT
+		if not _recovering:
+			match _state:
+				State.CLIMB:
+					# Da mão: desbica em ritmo e dá linha quando ela puxa; baixa demais, puxa.
+					if _tap_timer <= 0.0:
+						_lh.tap()
+						_tap_timer = _rng.randf_range(0.28, 0.42)
+					# Mão entreaberta: a linha corre só quando a pipa puxa (sobe ganhando linha);
+					# afundando (pouca tração), fecha a mão e puxa para ela pegar vento.
+					if rig.flying_length() < _target_length and rig.tension > 0.9:
+						grip = 0.3
+					elif rig.tension < 0.6 and alt < 10.0 and _pull_timer <= 0.0 and rig.age > 3.0:
+						_lh.pull_line(0.4)
+						_pull_timer = 0.5
+					if alt < 0.5 and rig.age > 3.0 and _pull_timer <= 0.0:
+						_lh.pull_line(0.35)
+						_pull_timer = 0.6
+					if rig.flying_length() >= _target_length and alt > 12.0:
+						_state = State.HUNT
+				State.HUNT:
+					grip = _hunt_physical(alt)
+				State.ENGAGE:
+					var phase := fmod(Time.get_ticks_msec() / 1000.0 + float(get_instance_id() % 7), 1.8)
+					if _style_release:
+						grip = 0.2 if phase < 1.1 else 1.0
+						if phase > 1.2 and _pull_timer <= 0.0:
+							_lh.pull_line(0.5)
+							_pull_timer = 0.3
+					else:
+						if _pull_timer <= 0.0:
+							_lh.pull_line(0.45)
+							_pull_timer = 0.28
+						grip = 0.3 if phase > 1.4 else 1.0
+	_lh.update(delta, grip, reel)
+	rig.hand_rest = hand_rest()
+	rig.stroke_dir = (global_transform.basis * Vector3(0.05, -0.4, 1.0)).normalized()
+	if character:
+		character.right_hand_target = rig.hand_position() + rig.stroke_dir * _lh.visual_pull
+		character.line_tension = rig.tension
+		character.reel_speed = rig.reel_rate - rig.feed_speed
+
+
+## Leva a pipa até a linha (ou a rabiola) do alvo só com a mão. Retorna a pegada.
+func _hunt_physical(alt: float) -> float:
+	var grip := 1.0
+	rig.reel_rate = 0.0
+	if target == null or not target.is_flying():
+		if _tap_timer <= 0.0:
+			_lh.tap()
+			_tap_timer = _rng.randf_range(0.8, 1.4)
+		if alt < 14.0 and _pull_timer <= 0.0:
+			_lh.pull_line(0.4)
+			_pull_timer = 0.8
+		return grip
+	var b := rig.body
+	if alt < 8.0:
+		# Baixa demais: puxa para subir.
+		if _pull_timer <= 0.0:
+			_lh.pull_line(0.5)
+			_pull_timer = 0.45
+		return grip
+	# Atravessar o plano vertical da linha do alvo (mão → pipa), na altura da pipa dele.
+	var t_hand := target.hand_position()
+	var t_dir := target.body.x - t_hand
+	t_dir.y = 0.0
+	var plane_n := t_dir.normalized().cross(Vector3.UP).normalized()
+	var off := (b.x - t_hand).dot(plane_n)
+	var side_now := signf(off) if off != 0.0 else 1.0
+	if _cross_side == 0.0 or off * _cross_side > 6.0:
+		_cross_side = -side_now
+	var line_dir := (b.x - rig.hand_position()).normalized()
+	var right := line_dir.cross(Vector3.UP).normalized()
+	var lateral := (plane_n * _cross_side).dot(right) * 10.0
+	var vertical := target.body.x.y - 3.0 - b.x.y   # mira um pouco abaixo da pipa dele
+	var h := rig.heading()
+	var need := signf(lateral)
+	if absf(lateral) > 1.5 and _rng.randf() < aggression + 0.3:
+		if signf(h) == need and absf(h) > 0.3 and absf(h) < 2.2:
+			# O bico aponta para onde ele quer ir: puxa (a pipa sai para lá).
+			if _pull_timer <= 0.0:
+				_lh.pull_line(lerpf(0.4, 0.8, skill))
+				_pull_timer = lerpf(0.5, 0.3, skill)
+		elif _tap_timer <= 0.0:
+			# Desbica até o bico virar para o lado certo.
+			_lh.tap()
+			_tap_timer = _rng.randf_range(0.3, 0.45)
+	elif _tap_timer <= 0.0:
+		_lh.tap()
+		_tap_timer = _rng.randf_range(0.6, 1.0)
+	if vertical > 4.0 and _pull_timer <= 0.0 and absf(h) < 0.6:
+		_lh.pull_line(0.5)   # abaixo da pipa dele: puxa (bico para cima = sobe)
+		_pull_timer = 0.5
+	elif vertical < -6.0 and rig.tension > 1.0 and rig.flying_length() < _target_length * 1.6:
+		grip = 0.3            # muito acima: dá linha (vai mais longe e desce)
+	if rig.flying_length() > _target_length * 1.6:
+		rig.reel_rate = 1.5
+	return grip

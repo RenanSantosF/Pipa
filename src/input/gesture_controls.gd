@@ -273,12 +273,68 @@ func _tap(pos: Vector2) -> void:
 
 
 var _last_vel_y := 0.0
+## FÍSICA REAL: metros de linha por pixel de dedo puxado para baixo (400 px = 1 m) e
+## quanto o dedo sobe acima do ponto onde encostou para virar "dar linha".
+const LINE_M_PER_PX := 0.0025
+const GIVE_SWITCH_PX := 40.0
+## Pegada da mão entreaberta ao dar linha (atrito ≈ pegada² × 40 N ≈ 3,6 N).
+const GIVE_GRIP := 0.3
+## Até aqui o dedo ainda pode ser um toque (desbico); passou disso, é a mão puxando.
+const PHYS_CLASSIFY_PX := 24.0
+
+
+## FÍSICA REAL: o dedo é a MÃO NA LINHA (qualquer velocidade).
+##   para baixo = puxa (a linha entra na velocidade do dedo; mais rápido = tranco maior)
+##   voltando para cima = a outra mão segura (não devolve linha) — esfregar = mão sobre mão
+##   acima de onde encostou = mão abre e a linha corre (dar linha)
+## Devolve [modo, ponto mais alto do dedo].
+func _phys_drag(pos: Vector2, origin: Vector2, mode: String, top: float) -> Array:
+	var d := pos - origin
+	if mode == "":
+		if d.length() < PHYS_CLASSIFY_PX:
+			return [mode, top]
+		if d.y > 0.0 and absf(d.y) >= absf(d.x) * 0.6:
+			mode = "puxar"
+			top = origin.y
+		elif d.y < 0.0 and absf(d.y) >= absf(d.x) * 0.6:
+			mode = "soltar"
+		else:
+			mode = "lado"
+	if mode == "puxar":
+		if pos.y > top:
+			intent.line_pull += (pos.y - top) * LINE_M_PER_PX
+			if pos.y - top > 30.0:
+				_fx.append([pos, 0.0, Color(1.0, 0.82, 0.35)])
+			top = pos.y
+		elif pos.y < top:
+			top = pos.y
+			if pos.y < origin.y - GIVE_SWITCH_PX:
+				mode = "soltar"
+	elif mode == "soltar":
+		# Até RELEASE_PX: mão ENTREABERTA (a linha só corre quando a pipa puxa mais que o
+		# atrito: ela sobe ganhando linha). Além disso até 2×: mão ABERTA (descarregar —
+		# a linha corre solta e a pipa vai embora caindo).
+		var up := maxf(origin.y - pos.y, 0.0)
+		if up <= RELEASE_PX:
+			intent.grip = lerpf(1.0, GIVE_GRIP, up / RELEASE_PX)
+		else:
+			intent.grip = lerpf(GIVE_GRIP, 0.0, clampf((up - RELEASE_PX) / RELEASE_PX, 0.0, 1.0))
+		if pos.y > origin.y + GIVE_SWITCH_PX * 0.5:
+			mode = "puxar"
+			top = pos.y
+			intent.grip = 1.0
+	return [mode, top]
 
 
 func _kite_drag(pos: Vector2, velocity: Vector2) -> void:
 	_finger = pos
 	_last_vel_y = velocity.y
 	_dirty = true
+	if GameConfig.physical_flight:
+		var r := _phys_drag(pos, _origin, _mode, _scrub_top)
+		_mode = r[0]
+		_scrub_top = r[1]
+		return
 	if _mode == "":
 		var k := _swipe_kind(_origin, pos, velocity, _t0)
 		if k != "":
@@ -339,6 +395,11 @@ func _pull_from_swipe(pos: Vector2) -> void:
 
 func _second_drag(pos: Vector2, velocity: Vector2) -> void:
 	_last_vel_y = velocity.y
+	if GameConfig.physical_flight:
+		var r := _phys_drag(pos, _second_origin, _second_mode, _second_top)
+		_second_mode = r[0]
+		_second_top = r[1]
+		return
 	if _second_mode == "":
 		var k := _swipe_kind(_second_origin, pos, velocity, _second_t0)
 		if k == "":
@@ -363,7 +424,7 @@ func _process(delta: float) -> void:
 		return
 	intent.gesture_mode = _mode if _kite_index != -1 else ""
 	# Segurou parado: vira guiar (o manche nasce ali; mexer o dedo dá a direção).
-	if _kite_index != -1 and _mode == "" and _time - _t0 > GUIDE_HOLD:
+	if _kite_index != -1 and _mode == "" and _time - _t0 > GUIDE_HOLD and not GameConfig.physical_flight:
 		_start_guide()
 	for fx in _fx:
 		fx[1] += delta

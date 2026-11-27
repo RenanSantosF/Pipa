@@ -60,10 +60,10 @@ const GUIDE_DEAD_PX := 18.0
 ## que a pipa deve ocupar e zona livre (fração do campo) em que ela anda sem a
 ## câmera ir atrás.
 const BASE_FOV := 74.0
-const MIN_FOV := 60.0
+const MIN_FOV := 40.0
 ## Quanto do campo de visão a câmera mira abaixo da pipa (0,22 = pipa a ~28% do topo).
 const AIM_BELOW := 0.22
-const KITE_SCREEN_FRACTION := 0.06
+const KITE_SCREEN_FRACTION := 0.04
 const FREE_ZONE := 0.18
 const GUIDE_FULL_PX := 110.0
 ## Erro de rumo (rad) que já pede cabresto todo para um lado.
@@ -81,6 +81,11 @@ func _ready() -> void:
 	if character:
 		character.first_person = true
 		head.position.y = character.eye_height
+	_head_base = head.position
+	if character:
+		_char_base = character.position
+	_phys_prev = global_position
+	_phys_cur = global_position
 
 
 func look_at_point(world_point: Vector3) -> void:
@@ -107,7 +112,39 @@ func focus_point() -> Vector3:
 	return head.global_position + Basis(Vector3.UP, _yaw) * Vector3(0, 1.5, -10)
 
 
+## VISUAL INTERPOLADO do jogador: o corpo anda no passo da física (30 Hz no celular)
+## e a linha/pipa são desenhadas interpoladas a 60 quadros/s. Sem isto, andando, a
+## câmera e a mão pulavam de 30 em 30 Hz e a ponta da linha perto da mão aparecia em
+## dois lugares (linha "duplicada"). Cabeça (câmera), corpo e alvo da mão vão para a
+## posição interpolada entre os dois últimos ticks, a mesma fração usada na linha.
+var _phys_prev := Vector3.ZERO
+var _phys_cur := Vector3.ZERO
+var _head_base := Vector3.ZERO
+var _char_base := Vector3.ZERO
+var _hand_prev := Vector3.ZERO
+var _hand_cur := Vector3.ZERO
+
+
+func _set_hand_target(p: Vector3) -> void:
+	_hand_prev = _hand_cur if _hand_cur != Vector3.ZERO else p
+	_hand_cur = p
+
+
+func _apply_visual_interpolation() -> void:
+	var fr := clampf(Engine.get_physics_interpolation_fraction(), 0.0, 1.0)
+	var off := _phys_prev.lerp(_phys_cur, fr) - _phys_cur
+	if off.length() > 1.0:
+		off = Vector3.ZERO   # teleporte (relançar, reposicionar)
+	var lo := global_basis.inverse() * off
+	head.position = _head_base + lo
+	if character:
+		character.position = _char_base + lo
+		if _hand_cur != Vector3.ZERO:
+			character.right_hand_target = _hand_prev.lerp(_hand_cur, fr) if _hand_prev.distance_to(_hand_cur) < 1.0 else _hand_cur
+
+
 func _process(delta: float) -> void:
+	_apply_visual_interpolation()
 	watch_time = maxf(watch_time - delta, 0.0)
 	var fp := focus_point()
 	var to := fp - head.global_position
@@ -157,6 +194,7 @@ func _apply_rotation() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	_phys_prev = global_position
 	var move := Vector2.ZERO
 	if input_router:
 		move = input_router.intent.move
@@ -169,6 +207,7 @@ func _physics_process(delta: float) -> void:
 	else:
 		velocity.y -= _gravity * delta
 	move_and_slide()
+	_phys_cur = global_position
 	_drive_rig(delta)
 	if character:
 		character.set_locomotion(Vector2(velocity.x, velocity.z).length())
@@ -205,6 +244,8 @@ func _drive_physical(delta: float, intent: PlayerIntent) -> void:
 	for _i in intent.pull_taps:
 		_line_hand.pull()
 	intent.pull_taps = 0
+	_line_hand.pull_line(intent.line_pull)
+	intent.line_pull = 0.0
 	_line_hand.pull_held = intent.pull_held
 	_line_hand.pull_rate = intent.pull_rate
 	var arm := 0.0
@@ -216,7 +257,7 @@ func _drive_physical(delta: float, intent: PlayerIntent) -> void:
 	_line_hand.arm = arm
 	_line_hand.update(delta, intent.grip, intent.reel_rate)
 	if character:
-		character.right_hand_target = rig.hand_position()
+		_set_hand_target(rig.hand_position() + rig.stroke_dir * _line_hand.visual_pull)
 		character.line_tension = rig.tension
 		character.reel_speed = rig.reel_rate - rig.feed_speed
 
@@ -323,6 +364,6 @@ func _drive_rig(delta: float) -> void:
 	if character:
 		# Puxadinha do desbico: o braço dá o tranco (só visual; a física está no voo).
 		var tug := rig.flight.tug_visual() if rig.flight != null else 0.0
-		character.right_hand_target = rig.hand_position() + rig.stroke_dir * (0.09 * tug)
+		_set_hand_target(rig.hand_position() + rig.stroke_dir * (0.09 * tug))
 		character.line_tension = rig.tension
 		character.reel_speed = rig.reel_rate - rig.feed_speed

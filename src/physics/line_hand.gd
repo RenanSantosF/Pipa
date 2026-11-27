@@ -29,6 +29,11 @@ extends RefCounted
 static var TAP_SLACK := 0.3
 static var TAP_SLACK_T := 0.09
 static var TAP_GIVE := 0.35
+## Pipa longe: o pipeiro aumenta o braço (a linha comprida estica e faz barriga e
+## engole um tranco curto). Ganho por metro de linha acima de FAR_FROM e o máximo.
+static var FAR_GAIN := 0.025
+const FAR_FROM := 25.0
+const FAR_MAX := 2.2
 ## Puxadinha: curso (m), subida e volta (s).
 static var TUG_LEN := 0.18
 static var TUG_UP := 0.07
@@ -58,6 +63,8 @@ var tap_count: int = 0
 var stroke_count: int = 0
 
 var _clock := 0.0
+## Tamanho do braço do toque atual (1 = perto).
+var _amp := 1.0
 var _tug_t := -1.0
 var _tug_from := 0.0
 var _pending_taps: Array[float] = []
@@ -67,6 +74,11 @@ var _stroke_queue := 0
 var _repeat_t := 0.0
 var _arm_pos := 0.0
 var _stroke := 0.0
+## Linha puxada pelo dedo esperando entrar (m) e velocidade máxima da mão (m/s).
+var _line_pending := 0.0
+const PULL_SPEED_MAX := 7.0
+## Braço visual da puxada mão-sobre-mão (só desenho: a linha já entrou pela mão).
+var visual_pull := 0.0
 
 
 func _init(p_rig: KiteRig) -> void:
@@ -86,6 +98,14 @@ func pull() -> void:
 		_stroke_queue = mini(_stroke_queue + 1, 2)
 	else:
 		_start_stroke()
+	_release_hold()
+
+
+## Dedo puxando a linha: `m` metros entram na velocidade do dedo (mão sobre mão).
+func pull_line(m: float) -> void:
+	if m <= 0.0:
+		return
+	_line_pending += m
 	_release_hold()
 
 
@@ -112,12 +132,14 @@ func _start_stroke() -> void:
 func _tug_pos(t: float) -> float:
 	if t < 0.0:
 		return 0.0
+	var slack := TAP_SLACK * _amp
+	var tug := TUG_LEN * tug_strength * _amp
 	if t < TAP_SLACK_T:
-		return -TAP_SLACK * _smooth(t / TAP_SLACK_T)
+		return -slack * _smooth(t / TAP_SLACK_T)
 	var t2 := t - TAP_SLACK_T
 	if t2 < TUG_UP:
-		return lerpf(-TAP_SLACK, TUG_LEN * tug_strength, _smooth(t2 / TUG_UP))
-	return TUG_LEN * tug_strength * (1.0 - _smooth((t2 - TUG_UP) / TUG_DOWN))
+		return lerpf(-slack, tug, _smooth(t2 / TUG_UP))
+	return tug * (1.0 - _smooth((t2 - TUG_UP) / TUG_DOWN))
 
 
 func _tug_total() -> float:
@@ -154,6 +176,8 @@ func update(delta: float, grip_in: float, reel: float) -> void:
 		var t0: float = _pending_taps.pop_front()
 		_tug_from = _tug_pos(_tug_t) if _tug_t >= 0.0 else 0.0
 		_tug_t = maxf(_clock - t0, 0.0)
+		var ln := rig.flying_length() if rig.rope != null else 0.0
+		_amp = clampf(1.0 + FAR_GAIN * (ln - FAR_FROM), 1.0, FAR_MAX)
 	var keep_line := false
 	# Braço contínuo (arrasto): à frente dá folga, atrás estica.
 	var arm_target := -ARM_FWD * maxf(-arm, 0.0) + ARM_BACK * maxf(arm, 0.0)
@@ -192,13 +216,24 @@ func update(delta: float, grip_in: float, reel: float) -> void:
 		var tp := _tug_pos(_tug_t)
 		# Um toque emendado no anterior começa de onde o braço estava.
 		if _tug_t < TAP_SLACK_T and _tug_from != 0.0:
-			tp = lerpf(_tug_from, -TAP_SLACK, _smooth(_tug_t / TAP_SLACK_T))
+			tp = lerpf(_tug_from, -TAP_SLACK * _amp, _smooth(_tug_t / TAP_SLACK_T))
 		s += tp
 		if _tug_t < TAP_SLACK_T:
 			grip = minf(grip, TAP_GIVE)
 		if _tug_t >= _tug_total():
 			_tug_t = -1.0
 			_tug_from = 0.0
+	# Linha puxada pelo dedo: entra na velocidade dele (a outra mão segura o que entrou).
+	if _line_pending > 0.0 and rig.rope != null:
+		var take := minf(_line_pending, PULL_SPEED_MAX * delta)
+		_line_pending -= take
+		rig.regrip(take)
+		visual_pull += take
+		if visual_pull > 0.45:
+			visual_pull -= 0.45
+	else:
+		_line_pending = 0.0
+		visual_pull = move_toward(visual_pull, 0.0, 1.2 * delta)
 	_stroke = s
 	rig.stroke = s
 	rig.grip = grip

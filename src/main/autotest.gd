@@ -28,6 +28,8 @@ const PILOT_PERIOD := 0.65
 const PILOT_HOLD := 0.15
 const PILOT_PULL := 0.18
 var _hand_b: KiteHand
+var _lh_b: LineHand
+var _saw_t0 := -1.0
 var _rise := 0.0
 
 
@@ -194,8 +196,9 @@ func _phase_flight(_delta: float) -> void:
 		_alt_sum += b.x.y - main.player.global_position.y
 		_alt_n += 1
 	if _every(2.0):
-		print("AUTOTEST voo t=%5.1f alt=%6.2f el=%4.0f lat=%+6.1f T=%5.2f linha=%5.1f física=%.2fms" % [
-			_t, b.x.y - main.player.global_position.y, el, lat, rig.tension, rig.flying_length(), main.physics_world.frame_ms])
+		print("AUTOTEST voo t=%5.1f alt=%6.2f el=%4.0f lat=%+6.1f T=%5.2f linha=%5.1f física=%.2fms presa=%s rabiola_presa=%d contatos=%d rumo=%+.0f°" % [
+			_t, b.x.y - main.player.global_position.y, el, lat, rig.tension, rig.flying_length(), main.physics_world.frame_ms,
+			str(rig.snagged), rig.tail.pinned_index if rig.tail else -2, rig.rope.contact_count(), rad_to_deg(rig.heading())])
 	if _t >= 30.0 and rig.physical:
 		var mean_alt2 := _alt_sum / maxf(float(_alt_n), 1.0)
 		var r_idle := sqrt(float(_m.get("ri2", 0.0)) / maxf(float(_m.get("rin", 1)), 1.0))
@@ -287,11 +290,25 @@ func _phase_combat(_delta: float) -> void:
 	# Sobe a mão até a linha dele apertar a sua por baixo; depois segura a altura.
 	var con := (main.physics_world as KitePhysicsWorld).strongest_contact_for(bot_rig)
 	if _t > 2.0 and (con == null or con.force < 1.5) and _rise < 22.0:
-		_rise += 1.2 * _delta
-	bot_rig.hand_rest = _hand_b0 + Vector3.UP * _rise
+		_rise += 0.8 * _delta
+	elif con != null and con.force > 4.0:
+		_rise = maxf(_rise - 0.4 * _delta, 0.0)
+	# Relo: encostado, o vizinho SERRA (leva a mão de um lado para o outro) e dá linha
+	# em pulsos — a linha dele desliza apertada sobre a sua (desgaste por atrito).
+	# Serra sempre (de um lado para o outro): sem encostar, varre até achar a linha;
+	# encostado, desliza apertado.
+	var saw := Vector3.ZERO
+	if _t > 2.0:
+		saw = _side * (3.0 * sin((_t - 2.0) * 1.8))
+	bot_rig.hand_rest = _hand_b0 + Vector3.UP * _rise + saw
 	# Dá linha só relando (apertando contra a outra), como no relo de verdade.
 	var relando := con != null and con.force > 0.5
-	_hand_b.update(_delta, 0.0, 0.3 if relando and fmod(_t, 2.0) < 0.8 and _t > 4.0 else 1.0, 0.0)
+	if bot_rig.physical:
+		if _lh_b == null:
+			_lh_b = LineHand.new(bot_rig)
+		_lh_b.update(_delta, 0.3 if relando and fmod(_t, 2.0) < 0.8 and _t > 4.0 else 1.0, 0.0)
+	else:
+		_hand_b.update(_delta, 0.0, 0.3 if relando and fmod(_t, 2.0) < 0.8 and _t > 4.0 else 1.0, 0.0)
 	if OS.get_cmdline_user_args().has("--debugcombat") and _t > 0.0:
 		var w2 := main.physics_world as KitePhysicsWorld
 		var c2 := w2.strongest_contact_for(rig)
