@@ -26,18 +26,18 @@ extends RefCounted
 ## linha sem tração, a vareta desenverga, o bico fica solto) e logo puxa curto (a
 ## linha estica de novo e a pipa sai para onde o bico estiver apontando).
 ## Folga: braço à frente (m), tempo (s), pegada aberta durante a folga.
-static var TAP_SLACK := 0.3
-static var TAP_SLACK_T := 0.09
-static var TAP_GIVE := 0.35
+static var TAP_SLACK := 0.04
+static var TAP_SLACK_T := 0.06
+static var TAP_GIVE := 0.6
 ## Pipa longe: o pipeiro aumenta o braço (a linha comprida estica e faz barriga e
 ## engole um tranco curto). Ganho por metro de linha acima de FAR_FROM e o máximo.
-static var FAR_GAIN := 0.025
+static var FAR_GAIN := 0.012
 const FAR_FROM := 25.0
-const FAR_MAX := 2.2
+const FAR_MAX := 1.6
 ## Puxadinha: curso (m), subida e volta (s).
-static var TUG_LEN := 0.18
+static var TUG_LEN := 0.08
 static var TUG_UP := 0.07
-static var TUG_DOWN := 0.18
+static var TUG_DOWN := 0.2
 ## Braçada do puxão: curso (m), arranque, segurada e volta do braço (s).
 const STROKE_LEN := 0.6
 const STROKE_UP := 0.12
@@ -76,7 +76,11 @@ var _arm_pos := 0.0
 var _stroke := 0.0
 ## Linha puxada pelo dedo esperando entrar (m) e velocidade máxima da mão (m/s).
 var _line_pending := 0.0
-const PULL_SPEED_MAX := 7.0
+## Velocidade máxima da mão puxando (m/s) com um dedo; dois dedos (uma mão de cada
+## lado da tela) puxam quase o dobro.
+const PULL_SPEED_ONE := 3.0
+const PULL_SPEED_TWO := 5.5
+var pull_fingers: int = 1
 ## Braço visual da puxada mão-sobre-mão (só desenho: a linha já entrou pela mão).
 var visual_pull := 0.0
 
@@ -107,6 +111,7 @@ func pull_line(m: float) -> void:
 		return
 	_line_pending += m
 	_release_hold()
+	rig.desbico_keep()
 
 
 func is_pulling() -> bool:
@@ -178,6 +183,7 @@ func update(delta: float, grip_in: float, reel: float) -> void:
 		_tug_t = maxf(_clock - t0, 0.0)
 		var ln := rig.flying_length() if rig.rope != null else 0.0
 		_amp = clampf(1.0 + FAR_GAIN * (ln - FAR_FROM), 1.0, FAR_MAX)
+		rig.desbico_tap()
 	var keep_line := false
 	# Braço contínuo (arrasto): à frente dá folga, atrás estica.
 	var arm_target := -ARM_FWD * maxf(-arm, 0.0) + ARM_BACK * maxf(arm, 0.0)
@@ -225,7 +231,8 @@ func update(delta: float, grip_in: float, reel: float) -> void:
 			_tug_from = 0.0
 	# Linha puxada pelo dedo: entra na velocidade dele (a outra mão segura o que entrou).
 	if _line_pending > 0.0 and rig.rope != null:
-		var take := minf(_line_pending, PULL_SPEED_MAX * delta)
+		var cap := PULL_SPEED_TWO if pull_fingers >= 2 else PULL_SPEED_ONE
+		var take := minf(_line_pending, cap * delta)
 		_line_pending -= take
 		rig.regrip(take)
 		visual_pull += take

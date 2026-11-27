@@ -22,7 +22,10 @@ var gust_strength: float = 0.3
 var direction_wander_deg: float = 15.0
 
 const REF_HEIGHT := 10.0
-const SHEAR_EXPONENT := 0.25
+## Quanto o vento cresce com a altura. 0,15 (era 0,25): perto do chão o vento continua
+## igual (soltar da mão funciona) e lá no alto ele fica 10–16% mais fraco — as pipas no
+## alto andam mais devagar (v0.20).
+const SHEAR_EXPONENT := 0.15
 const GROUND_LEVEL := 0.0
 const ROOF_HEIGHT := 6.0
 

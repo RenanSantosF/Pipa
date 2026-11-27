@@ -22,6 +22,9 @@ func start(p_main) -> void:
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--mode="):
 			_mode = a.substr(7)
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--wind="):
+			Wind.base_speed = float(a.substr(7))
 	main.reset_kite()
 	print("SUBIDA modo=%s vento=%.1f" % [_mode, Wind.base_speed])
 
@@ -31,8 +34,10 @@ func _physics_process(delta: float) -> void:
 	if rig.body == null:
 		return
 	# Toques a cada 0,3 s; dar linha em pulsos (mão aberta 0,3 s a cada 0,7 s) com a pipa puxando.
-	if fmod(_t, 0.3) < delta and _t > 1.0:
+	if fmod(_t, 0.3) < delta and _t > 1.0 and not OS.get_cmdline_user_args().has("--notaps"):
 		it.desbico_toques += 1
+	if _t > 1.0 and _t < 1.1 and OS.get_cmdline_user_args().has("--notaps"):
+		it.desbico_toques += 1   # só para soltar da mão
 	var give := fmod(_t, 0.7) < 0.3 and _t > 2.0 and rig.flying_length() < 35.0
 	if _mode == "b":
 		give = _t > 2.0 and rig.flying_length() < 35.0 and rig.tension > 0.5

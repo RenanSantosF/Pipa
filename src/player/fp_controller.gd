@@ -244,6 +244,7 @@ func _drive_physical(delta: float, intent: PlayerIntent) -> void:
 	for _i in intent.pull_taps:
 		_line_hand.pull()
 	intent.pull_taps = 0
+	_line_hand.pull_fingers = intent.pull_fingers
 	_line_hand.pull_line(intent.line_pull)
 	intent.line_pull = 0.0
 	_line_hand.pull_held = intent.pull_held

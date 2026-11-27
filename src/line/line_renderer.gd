@@ -86,8 +86,12 @@ func _process(_delta: float) -> void:
 	for i in n - 1:
 		var p1 := _pts[i]
 		var p2 := _pts[i + 1]
-		if not kinks.is_empty() and _segment_kinks(kinks, i, p1, p2):
-			continue
+		if not kinks.is_empty():
+			if _segment_kinks(kinks, i, p1, p2):
+				continue
+			if _has_kink(kinks, i - 1) or _has_kink(kinks, i + 1):
+				_smooth.append(p1)   # vizinho de um cruzamento: reto (sem estufar)
+				continue
 		var p0 := _pts[i - 1] if i > 0 else p1 * 2.0 - p2
 		var p3 := _pts[i + 2] if i + 2 < n else p2 * 2.0 - p1
 		var mid := (p1 + p2) * 0.5
@@ -158,6 +162,13 @@ func _segment_kinks(kinks: PackedVector2Array, i: int, p1: Vector3, p2: Vector3)
 		if t > 0.001 and t < 0.999:
 			_smooth.append(p1.lerp(p2, t))
 	return true
+
+
+static func _has_kink(kinks: PackedVector2Array, i: int) -> bool:
+	for k in kinks:
+		if int(k.x) == i:
+			return true
+	return false
 
 
 ## Catmull-Rom centrípeta (Barry–Goldman), t em [0, 1] entre p1 e p2.

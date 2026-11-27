@@ -54,7 +54,13 @@ func launch() -> void:
 	if rig == null:
 		return
 	rotation.y = atan2(-Wind.get_direction().x, -Wind.get_direction().z)
-	rig.launch_in_hand(hand_rest(), Wind.get_direction())
+	if rig.physical:
+		# Física real: "soltar de longe" — um amigo segura a pipa ~15 m vento abaixo e
+		# solta (na rua, entre as casas, o vento junto do chão é fraco demais para soltar
+		# da mão sem ajuda).
+		rig.launch(hand_rest(), _rng.randf_range(13.0, 17.0), 32.0, Wind.get_direction())
+	else:
+		rig.launch_in_hand(hand_rest(), Wind.get_direction())
 	_hand = KiteHand.new(rig)
 	_target_length = _rng.randf_range(25.0, 45.0)
 	_state = State.CLIMB
@@ -288,14 +294,19 @@ func _physical_update(delta: float) -> void:
 		if not _recovering:
 			match _state:
 				State.CLIMB:
-					# Da mão: desbica em ritmo e dá linha quando ela puxa; baixa demais, puxa.
-					if _tap_timer <= 0.0:
+					# Da mão: solta da mão (1 toque) e sobe com puxadinhas curtas e a mão
+					# entreaberta (a linha corre só quando ela puxa). Sem desbicar: perto do
+					# chão o balanço do desbico jogaria a pipa no chão.
+					if rig.held and _tap_timer <= 0.0:
 						_lh.tap()
-						_tap_timer = _rng.randf_range(0.28, 0.42)
+						_tap_timer = 1.0
+					if not rig.held and rig.tension < 2.0 and _pull_timer <= 0.0:
+						_lh.pull_line(0.2)
+						_pull_timer = 0.6
 					# Mão entreaberta: a linha corre só quando a pipa puxa (sobe ganhando linha);
 					# afundando (pouca tração), fecha a mão e puxa para ela pegar vento.
-					if rig.flying_length() < _target_length and rig.tension > 0.9:
-						grip = 0.3
+					if rig.flying_length() < _target_length and rig.tension > 0.7:
+						grip = 0.2
 					elif rig.tension < 0.6 and alt < 10.0 and _pull_timer <= 0.0 and rig.age > 3.0:
 						_lh.pull_line(0.4)
 						_pull_timer = 0.5
@@ -368,9 +379,10 @@ func _hunt_physical(alt: float) -> float:
 				_lh.pull_line(lerpf(0.4, 0.8, skill))
 				_pull_timer = lerpf(0.5, 0.3, skill)
 		elif _tap_timer <= 0.0:
-			# Desbica até o bico virar para o lado certo.
-			_lh.tap()
-			_tap_timer = _rng.randf_range(0.3, 0.45)
+			# Desbica para o lado certo (os lados alternam: 1 toque se o próximo já é
+			# para lá, 2 toques se não) e espera o balanço render.
+			_tap_toward(need)
+			_tap_timer = _rng.randf_range(0.8, 1.1)
 	elif _tap_timer <= 0.0:
 		_lh.tap()
 		_tap_timer = _rng.randf_range(0.6, 1.0)
@@ -382,3 +394,10 @@ func _hunt_physical(alt: float) -> float:
 	if rig.flying_length() > _target_length * 1.6:
 		rig.reel_rate = 1.5
 	return grip
+
+
+## Desbico para um lado (−1 esquerda, +1 direita) respeitando a alternância.
+func _tap_toward(side: float) -> void:
+	_lh.tap()
+	if rig.next_desbico_side() != side:
+		_lh.tap(0.18)

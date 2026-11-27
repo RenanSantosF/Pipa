@@ -122,11 +122,33 @@ func _collide_with_world() -> void:
 				EventBus.kite_snagged.emit(r, snag)
 			if obstacles.last_freed != "" and r.is_flying():
 				EventBus.line_freed.emit(r, obstacles.last_freed)
+		if r.tail != null and r.body != null:
+			_tail_collide(r.tail)
 		if r.is_flying():
 			r.try_snag(obstacles, dt)
 			r.tail.try_snag(obstacles, r.rope.tension_end, dt)
 		elif r.loose and r.body != null:
 			r.try_snag(obstacles, dt)
+
+
+## A rabiola é sólida para o cenário: cada nó varre o caminho do tick (do começo do
+## tick até agora) contra poste, fio, galho e casa e desliza na superfície (a rabiola
+## atravessava o poste).
+func _tail_collide(tail: TailChain) -> void:
+	var n := tail.pos.size()
+	if tail.tick_prev.size() != n:
+		return
+	for i in n:
+		var p := tail.pos[i]
+		var res := obstacles.kite_sweep(tail.tick_prev[i], p, 0.03)
+		var nrm: Vector3 = res[1]
+		if nrm == Vector3.ZERO:
+			continue
+		tail.pos[i] = res[0]
+		var vn := tail.vel[i].dot(nrm)
+		if vn < 0.0:
+			tail.vel[i] -= nrm * vn
+		tail.vel[i] *= 0.8
 
 
 func _opponent_in_contact(rig: KiteRig) -> KiteRig:
@@ -185,6 +207,8 @@ func _grab_events(collected: Array) -> void:
 				EventBus.tail_grabbed.emit(ev[1], ev[2])
 			"cortou_rabiola", "arrebentou_rabiola":
 				EventBus.tail_cut.emit(ev[1], ev[2], ev[3])
+			"soltou_voada":
+				EventBus.loose_kite_slipped.emit(ev[1], ev[2])
 	for pc in grabs.cut_pieces:
 		var rg: KiteRig = pc[2]
 		var fr := FallingRibbon.new()

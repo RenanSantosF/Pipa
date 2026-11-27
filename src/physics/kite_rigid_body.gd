@@ -59,6 +59,8 @@ var flex_per_n: float = 0.0
 ## Escala do amortecimento residual de rotação (pipa física: 0,4 — o giro do bico em
 ## volta da linha quase não empurra ar; o amortecimento de verdade vem da rabiola).
 var rot_damp_scale: float = 1.0
+## Torque externo deste subpasso (mundo, N·m): o desbico do cabresto (KiteRig).
+var ext_torque := Vector3.ZERO
 var flex_rest: float = 0.0
 var flex: PackedFloat32Array = PackedFloat32Array([0.0, 0.0])
 const FLEX_TAU := 0.035
@@ -300,6 +302,7 @@ func compute_forces() -> void:
 		_force += f
 		_torque += cop.cross(f)
 	angle_of_attack = alpha_sum * 0.5
+	_torque += ext_torque
 	if sp_sum < 0.1:
 		_half_normal_force[0] = 0.0
 		_half_normal_force[1] = 0.0

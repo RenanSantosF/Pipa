@@ -59,6 +59,9 @@ var end_local := Vector3.ZERO
 ## Cabresto de linha (nó + 2 pernas): com ele, end_local é o NÓ, que escorrega nas
 ## pernas conforme a linha puxa (Bridle.update a cada subpasso).
 var bridle: Bridle = null
+## Ponta da linha (nó) no começo do subpasso, antes da pipa andar e do nó escorregar
+## no cabresto: o deslocamento real da ponta para a detecção contínua de cruzamento.
+var end_prev_world := Vector3.ZERO
 ## Nó 0 preso à mão?
 var hand_fixed: bool = true
 var hand_position := Vector3.ZERO

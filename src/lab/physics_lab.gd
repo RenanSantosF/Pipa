@@ -279,7 +279,7 @@ func _plan(seq: String) -> void:
 			_other = _make_other(HAND + Vector3(0.0, 0.0, 14.0), 48.0, 62.0)
 			_ev(s, "cutother")
 			for k in 120:
-				_ev(s + 3.0 + k * 0.1, "linepull_if_hooked", 0.25)
+				_ev(s + 3.0 + k * 0.1, "linepull_if_hooked", 0.15)
 			_log_every = 0.5
 			_end_t = s + 18.0
 		"rabiola":
@@ -295,6 +295,24 @@ func _plan(seq: String) -> void:
 			_other_sweep = true
 			_log_every = 0.5
 			_end_t = s + 14.0
+		"direcao":
+			# Vira para a direita (2 toques + pausa, ×2), puxa (vai para a direita);
+			# depois vira de cabeça para baixo (1 toque + pausa, ×5) e puxa (desce).
+			var t5 := s
+			for k in 2:
+				_ev(t5, "tap")
+				_ev(t5 + 0.25, "tap")
+				t5 += 1.1
+			for k in 10:
+				_ev(t5 + k * 0.2, "linepull", 0.25)
+			t5 += 2.5
+			for k in 5:
+				_ev(t5, "tap")
+				t5 += 0.9
+			for k in 10:
+				_ev(t5 + k * 0.2, "linepull", 0.25)
+			_log_every = 0.25
+			_end_t = t5 + 3.0
 		"corte":
 			_ev(s, "cut")
 			_log_every = 0.5

@@ -23,6 +23,82 @@ const FEED_MASS := 0.06      # inércia da linha + lata girando
 const FEED_DAMP := 2.5
 const MIN_LENGTH := 2.0
 const REEL_HARD_TENSION := 25.0
+## DESBICO CONTROLADO (física real, v0.20). Cada toque é uma puxadinha que carrega a
+## perna do cabresto de um lado: o torque (limitado pela tração da linha — linha frouxa
+## não vira nada) gira o bico em volta da linha. Os lados SEMPRE ALTERNAM: se o último
+## foi para a esquerda, o próximo é para a direita, com pausa ou sem (o primeiro de
+## todos é para a esquerda). O balanço tem
+## inércia e vai morrendo; na pausa o último balanço rende e ela fica virada para lá.
+## Puxando, o rumo é mantido (ela vai reta para onde aponta). Sem tocar nem puxar por
+## DESB_HOLD_TIME o cabresto solta e a rabiola endireita a pipa sozinha.
+## Por tamanho [P, M, G]: giro de um balanço (rad/s) e quanto ele dura (s).
+const DESB_RATE_BY_SIZE := [2.9, 2.3, 1.8]
+const DESB_TAU_BY_SIZE := [0.4, 0.55, 0.75]
+const DESB_SEQ_RESET := 0.5
+const DESB_HOLD_TIME := 1.8
+const DESB_WN := 8.0
+const DESB_ZETA := 0.95
+## Braço da perna do cabresto (m): torque máximo = tração × braço (pipa M).
+const DESB_ARM := 0.13
+var desb_active: bool = false
+var desb_hold: float = 0.0
+var desb_rate: float = 0.0
+var desb_side: float = 1.0
+var desb_last: float = -10.0
+var desb_count: int = 0
+var _desb_until: float = -10.0
+var _desb_clock: float = 0.0
+
+
+## Um toque de desbico (chamado pela mão quando a puxadinha acontece).
+func desbico_tap() -> void:
+	if body == null or loose or not physical:
+		return
+	desb_side = -desb_side
+	if not desb_active:
+		desb_hold = heading()
+		desb_active = true
+	desb_rate = desb_side * float(DESB_RATE_BY_SIZE[clampi(profile.size_class, 0, 2)])
+	desb_last = _desb_clock
+	_desb_until = _desb_clock + DESB_HOLD_TIME
+	desb_count += 1
+
+
+## Lado do próximo toque (−1 esquerda, +1 direita).
+func next_desbico_side() -> float:
+	return -desb_side
+
+
+## Puxando: o rumo atual fica mantido (vai reta para onde aponta).
+func desbico_keep() -> void:
+	if desb_active:
+		_desb_until = maxf(_desb_until, _desb_clock + 0.6)
+
+
+func _desbico_substep(h: float) -> void:
+	_desb_clock += h
+	if not desb_active or held or snagged or rope == null or rope.end_body != body:
+		body.ext_torque = Vector3.ZERO
+		return
+	if _desb_clock > _desb_until:
+		desb_active = false
+		body.ext_torque = Vector3.ZERO
+		return
+	desb_hold = wrapf(desb_hold + desb_rate * h, -PI, PI)
+	desb_rate *= exp(-h / float(DESB_TAU_BY_SIZE[clampi(profile.size_class, 0, 2)]))
+	var d := body.x - hand_position()
+	if d.length() < 0.5:
+		body.ext_torque = Vector3.ZERO
+		return
+	d = d.normalized()
+	var err := wrapf(desb_hold - heading(), -PI, PI)
+	var wd := body.w.dot(d)
+	var i_d := body.inertia.z * 3.0
+	var tq := i_d * (DESB_WN * DESB_WN * err + 2.0 * DESB_ZETA * DESB_WN * (desb_rate - wd))
+	var auth := DESB_ARM * (profile.height / 0.65) * (rope.tension_end + 1.0)
+	body.ext_torque = d * clampf(tq, -auth, auth)
+
+
 ## Amortecimento residual de rotação da pipa física (balanços do desbico claros).
 static var ROT_DAMP_PHYSICAL := 0.4
 ## Comprimento da rabiola na pipa física (× o do perfil), por rabiola [curta, média,
@@ -469,6 +545,8 @@ func _update_spool(dt: float) -> void:
 
 
 func predict(h: float) -> void:
+	if rope != null and rope.end_body != null:
+		rope.end_prev_world = rope.end_point()
 	if body != null:
 		if flight != null and (loose or rope == null or rope.end_body != body):
 			# Cortada/solta: volta a ser corpo rígido livre (cai de verdade).
@@ -480,6 +558,10 @@ func predict(h: float) -> void:
 			if not held and not snagged:
 				flight.step(h)
 		else:
+			if physical and not loose:
+				_desbico_substep(h)
+			else:
+				body.ext_torque = Vector3.ZERO
 			body.compute_forces()
 			body.predict(h)
 		tail.predict(h)

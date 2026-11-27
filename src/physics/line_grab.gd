@@ -21,8 +21,15 @@ const KIND_TAIL := 2
 const CATCH_R := 0.18
 const KITE_R := 0.3
 const TAIL_R := 0.12
-## Linha que corta rabiola (rapinha, cerol, chilena; a pura só pega).
+## Linha que corta rabiola (rapinha, cerol, chilena; a pura só pega). Cortar não é só
+## encostar: a linha engancha e vai SERRANDO o barbante — desgaste ∝ abrasão × tempo ×
+## (0,4 + velocidade da linha em relação à pipa); corta quando chega a TAIL_WEAR.
 const CUT_ABRASION := 0.3
+const TAIL_WEAR := 1.4
+## Pipa voada enganchada: a linha solta escorrega da sua com um puxão forte (N).
+const SLIP_MIN := 12.0
+const SLIP_MAX := 20.0
+const SLIP_TIME := 0.1
 ## Força sustentada (N) que arrebenta o barbante da rabiola presa e por quanto tempo.
 const TAIL_TEAR := 3.0
 const TAIL_TEAR_TIME := 0.15
@@ -40,6 +47,8 @@ class Grab:
 	var s: float = 0.0
 	var force: float = 0.0
 	var tear_t: float = 0.0
+	var wear: float = 0.0
+	var slip: float = 7.0
 	var lam_sum: float = 0.0
 	var pos := Vector3.ZERO
 
@@ -176,10 +185,7 @@ func _detect_tail(c: KiteRig, cp: PackedVector3Array, cbox: AABB, t: KiteRig) ->
 			var where := tp[j].lerp(tp[j + 1], float(r[1]))
 			# Nó da rabiola (índice em tail.pos) mais perto do encosto.
 			var node := clampi(j if float(r[1]) < 0.5 else j + 1, 1, tail.pos.size()) - 1
-			if c.line_type.abrasion >= CUT_ABRASION:
-				_cut_tail(t, maxi(node, 1), where, c)
-			else:
-				_add(c, t, KIND_TAIL, node, c.rope.material_at(i, float(r[0])), where)
+			_add(c, t, KIND_TAIL, node, c.rope.material_at(i, float(r[0])), where)
 			return
 
 
@@ -202,6 +208,7 @@ func _add(c: KiteRig, t: KiteRig, kind: int, index: int, s: float, where: Vector
 	g.index = index
 	g.s = s
 	g.pos = where
+	g.slip = randf_range(SLIP_MIN, SLIP_MAX)
 	grabs.append(g)
 	events.append(["pegou_rabiola" if kind == KIND_TAIL else "enroscou_voada", c, t, where])
 
@@ -267,6 +274,22 @@ func post_frame(dt: float, h: float, substeps: int) -> Array:
 		g.force = g.lam_sum * k
 		g.lam_sum = 0.0
 		var cr := g.catcher.rope
+		if g.kind == KIND_TAIL and g.catcher.line_type.abrasion >= CUT_ABRASION:
+			# Serrando a rabiola: a linha corre em relação à pipa presa.
+			var pa: Array = point_at(cr, g.s)
+			var v_line := cr.velocity_at(int(pa[0]), float(pa[1])) if int(pa[0]) >= 0 else Vector3.ZERO
+			var rel := (v_line - g.target.body.v).length()
+			g.wear += g.catcher.line_type.abrasion * dt * (0.4 + rel)
+			if g.wear >= TAIL_WEAR:
+				var tc := g.target
+				var nd := maxi(g.index, 1)
+				var pc2 := tc.tail.pos.slice(nd)
+				var pv2 := tc.tail.vel.slice(nd)
+				tc.tail.cut_at(nd)
+				cut_pieces.append([pc2, pv2, tc])
+				events.append(["cortou_rabiola", g.catcher, tc, g.pos])
+				grabs.remove_at(gi)
+				continue
 		if g.kind == KIND_TAIL:
 			if g.force > TAIL_TEAR:
 				g.tear_t += dt
@@ -281,7 +304,16 @@ func post_frame(dt: float, h: float, substeps: int) -> Array:
 					grabs.remove_at(gi)
 			else:
 				g.tear_t = maxf(g.tear_t - dt, 0.0)
-		elif cr.length() - g.s < COLLECT_DIST and not done.has(g.target):
+		elif g.force <= g.slip:
+			g.tear_t = maxf(g.tear_t - dt, 0.0)
+		if g.kind != KIND_TAIL and g.force > g.slip:
+			# Puxão forte demais: a linha da voada escorrega e solta da sua.
+			g.tear_t += dt
+			if g.tear_t > SLIP_TIME:
+				events.append(["soltou_voada", g.catcher, g.target, g.pos])
+				grabs.remove_at(gi)
+				continue
+		elif g.kind != KIND_TAIL and cr.length() - g.s < COLLECT_DIST and not done.has(g.target):
 			events.append(["aparou", g.catcher, g.target, g.pos])
 			collected.append([g.catcher, g.target])
 			done.append(g.target)

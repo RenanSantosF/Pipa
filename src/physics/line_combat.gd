@@ -446,6 +446,8 @@ static func _disp(r: Rope, idx: int, h: float) -> Vector3:
 	if idx < r.pos.size():
 		return r.pos[idx] - r.prev[idx]
 	if r.end_body != null:
+		if r.end_prev_world != Vector3.ZERO:
+			return r.end_point() - r.end_prev_world
 		return r.end_body.point_velocity(r.end_body.q * r.end_local) * h
 	return Vector3.ZERO
 
@@ -590,9 +592,12 @@ func post_frame(dt: float, h: float, substeps: int) -> void:
 		c.position = (pa + pb) * 0.5
 		c.force = c.impulse / (h * h * float(substeps))
 		c.touching = c.hooked or c.force > 0.005 or pa.distance_to(pb) < 0.02
-		if c.touching:
+		if c.touching or pa.distance_to(pb) < 0.25:
+			# Perto: as duas linhas são desenhadas RETAS ali (a curva suave entre os nós
+			# estufava e passava por dentro da outra linha, mesmo separadas na física).
 			ra.add_render_kink(c.ia, c.ta)
 			rb.add_render_kink(c.ib, c.tb)
+		if c.touching:
 			if not c.hooked:
 				# A pipa de cada um passa a girar em volta deste cruzamento.
 				c.a.line_pivots.append([c.ia, c.ta, c.b.get_instance_id()])

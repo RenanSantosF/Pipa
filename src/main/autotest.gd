@@ -159,11 +159,21 @@ func _phase_flight(_delta: float) -> void:
 		if _t > 14.5 and _t < 20.0:
 			_m["ri2"] = float(_m.get("ri2", 0.0)) + rate * rate
 			_m["rin"] = int(_m.get("rin", 0)) + 1
-		elif _t >= 21.0 and _t < 25.0:
-			if _every(0.25, 21.0):
+		elif _t >= 20.0 and _t < 21.0:
+			_m["h5"] = hd
+		elif _t >= 21.0 and _t < 24.6:
+			# DESBICO DIRECIONAL: 2 toques + pausa (três vezes) → vira para a DIREITA.
+			var k2 := fmod(_t - 21.0, 1.2)
+			if _every(1.2, 21.0) or (k2 >= 0.25 and k2 - _dt < 0.25):
 				it.desbico_toques += 1
 			_m["rt2"] = float(_m.get("rt2", 0.0)) + rate * rate
 			_m["rtn"] = int(_m.get("rtn", 0)) + 1
+			_m["h6"] = hd
+		elif _t >= 24.6 and _t < 26.4:
+			# O próximo toque é para a ESQUERDA (os lados sempre alternam).
+			if _t - _dt < 24.6:
+				it.desbico_toques += 1
+			_m["h7"] = hd
 		if absf(rad_to_deg(hd)) > 150.0:
 			_m["inv"] = int(_m.get("inv", 0)) + 1
 	elif _t < 17.0:
@@ -203,14 +213,18 @@ func _phase_flight(_delta: float) -> void:
 		var mean_alt2 := _alt_sum / maxf(float(_alt_n), 1.0)
 		var r_idle := sqrt(float(_m.get("ri2", 0.0)) / maxf(float(_m.get("rin", 1)), 1.0))
 		var r_tap := sqrt(float(_m.get("rt2", 0.0)) / maxf(float(_m.get("rtn", 1)), 1.0))
-		print("AUTOTEST voo (física real): dar linha %.1f → %.1f m · puxar %.1f → %.1f m (elevação %.0f° → %.0f°) · giro do bico parada %.0f°/s, desbicando %.0f°/s · invertida %d ticks · altura final %.1f m" % [
-			_m["len0"], _m["len1"], _m["len1"], _m["len2"], _m["el1"], _m["el2"], r_idle, r_tap, int(_m.get("inv", 0)), mean_alt2])
+		print("AUTOTEST voo (física real): dar linha %.1f → %.1f m · puxar %.1f → %.1f m (elevação %.0f° → %.0f°) · giro do bico parada %.0f°/s, desbicando %.0f°/s · 2 toques %+.0f° · 1 toque %+.0f° · invertida %d ticks · altura final %.1f m" % [
+			_m["len0"], _m["len1"], _m["len1"], _m["len2"], _m["el1"], _m["el2"], r_idle, r_tap,
+			rad_to_deg(wrapf(float(_m.get("h6", 0.0)) - float(_m.get("h5", 0.0)), -PI, PI)),
+			rad_to_deg(wrapf(float(_m.get("h7", 0.0)) - float(_m.get("h6", 0.0)), -PI, PI)), int(_m.get("inv", 0)), mean_alt2])
 		var checks2 := [
 			[_m["len1"] > _m["len0"] + 2.0, "dar linha não deu linha"],
 			[_m["len2"] < _m["len1"] - 2.0, "puxar não recolheu linha"],
 			[_m["el2"] > _m["el1"] + 2.0, "puxar não fez a pipa subir no céu"],
 			[mean_alt2 > 6.0, "a pipa não se manteve no ar"],
 			[r_tap > 1.3 * r_idle and r_tap > 15.0, "desbicar não mexeu o bico (giro %.0f°/s × %.0f°/s parada)" % [r_tap, r_idle]],
+			[rad_to_deg(wrapf(float(_m.get("h6", 0.0)) - float(_m.get("h5", 0.0)), -PI, PI)) > 25.0, "2 toques + pausa não virou para a direita"],
+			[rad_to_deg(wrapf(float(_m.get("h7", 0.0)) - float(_m.get("h6", 0.0)), -PI, PI)) < -20.0, "o toque seguinte não virou para a esquerda"],
 			[int(_m.get("inv", 0)) < 30, "a pipa ficou de cabeça para baixo (looping)"],
 		]
 		for c in checks2:

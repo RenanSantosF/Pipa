@@ -120,22 +120,29 @@ func _process(_delta: float) -> void:
 		for _d in 3:
 			_im.surface_set_color(Color(0, 0, 0, 0))
 			_im.surface_add_vertex(_pts[0])
-		var col_far := prof.tail_color_a.lerp(prof.tail_color_b, 0.5)
+		# Faixas alternando as duas cores da rabiola (cada faixa com pelo menos ~4 px na
+		# tela), opaca, largura mínima de ~2,4 px afinando até a ponta: de longe a rabiola
+		# aparece como uma tira colorida tremulando, não como uma linha fantasma.
 		var nc := _curve.size()
 		var walked := 0.0
+		var dist0 := cam_pos.distance_to(_curve[0])
+		var band := maxf(KNOT_STEP * k * 1.5, dist0 * px_ang * 3.0)
 		for i in nc - 1:
 			var a0 := _curve[i]
 			var b0 := _curve[i + 1]
-			walked += a0.distance_to(b0)
-			if walked < GAP * k:
+			var seg_l := a0.distance_to(b0)
+			if walked + seg_l < GAP * k:
+				walked += seg_l
 				continue   # o pedacinho de barbante entre a pipa e as tirinhas
 			var u0 := float(i) / float(nc - 1)
 			var u1 := float(i + 1) / float(nc - 1)
-			var wa := maxf(cam_pos.distance_to(a0) * px_ang * 0.9, STRIP_LEN * k * 0.3) * (1.0 - 0.55 * u0)
-			var wb := maxf(cam_pos.distance_to(b0) * px_ang * 0.9, STRIP_LEN * k * 0.3) * (1.0 - 0.55 * u1)
+			var wa := maxf(cam_pos.distance_to(a0) * px_ang * 0.75, STRIP_LEN * k * 0.18) * (1.0 - 0.4 * u0)
+			var wb := maxf(cam_pos.distance_to(b0) * px_ang * 0.75, STRIP_LEN * k * 0.18) * (1.0 - 0.4 * u1)
 			var dir := (b0 - a0).cross(cam_pos - a0).normalized()
-			var ca := Color(col_far, 0.7 - 0.4 * u0)
-			var cb := Color(col_far, 0.7 - 0.4 * u1)
+			var col: Color = prof.tail_color_a if int(walked / band) % 2 == 0 else prof.tail_color_b
+			walked += seg_l
+			var ca := Color(col, 0.95 - 0.25 * u0)
+			var cb := Color(col, 0.95 - 0.25 * u1)
 			_im.surface_set_color(ca)
 			_im.surface_add_vertex(a0 - dir * wa)
 			_im.surface_set_color(ca)

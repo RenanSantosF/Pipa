@@ -19,6 +19,7 @@ var rig: KiteRig
 var bot: KiteRig
 var obs: WorldObstacles
 var hand: KiteHand
+var _lh: LineHand
 var _mode := "line"
 var _dur := 40.0
 var _t := 0.0
@@ -229,6 +230,29 @@ func _pilot(delta: float) -> void:
 		_tapping = _rng.randf() < 0.45
 		_tap_int = _rng.randf_range(0.18, 0.32)
 	var pulling := fmod(_t, 9.0) > 6.5
+	if rig.physical:
+		# Física real: só a mão na linha (toques alternando, puxar com o dedo, dar linha).
+		if _lh == null or _lh.rig != rig:
+			_lh = LineHand.new(rig)
+		_tap_clock += delta
+		if _tapping:
+			if _tap_clock >= _tap_int:
+				_tap_clock = 0.0
+				_lh.tap()
+		elif _tap_clock >= 0.9:
+			_tap_clock = 0.0
+			var want := signf(_g.x) if absf(_g.x) > 0.3 else 0.0
+			if want != 0.0 and signf(rig.heading()) != want:
+				_lh.tap()
+				if rig.next_desbico_side() != want:
+					_lh.tap(0.18)
+		if pulling and fmod(_t, 0.2) < delta:
+			_lh.pull_line(0.35)
+		rig.hand_rest = _hand_a
+		_lh.update(delta, _grip if not pulling else 1.0, 0.0)
+		if rig.flying_length() > 60.0:
+			_grip = 1.0
+		return
 	if _tapping and rig.flight != null:
 		_tap_clock += delta
 		if _tap_clock >= _tap_int:

@@ -27,6 +27,9 @@ func _ready() -> void:
 	EventBus.loose_kite_hooked.connect(func(c: Node, _k: Node) -> void:
 		if c == rig:
 			toast("cut", "enroscou a voada! recolhe", Color(0.6, 0.9, 1.0), 2.5))
+	EventBus.loose_kite_slipped.connect(func(c: Node, _k: Node) -> void:
+		if c == rig:
+			toast("snag", "puxou forte: a voada soltou", Color(1.0, 0.8, 0.35), 2.5))
 	EventBus.kite_caught.connect(func(c: Node, _k: Node) -> void:
 		if c == rig:
 			toast("cut", "aparou!", Color(0.55, 1.0, 0.55), 3.0))

@@ -277,8 +277,8 @@ var _last_vel_y := 0.0
 ## quanto o dedo sobe acima do ponto onde encostou para virar "dar linha".
 const LINE_M_PER_PX := 0.0025
 const GIVE_SWITCH_PX := 40.0
-## Pegada da mão entreaberta ao dar linha (atrito ≈ pegada² × 40 N ≈ 3,6 N).
-const GIVE_GRIP := 0.3
+## Pegada da mão entreaberta ao dar linha (atrito ≈ pegada² × 40 N ≈ 2,5 N).
+const GIVE_GRIP := 0.25
 ## Até aqui o dedo ainda pode ser um toque (desbico); passou disso, é a mão puxando.
 const PHYS_CLASSIFY_PX := 24.0
 
@@ -423,6 +423,7 @@ func _process(delta: float) -> void:
 	if intent == null:
 		return
 	intent.gesture_mode = _mode if _kite_index != -1 else ""
+	intent.pull_fingers = (1 if _kite_index != -1 and _mode == "puxar" else 0) + (1 if _second_index != -1 and _second_mode == "puxar" else 0)
 	# Segurou parado: vira guiar (o manche nasce ali; mexer o dedo dá a direção).
 	if _kite_index != -1 and _mode == "" and _time - _t0 > GUIDE_HOLD and not GameConfig.physical_flight:
 		_start_guide()

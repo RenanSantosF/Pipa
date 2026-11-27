@@ -17,6 +17,8 @@ signal reset_requested
 ## A linha de `catcher` enroscou numa pipa voada (`kite`) / trouxe ela até a mão (aparou).
 signal loose_kite_hooked(catcher: Node, kite: Node)
 signal kite_caught(catcher: Node, kite: Node)
+## A pipa voada enganchada escorregou da linha (puxão forte demais).
+signal loose_kite_slipped(catcher: Node, kite: Node)
 ## A linha de `catcher` pegou a rabiola de `target` (sem cerol: arrasta pela rabiola).
 signal tail_grabbed(catcher: Node, target: Node)
 ## A rabiola de `target` foi cortada (cerol) ou arrebentou presa na linha de `by`.
