@@ -25,7 +25,7 @@ const TAIL_R := 0.12
 ## encostar: a linha engancha e vai SERRANDO o barbante — desgaste ∝ abrasão × tempo ×
 ## (0,4 + velocidade da linha em relação à pipa); corta quando chega a TAIL_WEAR.
 const CUT_ABRASION := 0.3
-const TAIL_WEAR := 1.4
+const TAIL_WEAR := 2.0
 ## Pipa voada enganchada: a linha solta escorrega da sua com um puxão forte (N).
 const SLIP_MIN := 12.0
 const SLIP_MAX := 20.0

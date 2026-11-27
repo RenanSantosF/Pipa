@@ -18,6 +18,7 @@ extends RefCounted
 ## contato que guarda o LADO; ele só empurra quando encosta (restrição unilateral),
 ## mas é checado a cada subpasso — por isso as linhas não "pulam" uma pela outra
 ## entre dois quadros.
+static var DEBUG_FLIPS := false
 const DETECT_RADIUS := 0.7
 const RELEASE_DISTANCE := 1.0
 const CONTACT_GAP := 0.003
@@ -78,29 +79,53 @@ func clear_for(rig: KiteRig) -> void:
 
 # --- Detecção ----------------------------------------------------------------
 
+## Tem linha que conta para o contato: pipa no ar, pipa voada com a linha dela ou a
+## sobra de linha na mão depois do corte (linha solta caindo não atravessa as outras).
+static func _has_line(r: KiteRig) -> bool:
+	return is_instance_valid(r) and r.rope != null and r.rope.pos.size() >= 2
+
+
 func detect(rigs: Array[KiteRig]) -> void:
 	for i in range(contacts.size() - 1, -1, -1):
 		var c := contacts[i]
-		if not (is_instance_valid(c.a) and is_instance_valid(c.b) and c.a.is_flying() and c.b.is_flying()):
+		if not (_has_line(c.a) and _has_line(c.b) and (c.a.is_flying() or c.b.is_flying())):
+			contacts.remove_at(i)
+		elif c.ia >= c.a.rope.segment_count() + 1 or c.ib >= c.b.rope.segment_count() + 1:
 			contacts.remove_at(i)
 	for i in rigs.size():
 		var ra := rigs[i]
-		if not ra.is_flying():
+		if not _has_line(ra):
 			continue
 		for j in range(i + 1, rigs.size()):
 			var rb := rigs[j]
-			if not rb.is_flying():
+			if not _has_line(rb) or not (ra.is_flying() or rb.is_flying()):
 				continue
 			_detect_pair(ra, rb)
-			_detect_kite(ra, rb)
-			_detect_kite(rb, ra)
+			if ra.is_flying() and rb.is_flying():
+				_detect_kite(ra, rb)
+				_detect_kite(rb, ra)
+	_dedupe()
 	_prev_pts.clear()
 	for r in rigs:
-		if r.is_flying():
+		if _has_line(r):
 			var sv := r.rope.mat_s.duplicate()
 			if r.rope.end_body != null:
 				sv.append(0.0)
 			_prev_pts[r] = [_rope_points(r.rope), sv]
+
+
+## Só a parte das pipas do detect (fim do tick): a linha que encostou na vela
+## durante o tick laça já, com as posições finais (e o varrido desde o começo).
+func detect_kites(rigs: Array[KiteRig]) -> void:
+	for i in rigs.size():
+		var ra := rigs[i]
+		if not ra.is_flying() or not _has_line(ra):
+			continue
+		for j in range(i + 1, rigs.size()):
+			var rb := rigs[j]
+			if rb.is_flying() and _has_line(rb):
+				_detect_kite(ra, rb)
+				_detect_kite(rb, ra)
 
 
 ## A linha de `other` encostou na PIPA de `owner` (vela, varetas ou linhas da
@@ -210,39 +235,20 @@ func _test_segments(ra: KiteRig, rb: KiteRig, pa: PackedVector3Array, pb: Packed
 	var dist: float = res[2]
 	var ta: float = res[0]
 	var tb: float = res[1]
+	if dist > CROSS_RADIUS:
+		return
 	var crossed_normal := Vector3.ZERO
 	if dist > DETECT_RADIUS:
-		# Atravessou entre quadros? Mede o LADO de uma linha em relação à outra pela
-		# normal comum (ea × eb): deslizar ao longo de qualquer uma das linhas (dar
-		# linha, recolher, escorregar no relo) não muda esse lado — só atravessar muda.
-		if dist > CROSS_RADIUS or prev_a.is_empty() or prev_b.is_empty():
+		# Longe agora: atravessou entre quadros? (perto, os contatos antecipados já
+		# guardam o lado a cada subpasso)
+		if prev_a.is_empty() or prev_b.is_empty():
 			return
-		var ea := pa[ia + 1] - pa[ia]
-		var eb := pb[ib + 1] - pb[ib]
-		var cr := ea.cross(eb)
-		var crl := cr.length()
-		if crl < 0.2 * ea.length() * eb.length():
-			return  # quase paralelas: o lado não é bem definido
-		var n := cr / crl
-		# Pontos de cruzamento das RETAS (sem limitar ao segmento): o cruzamento tem
-		# que cair dentro dos dois trechos.
-		var lp := _line_params(pa[ia], ea, pb[ib], eb)
-		if lp.x < -0.02 or lp.x > 1.02 or lp.y < -0.02 or lp.y > 1.02:
+		var cx := _crossed_between_frames(ra, rb, pa, pb, ia, ib, prev_a, prev_b)
+		if cx.is_empty():
 			return
-		# Bem na ponta do trecho: o par vizinho pega (e não "laça" no cabresto à toa).
-		lp = lp.clamp(Vector2(0.01, 0.01), Vector2(0.99, 0.99))
-		var qa := pa[ia] + ea * lp.x
-		var qb := pb[ib] + eb * lp.y
-		var side_now := (qb - qa).dot(n)
-		# Mesmo ponto do MATERIAL no quadro anterior (funciona mesmo dando linha).
-		var oa := _point_at_s(prev_a, ra.rope.material_at(ia, lp.x))
-		var ob := _point_at_s(prev_b, rb.rope.material_at(ib, lp.y))
-		var side_old := (ob - oa).dot(n)
-		if side_old * side_now >= 0.0 or absf(side_old) > CROSS_RADIUS:
-			return
-		crossed_normal = n * signf(side_old)
-		ta = lp.x
-		tb = lp.y
+		crossed_normal = cx[0]
+		ta = cx[1]
+		tb = cx[2]
 	var sa := ra.rope.material_at(ia, ta)
 	var sb := rb.rope.material_at(ib, tb)
 	var pair_count := 0
@@ -274,6 +280,35 @@ func _test_segments(ra: KiteRig, rb: KiteRig, pa: PackedVector3Array, pb: Packed
 	c.sb_prev = sb
 	c.position = (p_a + p_b) * 0.5
 	contacts.append(c)
+
+
+## Os trechos ia (de A) e ib (de B) trocaram de LADO desde o quadro anterior? Mede o
+## lado pela normal comum (ea × eb) no ponto de cruzamento das retas, com os mesmos
+## pontos do MATERIAL no quadro anterior (deslizar ao longo das linhas — dar linha,
+## recolher, relar — não muda o lado; só atravessar muda). Devolve [normal do lado
+## antigo, ta, tb] ou [] se não atravessou.
+func _crossed_between_frames(ra: KiteRig, rb: KiteRig, pa: PackedVector3Array, pb: PackedVector3Array,
+		ia: int, ib: int, prev_a: Array, prev_b: Array) -> Array:
+	var ea := pa[ia + 1] - pa[ia]
+	var eb := pb[ib + 1] - pb[ib]
+	var cr := ea.cross(eb)
+	var crl := cr.length()
+	if crl < 0.2 * ea.length() * eb.length():
+		return []  # quase paralelas: o lado não é bem definido
+	var n := cr / crl
+	var lp := _line_params(pa[ia], ea, pb[ib], eb)
+	if lp.x < -0.02 or lp.x > 1.02 or lp.y < -0.02 or lp.y > 1.02:
+		return []
+	lp = lp.clamp(Vector2(0.01, 0.01), Vector2(0.99, 0.99))
+	var qa := pa[ia] + ea * lp.x
+	var qb := pb[ib] + eb * lp.y
+	var side_now := (qb - qa).dot(n)
+	var oa := _point_at_s(prev_a, ra.rope.material_at(ia, lp.x))
+	var ob := _point_at_s(prev_b, rb.rope.material_at(ib, lp.y))
+	var side_old := (ob - oa).dot(n)
+	if side_old * side_now >= 0.0 or absf(side_old) > CROSS_RADIUS:
+		return []
+	return [n * signf(side_old), lp.x, lp.y]
 
 
 ## Parâmetros (s, t) dos pontos mais próximos entre as RETAS p1 + s·d1 e p2 + t·d2.
@@ -352,9 +387,50 @@ static func closest_segments(p1: Vector3, q1: Vector3, p2: Vector3, q2: Vector3)
 
 # --- Resolução (subpasso) ----------------------------------------------------
 
+## Contatos do mesmo par no MESMO ponto (pela posição atual, em material): com as
+## linhas deitadas uma sobre a outra, vários contatos escorregavam para o mesmo lugar e
+## empurravam juntos — passavam do ponto, as linhas tremiam a milímetros e trocavam
+## de lado. Fica um por ponto (o que aperta mais).
+func _dedupe() -> void:
+	var seen := {}
+	for i in range(contacts.size() - 1, -1, -1):
+		var c := contacts[i]
+		if c.hooked or c.a.rope == null or c.b.rope == null:
+			continue
+		if c.ia >= c.a.rope.segment_count() or c.ib >= c.b.rope.segment_count():
+			continue
+		var sa := c.a.rope.material_at(c.ia, c.ta)
+		var sb := c.b.rope.material_at(c.ib, c.tb)
+		var key := Vector4i(c.a.get_instance_id() % 100000, c.b.get_instance_id() % 100000, int(roundf(sa * 4.0)), int(roundf(sb * 4.0)))
+		if seen.has(key):
+			var k: int = seen[key]
+			var other := contacts[k]
+			if c.impulse > other.impulse or c.crossed:
+				contacts[k] = c
+			contacts.remove_at(i)
+			# índices acima de i andaram uma casa
+			for kk in seen:
+				if int(seen[kk]) > i:
+					seen[kk] = int(seen[kk]) - 1
+		else:
+			seen[key] = i
+
+
 func solve(h: float) -> void:
+	var used := {}
+	var occ := {}
 	for c in contacts:
-		_refresh(c)
+		if not c.hooked:
+			occ[_occ_key(c, c.ia, c.ib)] = c
+	for c in contacts:
+		_refresh(c, occ)
+		if not c.hooked and c.ia < c.a.rope.segment_count() and c.ib < c.b.rope.segment_count():
+			# Um contato só empurra por ponto em cada subpasso.
+			var key := Vector4i(c.a.get_instance_id() % 100000, c.b.get_instance_id() % 100000,
+				int(roundf(c.a.rope.material_at(c.ia, c.ta) * 4.0)), int(roundf(c.b.rope.material_at(c.ib, c.tb) * 4.0)))
+			if used.has(key):
+				continue
+			used[key] = true
 		var ra := c.a.rope
 		var rb := c.b.rope
 		var pa_pts := ra.segment_points(c.ia)
@@ -371,6 +447,7 @@ func solve(h: float) -> void:
 			var da_s := _disp(ra, c.ia, h).lerp(_disp(ra, c.ia + 1, h), c.ta)
 			var db_s := _disp(rb, c.ib, h).lerp(_disp(rb, c.ib + 1, h), c.tb)
 			var d_prev := (pb - db_s) - (pa - da_s)
+			var n_before := c.normal
 			var interior := c.ta > 0.0 and c.ta < 1.0 and c.tb > 0.0 and c.tb < 1.0
 			var ea := pa_pts[1] - pa_pts[0]
 			var eb := pb_pts[1] - pb_pts[0]
@@ -386,6 +463,8 @@ func solve(h: float) -> void:
 			elif d_prev.length() > 1e-5:
 				# Ponta de trecho ou quase paralelas: a separação do começo do subpasso.
 				c.normal = d_prev.normalized()
+			if DEBUG_FLIPS and n_before.dot(c.normal) < -0.2:
+				print("FLIP n %d/%d t=%.2f/%.2f interior=%s par=%s |dprev|=%.4f |d|=%.4f dot=%.2f" % [c.ia, c.ib, c.ta, c.tb, str(interior), str(crl <= 0.25 * sqrt(ea.length_squared() * eb.length_squared())), d_prev.length(), d.length(), n_before.dot(c.normal)])
 		var nrm := c.normal
 		var violation := 0.0
 		if c.hooked:
@@ -397,6 +476,9 @@ func solve(h: float) -> void:
 		else:
 			var sep := d.dot(nrm)
 			if sep >= CONTACT_GAP:
+				# O ponto principal está separado, mas em linhas deitadas uma na outra
+				# as pontas da sobreposição podem não estar.
+				_push_overlap(c, nrm)
 				continue
 			# Atravessou muito (puxada forte): volta em alguns subpassos, sem explodir.
 			violation = minf(CONTACT_GAP - sep, MAX_PUSH if c.crossed else MAX_PUSH_SPEC)
@@ -423,6 +505,11 @@ func solve(h: float) -> void:
 		c.impulse += lam
 		if c.hooked:
 			continue
+		# Linhas QUASE PARALELAS (deitadas uma sobre a outra): o ponto mais próximo não é
+		# definido e um contato num ponto só não protege o resto do trecho. Os trechos
+		# são retos: se as duas PONTAS da parte sobreposta ficam do lado certo, o trecho
+		# inteiro fica. Empurra também nessas duas pontas, com a mesma normal.
+		_push_overlap(c, nrm)
 		# Atrito de Coulomb entre as linhas: o deslizamento relativo do subpasso é
 		# limitado por μ × (correção normal). Linhas apertadas "pegam" e escorregam
 		# com resistência (relo), em vez de deslizar livres.
@@ -439,6 +526,60 @@ func solve(h: float) -> void:
 			_push(ra, c.ia + 1, tdir * (lt * c.ta))
 			_push(rb, c.ib, -tdir * (lt * ub))
 			_push(rb, c.ib + 1, -tdir * (lt * c.tb))
+
+
+## Linhas QUASE PARALELAS (deitadas uma sobre a outra): o ponto mais próximo não é
+## definido e um contato num ponto só não protege o resto do trecho. Os trechos são
+## retos: se as duas PONTAS da parte sobreposta ficam do lado certo, o trecho inteiro
+## fica. Empurra nessas duas pontas, com a mesma normal do contato.
+func _push_overlap(c: Contact, nrm: Vector3) -> void:
+	var ra := c.a.rope
+	var rb := c.b.rope
+	var pa_pts := ra.segment_points(c.ia)
+	var pb_pts := rb.segment_points(c.ib)
+	var ea := pa_pts[1] - pa_pts[0]
+	var eb := pb_pts[1] - pb_pts[0]
+	var la := ea.length_squared()
+	var lb := eb.length_squared()
+	if la < 1e-8 or lb < 1e-8 or ea.cross(eb).length() >= 0.25 * sqrt(la * lb):
+		return
+	var u0 := clampf((pb_pts[0] - pa_pts[0]).dot(ea) / la, 0.0, 1.0)
+	var u1 := clampf((pb_pts[1] - pa_pts[0]).dot(ea) / la, 0.0, 1.0)
+	for uv in [minf(u0, u1), maxf(u0, u1)]:
+		var ue: float = uv
+		if absf(ue - c.ta) < 0.02:
+			continue
+		var qa: Vector3 = pa_pts[0] + ea * ue
+		var ve := clampf((qa - pb_pts[0]).dot(eb) / lb, 0.0, 1.0)
+		var lam := _push_point(ra, rb, c.ia, c.ib, ue, ve, nrm, c.crossed)
+		if lam > 0.0:
+			c.impulse += lam
+			c.a.pushed_by_line = true
+			c.b.pushed_by_line = true
+
+
+## Garante a separação ≥ CONTACT_GAP ao longo de `nrm` no ponto (ta, tb) dos trechos
+## ia/ib. Devolve o multiplicador aplicado.
+func _push_point(ra: Rope, rb: Rope, ia: int, ib: int, ta: float, tb: float, nrm: Vector3, crossed: bool) -> float:
+	var pa_pts := ra.segment_points(ia)
+	var pb_pts := rb.segment_points(ib)
+	var sep := (pb_pts[0].lerp(pb_pts[1], tb) - pa_pts[0].lerp(pa_pts[1], ta)).dot(nrm)
+	if sep >= CONTACT_GAP:
+		return 0.0
+	var violation := minf(CONTACT_GAP - sep, MAX_PUSH if crossed else MAX_PUSH_SPEC)
+	var ua := 1.0 - ta
+	var ub := 1.0 - tb
+	var wsum := _weight(ra, ia, -nrm) * ua * ua + _weight(ra, ia + 1, -nrm) * ta * ta \
+		+ _weight(rb, ib, nrm) * ub * ub + _weight(rb, ib + 1, nrm) * tb * tb
+	if wsum <= 0.0:
+		return 0.0
+	var lam := violation / wsum
+	var nv := nrm * lam
+	_push(ra, ia, -nv * ua)
+	_push(ra, ia + 1, -nv * ta)
+	_push(rb, ib, nv * ub)
+	_push(rb, ib + 1, nv * tb)
+	return lam
 
 
 ## Deslocamento do ponto `idx` da linha neste subpasso.
@@ -469,7 +610,11 @@ static func _push(r: Rope, idx: int, corr: Vector3) -> void:
 
 
 ## Recalcula os parâmetros do contato, deslizando para segmentos vizinhos.
-func _refresh(c: Contact) -> void:
+static func _occ_key(c: Contact, ia: int, ib: int) -> String:
+	return "%d:%d:%d:%d" % [c.a.get_instance_id(), c.b.get_instance_id(), ia, ib]
+
+
+func _refresh(c: Contact, occ = null) -> void:
 	var seg_a := c.a.rope.segment_count()
 	var seg_b := c.b.rope.segment_count()
 	if c.hooked and c.hook_side >= 0:
@@ -509,6 +654,15 @@ func _refresh(c: Contact) -> void:
 		var res := closest_segments(pa[0], pa[1], pb[0], pb[1])
 		c.ta = res[0]
 		c.tb = res[1]
+		# Trechos QUASE PARALELOS (linhas deitadas uma na outra): o ponto mais próximo
+		# vive batendo na ponta do trecho e todos os contatos escorregariam para o
+		# mesmo lugar, deixando o resto da sobreposição desprotegido. O contato fica
+		# no par dele (o empurrão nas duas pontas da sobreposição cobre o par inteiro);
+		# os pares vizinhos têm os contatos deles.
+		var ea: Vector3 = pa[1] - pa[0]
+		var eb: Vector3 = pb[1] - pb[0]
+		if ea.cross(eb).length() < 0.25 * sqrt(ea.length_squared() * eb.length_squared()):
+			break
 		var moved := false
 		if c.ta <= 0.0 and c.ia > 0:
 			c.ia -= 1

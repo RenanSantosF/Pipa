@@ -57,8 +57,10 @@ func _physics_process(dt: float) -> void:
 		for r in rigs:
 			r.solve(h)
 			r.pushed_by_line = false
-		combat.solve(h)
+		# Enganches antes do contato linha × linha: o contato tem a palavra final (um
+		# enganche puxando a linha não pode arrastá-la através de outra linha).
 		grabs.solve(h)
+		combat.solve(h)
 		# O cenário é rígido: depois do empurra-empurra entre linhas, os nós apoiados
 		# em fio/poste/telhado voltam para fora (uma linha não empurra a outra para
 		# dentro da casa).
@@ -75,6 +77,8 @@ func _physics_process(dt: float) -> void:
 		for r in rigs:
 			r.finalize(h)
 	combat.post_frame(dt, h, sub)
+	# A linha que encostou na pipa neste tick já laça agora (não no tick seguinte).
+	combat.detect_kites(rigs)
 	var collected := grabs.post_frame(dt, h, sub)
 	_grab_events(collected)
 	var tw := Time.get_ticks_usec()

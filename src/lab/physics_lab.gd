@@ -44,6 +44,8 @@ var _last_tap_t := -1.0
 var _rate_hist: Array = []
 var _pmul := {}
 var _hs: Array = []
+## Azimute e elevação da pipa vistos do pipeiro depois dos 12 s (quanto ela ANDA no céu).
+var _azs: Array = []
 var _tap_int := 0.25
 var _loose: KiteRig = null
 var _other: KiteRig = null
@@ -95,6 +97,18 @@ func _ready() -> void:
 			_tail = int(a.substr(7))
 		elif a.begins_with("--int="):
 			_tap_int = float(a.substr(6))
+		elif a.begins_with("--dwn="):
+			KiteRig.DESB_WN = float(a.substr(6))
+		elif a.begins_with("--dforce="):
+			KiteRig.DESB_FORCE = float(a.substr(9))
+		elif a.begins_with("--dang="):
+			KiteRig.DESB_ANGLE_DEG = float(a.substr(7))
+		elif a.begins_with("--dtime="):
+			KiteRig.DESB_TIME = float(a.substr(8))
+		elif a.begins_with("--tug="):
+			LineHand.TUG_LEN = float(a.substr(6))
+		elif a.begins_with("--dhold="):
+			KiteRig.DESB_HOLD = float(a.substr(8))
 		elif a.begins_with("--far="):
 			LineHand.FAR_GAIN = float(a.substr(6))
 		elif a.begins_with("--belly="):
@@ -224,6 +238,12 @@ func _plan(seq: String) -> void:
 				_ev(s + 0.6 * k, "pull")
 			_log_every = 0.1
 			_end_t = 20.0
+		"lado":
+			# Um toque por vez, sem puxar: o quanto a pipa anda para cada lado.
+			for k in 8:
+				_ev(s + k * _tap_int, "tap")
+			_log_every = 0.1
+			_end_t = s + 8 * _tap_int + 2.0
 		"toques":
 			# 2 toques + pausa, 4 vezes; depois 1 toque + pausa, 4 vezes.
 			var t := s
@@ -486,6 +506,7 @@ func _collect(delta: float) -> void:
 		_stats["az_max2"] = maxf(_stats.get("az_max2", -99.0), m[2])
 		# Balanços do bico: picos de giro com sinal (para ver a alternância).
 		_rate_hist.append(rate)
+		_azs.append(Vector2(m[2], m[1]))
 		_stats["h2_sum"] = _stats.get("h2_sum", 0.0) + h * h
 		_stats["el2_sum"] = _stats.get("el2_sum", 0.0) + float(m[1])
 		_stats["aoa2_sum"] = _stats.get("aoa2_sum", 0.0) + float(m[4])
@@ -535,6 +556,23 @@ func _report() -> void:
 			amp += dd
 			na += 1
 	print("LAB BALANÇO médio %.0f° (%d balanços)" % [amp / maxf(na, 1), na])
+	# Quanto a pipa ANDA no céu (o que se vê de longe): vai-e-volta do ponto no céu
+	# (azimute/elevação) entre extremos consecutivos, em graus e em metros.
+	var walk := 0.0
+	var nw := 0
+	var last_ext := Vector2.INF
+	for i in range(1, _azs.size() - 1):
+		var a0: Vector2 = _azs[i - 1]
+		var a1: Vector2 = _azs[i]
+		var a2: Vector2 = _azs[i + 1]
+		if (a1.x > a0.x and a1.x >= a2.x) or (a1.x < a0.x and a1.x <= a2.x):
+			if last_ext != Vector2.INF and absf(a1.x - last_ext.x) > 0.3:
+				walk += a1.distance_to(last_ext)
+				nw += 1
+			if last_ext == Vector2.INF or absf(a1.x - last_ext.x) > 0.3:
+				last_ext = a1
+	var dist := rig.body.x.distance_to(rig.rope.hand_position) if rig.body != null else 0.0
+	print("LAB ANDA médio %.1f° (%.1f m a %.0f m) por vai-e-volta (%d)" % [walk / maxf(nw, 1), deg_to_rad(walk / maxf(nw, 1)) * dist, dist, nw])
 	print("LAB GIRO parado=%.0f°/s toques=%.0f°/s" % [sqrt(_stats.get("ri2", 0.0) / maxf(_stats.get("rin", 1), 1)), sqrt(_stats.get("rt2", 0.0) / maxf(_stats.get("rtn", 1), 1))])
 	print("LAB SCORE elev=%.1f rumo_rms=%.1f aoa=%.1f y_min=%.1f invertida=%.0f%% picos=%d" % [
 		_stats.get("el2_sum", 0.0) / n2, sqrt(_stats.get("h2_sum", 0.0) / n2), _stats.get("aoa2_sum", 0.0) / n2,

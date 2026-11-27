@@ -30,13 +30,18 @@ const REEL_HARD_TENSION := 25.0
 ## todos é para a esquerda). O balanço tem
 ## inércia e vai morrendo; na pausa o último balanço rende e ela fica virada para lá.
 ## Puxando, o rumo é mantido (ela vai reta para onde aponta). Sem tocar nem puxar por
-## DESB_HOLD_TIME o cabresto solta e a rabiola endireita a pipa sozinha.
-## Por tamanho [P, M, G]: giro de um balanço (rad/s) e quanto ele dura (s).
-const DESB_RATE_BY_SIZE := [2.9, 2.3, 1.8]
-const DESB_TAU_BY_SIZE := [0.4, 0.55, 0.75]
+## DESB_HOLD o cabresto solta e a rabiola endireita a pipa sozinha.
+## AJUSTÁVEIS (barras na área de testes): ângulo de um balanço (graus, se não for
+## interrompido pelo próximo toque), tempo do balanço (s), força do cabresto (×) e quanto
+## tempo o rumo fica segurado sem mexer (s). Por tamanho [P, M, G] o tempo é escalado.
+static var DESB_ANGLE_DEG := 110.0
+static var DESB_TIME := 0.22
+static var DESB_FORCE := 1.0
+static var DESB_HOLD := 1.8
+const DESB_TIME_BY_SIZE := [0.75, 1.0, 1.35]
 const DESB_SEQ_RESET := 0.5
-const DESB_HOLD_TIME := 1.8
-const DESB_WN := 8.0
+
+static var DESB_WN := 16.0
 const DESB_ZETA := 0.95
 ## Braço da perna do cabresto (m): torque máximo = tração × braço (pipa M).
 const DESB_ARM := 0.13
@@ -46,6 +51,7 @@ var desb_rate: float = 0.0
 var desb_side: float = 1.0
 var desb_last: float = -10.0
 var desb_count: int = 0
+var _desb_tau: float = 0.3
 var _desb_until: float = -10.0
 var _desb_clock: float = 0.0
 
@@ -58,9 +64,10 @@ func desbico_tap() -> void:
 	if not desb_active:
 		desb_hold = heading()
 		desb_active = true
-	desb_rate = desb_side * float(DESB_RATE_BY_SIZE[clampi(profile.size_class, 0, 2)])
+	_desb_tau = maxf(DESB_TIME * float(DESB_TIME_BY_SIZE[clampi(profile.size_class, 0, 2)]), 0.05)
+	desb_rate = desb_side * deg_to_rad(DESB_ANGLE_DEG) / _desb_tau
 	desb_last = _desb_clock
-	_desb_until = _desb_clock + DESB_HOLD_TIME
+	_desb_until = _desb_clock + DESB_HOLD
 	desb_count += 1
 
 
@@ -85,7 +92,7 @@ func _desbico_substep(h: float) -> void:
 		body.ext_torque = Vector3.ZERO
 		return
 	desb_hold = wrapf(desb_hold + desb_rate * h, -PI, PI)
-	desb_rate *= exp(-h / float(DESB_TAU_BY_SIZE[clampi(profile.size_class, 0, 2)]))
+	desb_rate *= exp(-h / _desb_tau)
 	var d := body.x - hand_position()
 	if d.length() < 0.5:
 		body.ext_torque = Vector3.ZERO
@@ -95,7 +102,7 @@ func _desbico_substep(h: float) -> void:
 	var wd := body.w.dot(d)
 	var i_d := body.inertia.z * 3.0
 	var tq := i_d * (DESB_WN * DESB_WN * err + 2.0 * DESB_ZETA * DESB_WN * (desb_rate - wd))
-	var auth := DESB_ARM * (profile.height / 0.65) * (rope.tension_end + 1.0)
+	var auth := DESB_ARM * DESB_FORCE * (profile.height / 0.65) * (rope.tension_end + 1.0)
 	body.ext_torque = d * clampf(tq, -auth, auth)
 
 

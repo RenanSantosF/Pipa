@@ -22,9 +22,70 @@ const PARAMS := [
 	["G", "Peso (freia subindo)", 0.5, 6.0],
 ]
 
+## Desbico da física real: [chave, rótulo, mín, máx, passo].
+const PHYS_PARAMS := [
+	["angle", "Ângulo de cada balanço (graus)", 20.0, 160.0, 1.0],
+	["time", "Tempo de cada balanço (s)", 0.10, 0.80, 0.01],
+	["stiff", "Firmeza da resposta", 4.0, 30.0, 0.5],
+	["force", "Força do cabresto (×)", 0.3, 3.0, 0.05],
+	["hold", "Segura o rumo sem mexer (s)", 0.5, 5.0, 0.1],
+	["tug", "Puxadinha do toque (cm)", 2.0, 30.0, 0.5],
+]
+const PHYS_DEFAULTS := {"angle": 110.0, "time": 0.22, "stiff": 16.0, "force": 1.0, "hold": 1.8, "tug": 8.0}
+const PHYS_FILE := "user://desbico.cfg"
+
 var rig: KiteRig
 var _readout: Label
 var _defaults := {}
+var _phys_defaults := {}
+var _phys_sliders := {}
+var _phys_box: VBoxContainer
+var _old_box: VBoxContainer
+
+
+static func phys_param(key: String) -> float:
+	match key:
+		"angle": return KiteRig.DESB_ANGLE_DEG
+		"time": return KiteRig.DESB_TIME
+		"stiff": return KiteRig.DESB_WN
+		"force": return KiteRig.DESB_FORCE
+		"hold": return KiteRig.DESB_HOLD
+		"tug": return LineHand.TUG_LEN * 100.0
+	return 0.0
+
+
+static func set_phys_param(key: String, v: float) -> void:
+	match key:
+		"angle": KiteRig.DESB_ANGLE_DEG = v
+		"time": KiteRig.DESB_TIME = v
+		"stiff": KiteRig.DESB_WN = v
+		"force": KiteRig.DESB_FORCE = v
+		"hold": KiteRig.DESB_HOLD = v
+		"tug": LineHand.TUG_LEN = v / 100.0
+
+
+static func _fmt(key: String, v: float) -> String:
+	match key:
+		"angle", "tug": return "%.0f" % v if key == "angle" else "%.1f" % v
+		"time": return "%.2f" % v
+	return "%.2f" % v
+
+
+## Os valores escolhidos ficam salvos no aparelho (valem na próxima vez que abrir).
+static func _load_phys() -> void:
+	var cf := ConfigFile.new()
+	if cf.load(PHYS_FILE) != OK:
+		return
+	for k in PHYS_DEFAULTS:
+		if cf.has_section_key("desbico", k):
+			set_phys_param(k, float(cf.get_value("desbico", k)))
+
+
+static func _save_phys() -> void:
+	var cf := ConfigFile.new()
+	for k in PHYS_DEFAULTS:
+		cf.set_value("desbico", k, phys_param(k))
+	cf.save(PHYS_FILE)
 
 
 func _ready() -> void:
@@ -59,6 +120,55 @@ func _ready() -> void:
 	_readout.add_theme_font_size_override("font_size", 13)
 	_readout.modulate = Color(0.75, 0.9, 1.0)
 	box.add_child(_readout)
+	# --- Desbico da física real: barras com o valor (para o jogador dizer o ideal) ---
+	_phys_box = VBoxContainer.new()
+	_phys_box.add_theme_constant_override("separation", 2)
+	box.add_child(_phys_box)
+	var ph := Label.new()
+	ph.text = "Desbico (física real) — ajuste e anote os números"
+	ph.add_theme_font_size_override("font_size", 15)
+	ph.modulate = Color(1.0, 0.9, 0.55)
+	_phys_box.add_child(ph)
+	_load_phys()
+	for p in PHYS_PARAMS:
+		var key: String = p[0]
+		_phys_defaults[key] = PHYS_DEFAULTS[key]
+		var row := HBoxContainer.new()
+		var lab := Label.new()
+		lab.text = p[1]
+		lab.custom_minimum_size = Vector2(250, 0)
+		lab.add_theme_font_size_override("font_size", 14)
+		row.add_child(lab)
+		var sl := HSlider.new()
+		sl.min_value = p[2]
+		sl.max_value = p[3]
+		sl.step = p[4]
+		sl.value = phys_param(key)
+		sl.custom_minimum_size = Vector2(240, 40)
+		var val := Label.new()
+		val.custom_minimum_size = Vector2(70, 0)
+		val.add_theme_font_size_override("font_size", 16)
+		val.text = _fmt(key, sl.value)
+		sl.value_changed.connect(func(v: float) -> void:
+			set_phys_param(key, v)
+			val.text = _fmt(key, v)
+			_save_phys())
+		row.add_child(sl)
+		row.add_child(val)
+		_phys_box.add_child(row)
+		_phys_sliders[key] = sl
+	var preset := Button.new()
+	preset.text = "Voltar ao padrão do desbico"
+	preset.pressed.connect(func() -> void:
+		for k in _phys_defaults:
+			set_phys_param(k, _phys_defaults[k])
+			(_phys_sliders[k] as HSlider).value = float(_phys_defaults[k])
+		_save_phys())
+	_phys_box.add_child(preset)
+	# --- Modelo de voo antigo (valem com a física real desligada) ---
+	_old_box = VBoxContainer.new()
+	_old_box.add_theme_constant_override("separation", 4)
+	box.add_child(_old_box)
 	for p in PARAMS:
 		var key: String = p[0]
 		_defaults[key] = KiteFlightModel.param(key)
@@ -82,26 +192,29 @@ func _ready() -> void:
 			val.text = "%.2f" % v)
 		row.add_child(sl)
 		row.add_child(val)
-		box.add_child(row)
+		_old_box.add_child(row)
 	var reset := Button.new()
 	reset.text = "Voltar ao padrão"
 	reset.pressed.connect(func() -> void:
 		for k in _defaults:
 			KiteFlightModel.set_param(k, _defaults[k])
-		for c in box.get_children():
+		for c in _old_box.get_children():
 			if c is HBoxContainer:
 				var s2 := c.get_child(1) as HSlider
 				var lab2 := c.get_child(0) as Label
 				for p in PARAMS:
 					if p[1] == lab2.text:
 						s2.value = float(_defaults[p[0]]))
-	box.add_child(reset)
+	_old_box.add_child(reset)
 	visible = false
 
 
 func _process(_delta: float) -> void:
 	if not visible or rig == null:
 		return
+	if _phys_box != null:
+		_phys_box.visible = GameConfig.physical_flight
+		_old_box.visible = not GameConfig.physical_flight
 	if rig.physical and rig.body != null and rig.rope != null:
 		var b := rig.body
 		var br := rig.rope.bridle

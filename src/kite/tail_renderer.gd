@@ -22,7 +22,8 @@ const GAP := 0.3
 var rig: KiteRig
 var _im := ImmediateMesh.new()
 var _mat := StandardMaterial3D.new()
-var _mat_far := StandardMaterial3D.new()
+var _mat_far := ShaderMaterial.new()
+const FAR_SHADER := preload("res://src/kite/tail_far.gdshader")
 var _pts := PackedVector3Array()
 var _curve := PackedVector3Array()
 
@@ -31,17 +32,13 @@ func _ready() -> void:
 	top_level = true
 	global_transform = Transform3D.IDENTITY
 	mesh = _im
+	_mat_far.shader = FAR_SHADER
 	cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	extra_cull_margin = 20.0
 	_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	_mat.vertex_color_use_as_albedo = true
 	_mat.vertex_color_is_srgb = true
 	_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-	_mat_far.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	_mat_far.vertex_color_use_as_albedo = true
-	_mat_far.vertex_color_is_srgb = true
-	_mat_far.cull_mode = BaseMaterial3D.CULL_DISABLED
-	_mat_far.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 
 
 func bind(p_rig: KiteRig) -> void:
@@ -87,7 +84,8 @@ func _process(_delta: float) -> void:
 	var vp_h := maxf(get_viewport().get_visible_rect().size.y, 1.0)
 	var px_ang := deg_to_rad(cam.fov) / (vp_h * get_viewport().scaling_3d_scale)
 	var strip_px := STRIP_LEN * k / maxf(cam_pos.distance_to(_pts[0]) * px_ang, 1e-5)
-	var far := strip_px < 6.0
+	# Abaixo de ~12 px por tirinha as tirinhas viravam ruído de pixels: vira a fita.
+	var far := strip_px < 12.0
 	# Curva lisa (Catmull-Rom) entre os nós: a rabiola é maleável, não um serrote.
 	_curve.resize(0)
 	var n := _pts.size()
@@ -119,6 +117,7 @@ func _process(_delta: float) -> void:
 		_im.surface_begin(Mesh.PRIMITIVE_TRIANGLES, _mat_far)
 		for _d in 3:
 			_im.surface_set_color(Color(0, 0, 0, 0))
+			_im.surface_set_uv(Vector2.ZERO)
 			_im.surface_add_vertex(_pts[0])
 		# Faixas alternando as duas cores da rabiola (cada faixa com pelo menos ~4 px na
 		# tela), opaca, largura mínima de ~2,4 px afinando até a ponta: de longe a rabiola
@@ -136,24 +135,33 @@ func _process(_delta: float) -> void:
 				continue   # o pedacinho de barbante entre a pipa e as tirinhas
 			var u0 := float(i) / float(nc - 1)
 			var u1 := float(i + 1) / float(nc - 1)
-			var wa := maxf(cam_pos.distance_to(a0) * px_ang * 0.75, STRIP_LEN * k * 0.18) * (1.0 - 0.4 * u0)
-			var wb := maxf(cam_pos.distance_to(b0) * px_ang * 0.75, STRIP_LEN * k * 0.18) * (1.0 - 0.4 * u1)
+			# Largura em pixels do buffer (perfil triangular: ~metade "pesa"); no BAIXO o
+			# buffer é menor, então a fita é proporcionalmente mais larga.
+			var pxs := 1.5 if GameConfig.quality == GameConfig.Quality.LOW else 1.0
+			var wa := maxf(cam_pos.distance_to(a0) * px_ang * 1.0 * pxs, STRIP_LEN * k * 0.12) * (1.0 - 0.35 * u0)
+			var wb := maxf(cam_pos.distance_to(b0) * px_ang * 1.0 * pxs, STRIP_LEN * k * 0.12) * (1.0 - 0.35 * u1)
 			var dir := (b0 - a0).cross(cam_pos - a0).normalized()
 			var col: Color = prof.tail_color_a if int(walked / band) % 2 == 0 else prof.tail_color_b
 			walked += seg_l
 			var ca := Color(col, 0.95 - 0.25 * u0)
 			var cb := Color(col, 0.95 - 0.25 * u1)
 			_im.surface_set_color(ca)
+			_im.surface_set_uv(Vector2(-1.0, 0.0))
 			_im.surface_add_vertex(a0 - dir * wa)
 			_im.surface_set_color(ca)
+			_im.surface_set_uv(Vector2(1.0, 0.0))
 			_im.surface_add_vertex(a0 + dir * wa)
 			_im.surface_set_color(cb)
+			_im.surface_set_uv(Vector2(1.0, 0.0))
 			_im.surface_add_vertex(b0 + dir * wb)
 			_im.surface_set_color(ca)
+			_im.surface_set_uv(Vector2(-1.0, 0.0))
 			_im.surface_add_vertex(a0 - dir * wa)
 			_im.surface_set_color(cb)
+			_im.surface_set_uv(Vector2(1.0, 0.0))
 			_im.surface_add_vertex(b0 + dir * wb)
 			_im.surface_set_color(cb)
+			_im.surface_set_uv(Vector2(-1.0, 0.0))
 			_im.surface_add_vertex(b0 - dir * wb)
 		_im.surface_end()
 		return

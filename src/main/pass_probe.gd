@@ -33,10 +33,13 @@ var _next_cmd := 0.0
 var _grip := 1.0
 # Árbitro.
 var _prev_ll: Dictionary = {}     # par -> [[sa, sb, sinal, dist, d], ...]
+var _prev_geo: Dictionary = {}    # par -> [pontos A, material A, pontos B, material B] do tick anterior
 var _sail_prev: Dictionary = {}
 var sail_pierce := 0
 var _prev_cap: Dictionary = {}    # idx -> [[s, sinal, dist], ...]
 var flips_ll := 0
+var _sail_watch := 0
+var rolled_ll := 0   # linhas paralelas rolando uma em volta da outra encostadas (permitido)
 var flips_cap := 0
 var box_ticks := 0
 var kite_in := 0
@@ -69,6 +72,8 @@ func start(p_main) -> void:
 		elif a == "--give":
 			_give_mode = true
 	_rng.seed = seed
+	if OS.get_cmdline_user_args().has("--flips"):
+		LineCombat.DEBUG_FLIPS = true
 	Wind.direction_wander_deg = 0.0
 	Wind.gust_strength = 0.15
 	obs = main.get_tree().get_first_node_in_group(&"street_builder").get("obstacles")
@@ -444,14 +449,65 @@ func _ref_pair(ra: KiteRig, rb: KiteRig) -> void:
 					flip = float(p[2]) != sgn and minf(float(p[3]), dist) < 0.35
 				else:
 					# Quase paralelas: o vetor de separação virou mais de 120° num tick.
-					var dp: Vector3 = p[4]
-					flip = maxf(float(p[3]), dist) < 0.15 and d.dot(dp) < -0.5 * d.length() * dp.length()
+					# Mede no MESMO ponto de material da linha A nos dois ticks (o ponto
+					# mais próximo de linhas deitadas uma na outra pula ao longo delas).
+					var geo: Array = _prev_geo.get(key, [])
+					if geo.is_empty():
+						continue
+					var qa0 := _point_at(geo[0], geo[1], s_a)
+					var qb0 := _closest_on(geo[2], qa0)
+					var qb1 := _closest_on(pb, qa)
+					var dp := qb0 - qa0
+					var dn := qb1 - qa
+					flip = maxf(dp.length(), dn.length()) < 0.15 and dn.dot(dp) < -0.5 * dn.length() * dp.length()
+					if flip:
+						# Atravessar = passar uma pela outra. Rolar em volta da outra
+						# encostada (é assim que uma linha enrosca na outra) mantém a
+						# folga do contato (3 mm) no caminho todo: isso não conta.
+						var ch := dn - dp
+						var lam := clampf(-dp.dot(ch) / maxf(ch.length_squared(), 1e-12), 0.0, 1.0)
+						var pass_min := (dp + ch * lam).length()
+						if pass_min >= 0.002:
+							flip = false
+							rolled_ll += 1
+						else:
+							_log("   paralelas: |antes|=%.3f |agora|=%.3f ângulo=%.0f° menor distância no caminho=%.4f" % [dp.length(), dn.length(), rad_to_deg(dp.angle_to(dn)), pass_min])
 				if flip:
 					flips_ll += 1
 					_log("ATRAVESSOU linha×linha t=%.2f dist=%.3f s=(%.1f, %.1f)%s contatos=%d" % [_t, dist, s_a, s_b, " paralelas" if parallel else "", (main.physics_world as KitePhysicsWorld).combat.contacts.size()])
+					var dbg := []
+					for cc in (main.physics_world as KitePhysicsWorld).combat.contacts:
+						dbg.append("[%s%s s=%.1f/%.1f %d/%d t=%.2f/%.2f F=%.2f]" % ["H" if cc.hooked else "", "X" if cc.crossed else "", cc.a.rope.material_at(cc.ia, cc.ta), cc.b.rope.material_at(cc.ib, cc.tb), cc.ia, cc.ib, cc.ta, cc.tb, cc.force])
+					_log("   contatos: %s · obst A=%d B=%d · presa A=%s B=%s · enganches=%d · segA %d/%d segB %d/%d" % [" ".join(dbg), ra.rope.contact_count(), rb.rope.contact_count(), str(ra.snagged), str(rb.snagged), (main.physics_world as KitePhysicsWorld).grabs.grabs.size(), i, pa.size(), j, pb.size()])
 					break
 			cur.append([s_a, s_b, sgn, dist, d])
 	_prev_ll[key] = cur
+	_prev_geo[key] = [pa, sa, pb, sb]
+
+
+## Ponto da linha na coordenada de material `s`.
+static func _point_at(pts: PackedVector3Array, sv: PackedFloat32Array, s: float) -> Vector3:
+	for k in pts.size() - 1:
+		var s0 := sv[k]
+		var s1 := sv[k + 1]
+		if (s - s0) * (s - s1) <= 0.0 and absf(s1 - s0) > 1e-6:
+			return pts[k].lerp(pts[k + 1], (s - s0) / (s1 - s0))
+	return pts[0] if absf(sv[0] - s) < absf(sv[sv.size() - 1] - s) else pts[pts.size() - 1]
+
+
+## Ponto da polilinha mais perto de `q`.
+static func _closest_on(pts: PackedVector3Array, q: Vector3) -> Vector3:
+	var best := pts[0]
+	var bd := INF
+	for k in pts.size() - 1:
+		var ab := pts[k + 1] - pts[k]
+		var t := clampf((q - pts[k]).dot(ab) / maxf(ab.length_squared(), 1e-9), 0.0, 1.0)
+		var c := pts[k] + ab * t
+		var dd := c.distance_squared_to(q)
+		if dd < bd:
+			bd = dd
+			best = c
+	return best
 
 
 ## Linha de `other` furando a vela da pipa de `owner` sem estar laçada.
@@ -475,6 +531,10 @@ func _ref_sail(owner: KiteRig, other: KiteRig) -> void:
 	if piercing and not hooked and not _sail_prev.get(key, false):
 		sail_pierce += 1
 		_log("LINHA FUROU A PIPA t=%.2f" % _t)
+		_sail_watch = 10
+	if _sail_watch > 0:
+		_sail_watch -= 1
+		print("PASS    vela t=%.2f furando=%s laçada=%s" % [_t, str(piercing), str(hooked)])
 	_sail_prev[key] = piercing and not hooked
 
 
@@ -498,7 +558,7 @@ func _log(s: String) -> void:
 
 
 func _finish(why: String) -> void:
-	print("PASS resumo modo=%s: linha×linha=%d furou_pipa=%d linha×obst=%d linha_em_caixa=%d pipa_dentro=%d encostes(ll=%d obst=%d) linha=%.1f (%s)" % [
-		_mode, flips_ll, sail_pierce, flips_cap, box_ticks, kite_in, near_ll, near_cap, rig.flying_length() if rig.rope else 0.0, why])
+	print("PASS resumo modo=%s: linha×linha=%d furou_pipa=%d linha×obst=%d linha_em_caixa=%d pipa_dentro=%d encostes(ll=%d obst=%d) rolou_encostada=%d linha=%.1f (%s)" % [
+		_mode, flips_ll, sail_pierce, flips_cap, box_ticks, kite_in, near_ll, near_cap, rolled_ll, rig.flying_length() if rig.rope else 0.0, why])
 	set_physics_process(false)
 	get_tree().quit()
