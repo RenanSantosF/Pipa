@@ -8,7 +8,7 @@ extends MeshInstance3D
 ## Tirinhas (pipa M; escala com o tamanho): espaçamento, comprimento, largura.
 const KNOT_STEP := 0.065
 const STRIP_LEN := 0.14
-const STRIP_W := 0.012
+const STRIP_W := 0.022
 ## Fita: ângulo para o lado (rad) e trechos (para ondular).
 const STRIP_ANGLE := 0.32
 const STRIP_SEGS := 4
@@ -18,6 +18,10 @@ const FLUTTER := 0.55
 const BLOCK := 4
 ## Barbante sem tirinhas entre a pipa e o começo da rabiola (m, pipa M).
 const GAP := 0.3
+## Tamanho mínimo de uma tirinha na tela (px) e o quanto ela pode crescer longe.
+const MIN_STRIP_PX := 10.0
+const MIN_STRIP_W_PX := 2.5
+const MAX_EXAGGERATION := 4.0
 
 var rig: KiteRig
 var _im := ImmediateMesh.new()
@@ -79,13 +83,18 @@ func _process(_delta: float) -> void:
 		for i in np:
 			var w := clampf(1.0 - float(i) / maxf(float(np - 1) * 0.35, 1.0), 0.0, 1.0)
 			_pts[i] += off * w
-	# Detalhe pelo TAMANHO NA TELA: tirinha com menos de ~6 px vira fita contínua (as
-	# tirinhas de 1 cm viravam pontinhos piscando de longe).
+	# Detalhe pelo TAMANHO NA TELA (v0.22): as TIRINHAS aparecem em qualquer distância.
+	# Longe, cada tirinha fica com pelo menos MIN_STRIP_PX de comprimento e ~2 px de
+	# largura (cresce até MAX_EXAGGERATION×) e o espaço entre elas cresce junto (menos
+	# tirinhas, maiores) — de longe se vê a rabiola de fitas tremulando, não uma faixa.
 	var vp_h := maxf(get_viewport().get_visible_rect().size.y, 1.0)
 	var px_ang := deg_to_rad(cam.fov) / (vp_h * get_viewport().scaling_3d_scale)
-	var strip_px := STRIP_LEN * k / maxf(cam_pos.distance_to(_pts[0]) * px_ang, 1e-5)
-	# Abaixo de ~12 px por tirinha as tirinhas viravam ruído de pixels: vira a fita.
-	var far := strip_px < 12.0
+	var dist0 := cam_pos.distance_to(_pts[0])
+	var px_m := maxf(dist0 * px_ang, 1e-6)          # metros por pixel na rabiola
+	var strip_px := STRIP_LEN * k / px_m
+	var ex := clampf(MIN_STRIP_PX / maxf(strip_px, 0.01), 1.0, MAX_EXAGGERATION)
+	var far := strip_px * ex < 14.0                 # pequena na tela: menos detalhe
+	var pxs := 1.5 if GameConfig.quality == GameConfig.Quality.LOW else 1.0
 	# Curva lisa (Catmull-Rom) entre os nós: a rabiola é maleável, não um serrote.
 	_curve.resize(0)
 	var n := _pts.size()
@@ -99,75 +108,22 @@ func _process(_delta: float) -> void:
 			_curve.append(_catmull(p0, p1, p2, p3, float(s) / float(sub)))
 	_curve.append(_pts[n - 1])
 
-	_im.surface_begin(Mesh.PRIMITIVE_TRIANGLES, _mat)
+	_im.surface_begin(Mesh.PRIMITIVE_TRIANGLES, _mat_far)
 	# Triângulo vazio: a superfície nunca fica sem vértices (rabiola cortada curtinha).
-	_tri(_pts[0], _pts[0], _pts[0], Color(0, 0, 0, 0))
-	# Barbante (bem fino).
-	var string_col := Color(0.92, 0.9, 0.84)
+	_soft_tri(_pts[0], _pts[0], _pts[0], Color(0, 0, 0, 0), -1.0, 1.0, 1.0)
+	# Barbante: fino, com ~1 px de largura no mínimo (borda suave).
+	var string_col := Color(0.92, 0.9, 0.84, 0.9)
 	for i in _curve.size() - 1:
 		var a := _curve[i]
 		var b := _curve[i + 1]
-		var side := (b - a).cross(cam_pos - a).normalized() * 0.0009
-		_tri(a - side, a + side, b + side, string_col)
-		_tri(a - side, b + side, b - side, string_col)
-	if far:
-		# Longe: uma fita LISA e afinando até a ponta, com largura de ~2 px na tela e
-		# cor misturada (os blocos de cor serrilhavam e piscavam com a resolução baixa).
-		_im.surface_end()
-		_im.surface_begin(Mesh.PRIMITIVE_TRIANGLES, _mat_far)
-		for _d in 3:
-			_im.surface_set_color(Color(0, 0, 0, 0))
-			_im.surface_set_uv(Vector2.ZERO)
-			_im.surface_add_vertex(_pts[0])
-		# Faixas alternando as duas cores da rabiola (cada faixa com pelo menos ~4 px na
-		# tela), opaca, largura mínima de ~2,4 px afinando até a ponta: de longe a rabiola
-		# aparece como uma tira colorida tremulando, não como uma linha fantasma.
-		var nc := _curve.size()
-		var walked := 0.0
-		var dist0 := cam_pos.distance_to(_curve[0])
-		var band := maxf(KNOT_STEP * k * 1.5, dist0 * px_ang * 3.0)
-		for i in nc - 1:
-			var a0 := _curve[i]
-			var b0 := _curve[i + 1]
-			var seg_l := a0.distance_to(b0)
-			if walked + seg_l < GAP * k:
-				walked += seg_l
-				continue   # o pedacinho de barbante entre a pipa e as tirinhas
-			var u0 := float(i) / float(nc - 1)
-			var u1 := float(i + 1) / float(nc - 1)
-			# Largura em pixels do buffer (perfil triangular: ~metade "pesa"); no BAIXO o
-			# buffer é menor, então a fita é proporcionalmente mais larga.
-			var pxs := 1.5 if GameConfig.quality == GameConfig.Quality.LOW else 1.0
-			var wa := maxf(cam_pos.distance_to(a0) * px_ang * 1.0 * pxs, STRIP_LEN * k * 0.12) * (1.0 - 0.35 * u0)
-			var wb := maxf(cam_pos.distance_to(b0) * px_ang * 1.0 * pxs, STRIP_LEN * k * 0.12) * (1.0 - 0.35 * u1)
-			var dir := (b0 - a0).cross(cam_pos - a0).normalized()
-			var col: Color = prof.tail_color_a if int(walked / band) % 2 == 0 else prof.tail_color_b
-			walked += seg_l
-			var ca := Color(col, 0.95 - 0.25 * u0)
-			var cb := Color(col, 0.95 - 0.25 * u1)
-			_im.surface_set_color(ca)
-			_im.surface_set_uv(Vector2(-1.0, 0.0))
-			_im.surface_add_vertex(a0 - dir * wa)
-			_im.surface_set_color(ca)
-			_im.surface_set_uv(Vector2(1.0, 0.0))
-			_im.surface_add_vertex(a0 + dir * wa)
-			_im.surface_set_color(cb)
-			_im.surface_set_uv(Vector2(1.0, 0.0))
-			_im.surface_add_vertex(b0 + dir * wb)
-			_im.surface_set_color(ca)
-			_im.surface_set_uv(Vector2(-1.0, 0.0))
-			_im.surface_add_vertex(a0 - dir * wa)
-			_im.surface_set_color(cb)
-			_im.surface_set_uv(Vector2(1.0, 0.0))
-			_im.surface_add_vertex(b0 + dir * wb)
-			_im.surface_set_color(cb)
-			_im.surface_set_uv(Vector2(-1.0, 0.0))
-			_im.surface_add_vertex(b0 - dir * wb)
-		_im.surface_end()
-		return
+		var hw := maxf(0.0009, cam_pos.distance_to(a) * px_ang * 0.6 * pxs)
+		var side := (b - a).cross(cam_pos - a).normalized() * hw
+		var e := maxf(hw * 2.0 / maxf(cam_pos.distance_to(a) * px_ang, 1e-6) / 1.5, 1.0)
+		_soft_quad(a - side, a + side, b + side, b - side, string_col, e)
 	var t_now := Time.get_ticks_msec() / 1000.0
 	var wind := clampf(Wind.get_reference_speed() / 6.0, 0.4, 1.8)
-	var step := KNOT_STEP * k
+	var step := KNOT_STEP * k * ex
+	var segs := 2 if far else STRIP_SEGS
 	# Primeiras tirinhas só depois de um pedaço de barbante (como na rabiola de verdade).
 	var acc := GAP * k
 	var knot := 0
@@ -183,30 +139,53 @@ func _process(_delta: float) -> void:
 			var c := a + t * acc
 			var to_cam := (cam_pos - c).normalized()
 			var s := t.cross(to_cam).normalized()
-			var color := prof.tail_color_a if (knot / BLOCK) % 2 == 0 else prof.tail_color_b
+			# Blocos de cor: longe (tirinhas maiores e mais espaçadas) o bloco tem menos
+			# tirinhas, para a mesma quantidade de cor ao longo da rabiola.
+			var blk := maxi(int(round(float(BLOCK) / ex)), 1)
+			var color := prof.tail_color_a if (knot / blk) % 2 == 0 else prof.tail_color_b
 			# Uma fita fina de sacola, amarrada de UM lado do barbante, indo para trás
 			# e ondulando com o vento (a onda corre da amarração para a ponta).
 			var ph := t_now * (9.0 + 5.0 * wind) + float(knot) * 0.9
 			var dir := (t * cos(STRIP_ANGLE) + s * sin(STRIP_ANGLE)).normalized()
-			var seg_len := STRIP_LEN * k / float(STRIP_SEGS)
-			var half_w := STRIP_W * k * 0.5
+			var seg_len := STRIP_LEN * k * ex / float(segs)
+			var px_here := maxf(cam_pos.distance_to(c) * px_ang, 1e-6)
+			var half_w := maxf(STRIP_W * k * ex * 0.5, px_here * MIN_STRIP_W_PX * 0.5 * pxs)
+			var edge := maxf(half_w * 2.0 / px_here / 1.5, 1.0)
 			var p0 := c
 			var w0 := s.cross(dir).cross(dir).normalized() * half_w
-			for j in STRIP_SEGS:
-				var bend := FLUTTER * wind * sin(ph - float(j) * 1.6) * (0.4 + float(j) / float(STRIP_SEGS))
+			for j in segs:
+				var bend := FLUTTER * wind * sin(ph - float(j) * (1.6 * float(STRIP_SEGS) / float(segs))) * (0.4 + float(j) / float(segs))
 				var dj := dir.rotated(to_cam, bend)
 				var p1 := p0 + dj * seg_len
-				var w1 := s.cross(dj).cross(dj).normalized() * half_w * (1.0 - 0.25 * float(j + 1) / float(STRIP_SEGS))
+				var w1 := s.cross(dj).cross(dj).normalized() * half_w * (1.0 - 0.25 * float(j + 1) / float(segs))
 				w1 = w1.rotated(dj, 0.6 * sin(ph * 1.3 - float(j)))   # torce um pouco
 				var col := color if j % 2 == 0 else color.darkened(0.1)
-				_tri(p0 - w0, p0 + w0, p1 + w1, col)
-				_tri(p0 - w0, p1 + w1, p1 - w1, col)
+				_soft_quad(p0 - w0, p0 + w0, p1 + w1, p1 - w1, col, edge)
 				p0 = p1
 				w0 = w1
 			acc += step
 			knot += 1
 		acc -= l
 	_im.surface_end()
+
+
+## Quadrilátero com borda suave: a–b na largura do começo, c–d na do fim (a e d do
+## lado −1; b e c do lado +1). `edge` = largura em px / 1,5 (borda de ~1,5 px).
+func _soft_quad(a: Vector3, b: Vector3, c: Vector3, d: Vector3, col: Color, edge: float) -> void:
+	_soft_tri(a, b, c, col, -1.0, 1.0, edge, 1.0)
+	_soft_tri(a, c, d, col, -1.0, 1.0, edge, -1.0)
+
+
+func _soft_tri(p: Vector3, q: Vector3, r: Vector3, col: Color, u_p: float, u_q: float, edge: float, u_r: float = 1.0) -> void:
+	_im.surface_set_color(col)
+	_im.surface_set_uv(Vector2(u_p, edge))
+	_im.surface_add_vertex(p)
+	_im.surface_set_color(col)
+	_im.surface_set_uv(Vector2(u_q, edge))
+	_im.surface_add_vertex(q)
+	_im.surface_set_color(col)
+	_im.surface_set_uv(Vector2(u_r, edge))
+	_im.surface_add_vertex(r)
 
 
 func _tri(a: Vector3, b: Vector3, c: Vector3, col: Color) -> void:

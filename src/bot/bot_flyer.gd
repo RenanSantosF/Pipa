@@ -46,6 +46,12 @@ func _ready() -> void:
 	_timer = _rng.randf_range(0.5, 4.0)
 
 
+func reseed(v: int) -> void:
+	_rng.seed = v
+	_style_release = _rng.randf() < 0.5
+	_timer = _rng.randf_range(0.5, 4.0)
+
+
 func hand_rest() -> Vector3:
 	return global_position + global_transform.basis * Vector3(0.2, 1.18, -0.36)
 
@@ -244,9 +250,13 @@ func _combo(side: float, amount: float) -> void:
 
 var _lh: LineHand
 var _pull_timer: float = 0.0
+## Relógio do jogo (não do sistema): o ritmo do relo não depende da velocidade da máquina.
+var _clock: float = 0.0
+var _rest_time: float = 0.0
 
 
 func _physical_update(delta: float) -> void:
+	_clock += delta
 	if _lh == null or _lh.rig != rig:
 		_lh = LineHand.new(rig)
 	_timer -= delta
@@ -277,8 +287,15 @@ func _physical_update(delta: float) -> void:
 		if alt > _best_alt + 0.5:
 			_best_alt = alt
 			_stall_time = 0.0
-		elif _state == State.CLIMB or rig.snagged:
+		elif _state == State.CLIMB or rig.snagged or (_state == State.HUNT and alt < 2.0):
 			_stall_time += delta
+		# Pipa parada com a linha frouxa = deitada num telhado/no chão: recolhe e solta de novo.
+		if rig.body.v.length() < 0.5 and rig.tension < 0.6:
+			_rest_time += delta
+		else:
+			_rest_time = 0.0
+		if _rest_time > 6.0:
+			_recovering = true
 		if _stall_time > 12.0 or _recovering:
 			_recovering = true
 			reel = 4.0
@@ -318,7 +335,7 @@ func _physical_update(delta: float) -> void:
 				State.HUNT:
 					grip = _hunt_physical(alt)
 				State.ENGAGE:
-					var phase := fmod(Time.get_ticks_msec() / 1000.0 + float(get_instance_id() % 7), 1.8)
+					var phase := fmod(_clock + float(get_instance_id() % 7), 1.8)
 					if _style_release:
 						grip = 0.2 if phase < 1.1 else 1.0
 						if phase > 1.2 and _pull_timer <= 0.0:
@@ -352,7 +369,11 @@ func _hunt_physical(alt: float) -> float:
 		return grip
 	var b := rig.body
 	if alt < 8.0:
-		# Baixa demais: puxa para subir.
+		# Baixa com pouca linha: puxar só encurta e joga no chão — dá linha devagar
+		# (mão entreaberta) e deixa o vento levar a pipa para cima.
+		if rig.flying_length() < 18.0:
+			return 0.12 if rig.tension > 0.4 else 1.0
+		# Baixa com linha: puxa para subir.
 		if _pull_timer <= 0.0:
 			_lh.pull_line(0.5)
 			_pull_timer = 0.45
@@ -393,6 +414,8 @@ func _hunt_physical(alt: float) -> float:
 		grip = 0.3            # muito acima: dá linha (vai mais longe e desce)
 	if rig.flying_length() > _target_length * 1.6:
 		rig.reel_rate = 1.5
+	elif rig.flying_length() < _target_length * 0.7 and rig.tension > 0.8 and _pull_timer < 0.2:
+		grip = minf(grip, 0.3)   # puxou demais: devolve linha (volta ao comprimento dele)
 	return grip
 
 

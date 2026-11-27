@@ -39,7 +39,10 @@ var sail_pierce := 0
 var _prev_cap: Dictionary = {}    # idx -> [[s, sinal, dist], ...]
 var flips_ll := 0
 var _sail_watch := 0
-var rolled_ll := 0   # linhas paralelas rolando uma em volta da outra encostadas (permitido)
+var rolled_ll := 0
+var renormal_ll := 0
+var renormal_cap := 0
+var _prev_line_geo: Array = []   # sinal trocado só porque a normal dos trechos mudou (não atravessou)   # linhas paralelas rolando uma em volta da outra encostadas (permitido)
 var flips_cap := 0
 var box_ticks := 0
 var kite_in := 0
@@ -48,6 +51,7 @@ var near_cap := 0
 
 var _phase := 0
 var _give_mode := false
+var _n_bots := 2
 var _tapping := false
 var _tap_int := 0.25
 var _tap_clock := 0.0
@@ -71,13 +75,17 @@ func start(p_main) -> void:
 			seed = int(a.substr(7))
 		elif a == "--give":
 			_give_mode = true
+		elif a.begins_with("--trace="):
+			_trace_from = float(a.substr(8))
+		elif a.begins_with("--bots="):
+			_n_bots = int(a.substr(7))
 	_rng.seed = seed
 	if OS.get_cmdline_user_args().has("--flips"):
 		LineCombat.DEBUG_FLIPS = true
 	Wind.direction_wander_deg = 0.0
 	Wind.gust_strength = 0.15
 	obs = main.get_tree().get_first_node_in_group(&"street_builder").get("obstacles")
-	if _mode != "bots":
+	if _mode != "bots" and _mode != "combate":
 		for b in main.bots:
 			b.rig = null
 		main.bot.rig = null
@@ -85,10 +93,17 @@ func start(p_main) -> void:
 		_setup_wire()
 	elif _mode == "bots":
 		_setup_bots()
+	elif _mode == "combate":
+		_setup_combat()
 	else:
 		_setup_line()
 	hand = KiteHand.new(rig)
 	print("PASS: modo=%s dur=%.0f semente=%d" % [_mode, _dur, seed])
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--obsinfo="):
+			for id in a.substr(10).split(","):
+				var e: Array = obs.entries[int(id)]
+				print("PASS obst %s: %s" % [id, str(e)])
 
 
 func _tough(r: KiteRig) -> void:
@@ -114,6 +129,38 @@ func _setup_line() -> void:
 	bot.launch(_hand_b0, 40.0, 50.0, (_wd + _side * 0.25).normalized())
 	rig.hand_rest = _hand_a
 	bot.hand_rest = _hand_b0
+
+
+## Combate de verdade: a sua pipa já no ar (30 m) na rua, os vizinhos mais perto já no
+## ar caçando a sua linha com a IA deles; o piloto rela como gente (toques, puxadas
+## rápidas com dois dedos, dar linha). Linhas sem corte.
+func _setup_combat() -> void:
+	_wd = Wind.get_direction()
+	_side = _wd.cross(Vector3.UP).normalized()
+	_hand_a = main.player.global_position + Vector3(0.2, 1.18, -0.3)
+	rig.launch(_hand_a, 30.0, 52.0, _wd)
+	rig.hand_rest = _hand_a
+	_tough(rig)
+	var p0: Vector3 = main.player.global_position
+	var all: Array = main.bots.duplicate()
+	all.sort_custom(func(x, y) -> bool: return x.global_position.distance_to(p0) < y.global_position.distance_to(p0))
+	var kept := 0
+	for b in all:
+		if b.rig == null:
+			continue
+		if kept >= _n_bots:
+			b.set_physics_process(false)
+			b.rig.stow()
+			continue
+		kept += 1
+		_tough(b.rig)
+		b.rotation.y = atan2(-_wd.x, -_wd.z)
+		b.rig.launch(b.hand_rest(), _rng.randf_range(32.0, 42.0), 50.0, _wd)
+		b._hand = KiteHand.new(b.rig)
+		b._target_length = 40.0
+		b._best_alt = 99.0
+		b._state = BotFlyer.State.HUNT
+		print("PASS: vizinho %s a %.0f m" % [b.name, b.global_position.distance_to(p0)])
 
 
 ## Jogo de verdade: vizinhos com a IA deles atacando a sua pipa (linhas sem corte).
@@ -190,7 +237,7 @@ func _physics_process(delta: float) -> void:
 		_finish("pipa perdida")
 		return
 	_pilot(delta)
-	if _mode == "bots":
+	if _mode == "bots" or _mode == "combate":
 		for r in (main.physics_world as KitePhysicsWorld).rigs:
 			if r.line_type.toughness < 1.0e8:
 				_tough(r)
@@ -235,6 +282,9 @@ func _pilot(delta: float) -> void:
 		_tapping = _rng.randf() < 0.45
 		_tap_int = _rng.randf_range(0.18, 0.32)
 	var pulling := fmod(_t, 9.0) > 6.5
+	if rig.physical and _mode == "combate":
+		_pilot_relo(delta)
+		return
 	if rig.physical:
 		# Física real: só a mão na linha (toques alternando, puxar com o dedo, dar linha).
 		if _lh == null or _lh.rig != rig:
@@ -297,7 +347,83 @@ func _svals(r: Rope) -> PackedFloat32Array:
 	return s
 
 
+## Histórico curto (últimos ticks) dos contatos linha×linha e da topologia das linhas,
+## impresso quando o árbitro acha um cruzamento.
+var _hist: Array = []
+var _hist_geo: Dictionary = {}
+var crazy_ticks := 0
+var max_mv := 0.0
+func _record_hist() -> void:
+	var cw := (main.physics_world as KitePhysicsWorld).combat
+	var txt := "t=%.2f" % _t
+	for r in (main.physics_world as KitePhysicsWorld).rigs:
+		if r.rope != null:
+			var cur := _pts(r.rope)
+			var sv := _svals(r.rope)
+			var mv := 0.0
+			var mk := -1
+			var old: Array = _hist_geo.get(r, [])
+			if not old.is_empty():
+				for k in cur.size():
+					var dd := cur[k].distance_to(_closest_on(old[0], cur[k]))
+					if dd > mv:
+						mv = dd
+						mk = k
+			_hist_geo[r] = [cur, sv]
+			if mv > 1.5:
+				crazy_ticks += 1
+				_log("LINHA LOUCA %s t=%.2f %.1f m num tick (nó %d, presa=%s, n=%d)" % [r.display_name, _t, mv, mk, str(r.snagged), cur.size()])
+			max_mv = maxf(max_mv, mv)
+			txt += " %s:n%d L%.1f mv%.2f@%d%s%s" % [r.display_name.right(1), r.rope.pos.size(), r.flying_length(), mv, mk,
+				"(obst%d)" % r.rope.pin_obstacle[mk] if mk >= 0 and mk < r.rope.pos.size() and r.rope.pin_obstacle[mk] >= 0 else "",
+				" PRESA" if r.snagged else ""]
+	# Menor distância da sua linha a cada outra (e onde).
+	if rig.rope != null:
+		var pa0 := _pts(rig.rope)
+		for r in (main.physics_world as KitePhysicsWorld).rigs:
+			if r == rig or r.rope == null:
+				continue
+			var pb0 := _pts(r.rope)
+			var best := 99.0
+			var where := ""
+			for i in pa0.size() - 1:
+				for j in pb0.size() - 1:
+					var res := LineCombat.closest_segments(pa0[i], pa0[i + 1], pb0[j], pb0[j + 1])
+					if float(res[2]) < best:
+						best = res[2]
+						where = "%d/%d" % [i, j]
+			if best < 3.0:
+				txt += " d(%s)=%.2f@%s" % [r.display_name.right(1), best, where]
+	for c in cw.contacts:
+		if c.ia >= c.a.rope.segment_count() or c.ib >= c.b.rope.segment_count():
+			txt += " [fora]"
+			continue
+		var pa := c.a.rope.segment_points(c.ia)
+		var pb := c.b.rope.segment_points(c.ib)
+		var d: Vector3 = pb[0].lerp(pb[1], c.tb) - pa[0].lerp(pa[1], c.ta)
+		txt += " [%s%s%d/%d t%.2f/%.2f s%.1f/%.1f sep%.3f]" % ["H" if c.hooked else "", "X" if c.crossed else "", c.ia, c.ib, c.ta, c.tb,
+			c.a.rope.material_at(mini(c.ia, c.a.rope.segment_count() - 1), c.ta), c.b.rope.material_at(mini(c.ib, c.b.rope.segment_count() - 1), c.tb), d.dot(c.normal)]
+	_hist.append(txt)
+	if _hist.size() > 14:
+		_hist.pop_front()
+
+
+var _trace_from := -1.0
 func _referee() -> void:
+	LineCombat.DEBUG_TRACE = false
+	if _trace_from >= 0.0:
+		var pw := main.physics_world as KitePhysicsWorld
+		var on := _t + 0.034 >= _trace_from and _t < _trace_from + 0.1
+		LineCombat.DEBUG_TRACE = on and OS.get_cmdline_user_args().has("--tracecombat")
+		pw.debug_rope_rig = null
+		if on:
+			for r in pw.rigs:
+				if r.display_name.ends_with("2"):
+					pw.debug_rope_rig = r
+			print("FASE ---- fim do tick %.2f" % _t)
+	if LineCombat.DEBUG_TRACE:
+		print("TRACE ---- fim do tick %.2f" % _t)
+	_record_hist()
 	if not rig.is_flying():
 		return
 	var pa := _pts(rig.rope)
@@ -359,6 +485,16 @@ func _referee() -> void:
 							bestc = pp
 					for p in ([bestc] if not bestc.is_empty() else []):
 						if float(p[1]) != sgn and minf(float(p[2]), dist) < 0.35:
+							# Mesmo material nos dois ticks e a MESMA normal (a de agora): a
+							# normal vem do trecho da linha × eixo, e a linha dobrando num
+							# apoio troca de trecho (a normal troca de sinal sem atravessar).
+							if not _prev_line_geo.is_empty():
+								var nn := n.normalized()
+								var oa := _point_at(_prev_line_geo[0], _prev_line_geo[1], s)
+								var oc: Vector3 = WorldObstacles._axis_point(ca, cb, oa)[0]
+								if (oa - oc).dot(nn) * (q - ca.lerp(cb, u)).dot(nn) >= 0.0:
+									renormal_cap += 1
+									break
 							flips_cap += 1
 							_log("ATRAVESSOU linha×%s t=%.2f dist=%.3f s=%.1f trecho=%d/%d obst=%d contatos=%s" % [String(e[4]), _t, dist, s, i, pa.size() - 1, idx, _contacts_str(rig.rope)])
 							break
@@ -378,6 +514,7 @@ func _referee() -> void:
 								str(box.has_point(a)), str(box.has_point(b)), str(box), str(a), str(b), _contacts_str(rig.rope)])
 							break
 		_prev_cap = cur_cap
+		_prev_line_geo = [pa, sa]
 		# Diagnóstico: nó de contato dentro da própria caixa.
 		var rr := rig.rope
 		for k in rr.pos.size():
@@ -425,6 +562,10 @@ func _ref_pair(ra: KiteRig, rb: KiteRig) -> void:
 			# Perto das pipas a linha pode dar a volta pela ponta (laça no cabresto).
 			if qa.distance_to(ra.body.x) < 0.6 or qb.distance_to(rb.body.x) < 0.6:
 				continue
+			# Laçada: as duas linhas saem do MESMO ponto (o nó do cabresto) e giram uma em
+			# volta da outra ali sem atravessar — os 2 m de cada lado da laçada não contam.
+			if _near_hook(ra, rb, s_a_of(sa, i, ta), s_a_of(sb, j, tb)):
+				continue
 			var ea := pa[i + 1] - pa[i]
 			var eb := pb[j + 1] - pb[j]
 			var n := ea.cross(eb)
@@ -447,6 +588,21 @@ func _ref_pair(ra: KiteRig, rb: KiteRig) -> void:
 				var flip := false
 				if sgn != 0.0 and float(p[2]) != 0.0:
 					flip = float(p[2]) != sgn and minf(float(p[3]), dist) < 0.35
+					if flip:
+						# Confere no MESMO material dos dois ticks e na MESMA normal (a de
+						# agora): a normal de cada tick vem dos trechos mais próximos, e numa
+						# linha que dobra num apoio (fio, quina) o trecho muda e a normal
+						# troca de sinal sem nada ter atravessado.
+						var geo2: Array = _prev_geo.get(key, [])
+						if not geo2.is_empty():
+							var nn := n.normalized()
+							var oa := _point_at(geo2[0], geo2[1], s_a)
+							var ob := _point_at(geo2[2], geo2[3], s_b)
+							var old_side := (ob - oa).dot(nn)
+							var now_side := d.dot(nn)
+							if old_side * now_side >= 0.0:
+								flip = false
+								renormal_ll += 1
 				else:
 					# Quase paralelas: o vetor de separação virou mais de 120° num tick.
 					# Mede no MESMO ponto de material da linha A nos dois ticks (o ponto
@@ -463,11 +619,12 @@ func _ref_pair(ra: KiteRig, rb: KiteRig) -> void:
 					if flip:
 						# Atravessar = passar uma pela outra. Rolar em volta da outra
 						# encostada (é assim que uma linha enrosca na outra) mantém a
-						# folga do contato (3 mm) no caminho todo: isso não conta.
+						# folga do contato (3 mm) no caminho todo: isso não conta. Atravessar
+						# = os centros chegarem a menos de 1 mm (a espessura da linha).
 						var ch := dn - dp
 						var lam := clampf(-dp.dot(ch) / maxf(ch.length_squared(), 1e-12), 0.0, 1.0)
 						var pass_min := (dp + ch * lam).length()
-						if pass_min >= 0.002:
+						if pass_min >= 0.001:   # 1 mm = espessura da linha: menos que isso, sobrepõe
 							flip = false
 							rolled_ll += 1
 						else:
@@ -478,11 +635,30 @@ func _ref_pair(ra: KiteRig, rb: KiteRig) -> void:
 					var dbg := []
 					for cc in (main.physics_world as KitePhysicsWorld).combat.contacts:
 						dbg.append("[%s%s s=%.1f/%.1f %d/%d t=%.2f/%.2f F=%.2f]" % ["H" if cc.hooked else "", "X" if cc.crossed else "", cc.a.rope.material_at(cc.ia, cc.ta), cc.b.rope.material_at(cc.ib, cc.tb), cc.ia, cc.ib, cc.ta, cc.tb, cc.force])
+					for hl in _hist:
+						print("PASS      hist " + str(hl))
 					_log("   contatos: %s · obst A=%d B=%d · presa A=%s B=%s · enganches=%d · segA %d/%d segB %d/%d" % [" ".join(dbg), ra.rope.contact_count(), rb.rope.contact_count(), str(ra.snagged), str(rb.snagged), (main.physics_world as KitePhysicsWorld).grabs.grabs.size(), i, pa.size(), j, pb.size()])
 					break
 			cur.append([s_a, s_b, sgn, dist, d])
 	_prev_ll[key] = cur
 	_prev_geo[key] = [pa, sa, pb, sb]
+
+
+static func s_a_of(sv: PackedFloat32Array, i: int, t: float) -> float:
+	return lerpf(sv[i], sv[i + 1], t)
+
+
+func _near_hook(ra: KiteRig, rb: KiteRig, s_a: float, s_b: float) -> bool:
+	for c in (main.physics_world as KitePhysicsWorld).combat.contacts:
+		if not c.hooked:
+			continue
+		if c.a == ra and c.b == rb:
+			if absf(c.s_a - s_a) < 2.0 or absf(c.s_b - s_b) < 2.0:
+				return true
+		elif c.a == rb and c.b == ra:
+			if absf(c.s_b - s_a) < 2.0 or absf(c.s_a - s_b) < 2.0:
+				return true
+	return false
 
 
 ## Ponto da linha na coordenada de material `s`.
@@ -508,6 +684,55 @@ static func _closest_on(pts: PackedVector3Array, q: Vector3) -> Vector3:
 			bd = dd
 			best = c
 	return best
+
+
+## Piloto do combate: ciclos de ~4 s escolhidos ao acaso entre desbicar no ritmo,
+## puxar rápido (um ou dois dedos, 3–5,5 m/s), dar linha (mão entreaberta ou aberta)
+## e relar (dar linha e puxar alternando) — o que se faz de verdade no cruzamento.
+var _relo_mode := 0
+var _relo_until := 0.0
+var _relo_clock := 0.0
+func _pilot_relo(delta: float) -> void:
+	if _lh == null or _lh.rig != rig:
+		_lh = LineHand.new(rig)
+	if _t >= _relo_until:
+		_relo_until = _t + _rng.randf_range(2.0, 5.0)
+		_relo_mode = _rng.randi() % 5
+		_tap_int = _rng.randf_range(0.2, 0.6)
+		_relo_clock = 0.0
+	_relo_clock += delta
+	_tap_clock += delta
+	var grip := 1.0
+	_lh.pull_fingers = 1
+	match _relo_mode:
+		0:  # desbico no ritmo
+			if _tap_clock >= _tap_int:
+				_tap_clock = 0.0
+				_lh.tap()
+		1:  # puxada rápida com dois dedos
+			_lh.pull_fingers = 2
+			if fmod(_relo_clock, 0.1) < delta:
+				_lh.pull_line(0.6)
+		2:  # dar linha (entreaberta), às vezes aberta
+			grip = 0.25 if fmod(_relo_clock, 2.0) < 1.4 else 0.0
+		3:  # relo: dá linha e puxa, alternando
+			if fmod(_relo_clock, 1.2) < 0.6:
+				grip = 0.2
+			elif fmod(_relo_clock, 0.12) < delta:
+				_lh.pull_line(0.4)
+		4:  # toques + puxada (direciona e puxa)
+			if _tap_clock >= 0.7:
+				_tap_clock = 0.0
+				_lh.tap()
+				_lh.tap(0.2)
+			elif fmod(_relo_clock, 0.15) < delta and fmod(_relo_clock, 2.0) > 1.0:
+				_lh.pull_line(0.45)
+	if rig.flying_length() > 70.0:
+		grip = 1.0
+	if rig.flying_length() < 12.0:
+		grip = 0.25
+	rig.hand_rest = _hand_a
+	_lh.update(delta, grip, 0.0)
 
 
 ## Linha de `other` furando a vela da pipa de `owner` sem estar laçada.
@@ -558,7 +783,7 @@ func _log(s: String) -> void:
 
 
 func _finish(why: String) -> void:
-	print("PASS resumo modo=%s: linha×linha=%d furou_pipa=%d linha×obst=%d linha_em_caixa=%d pipa_dentro=%d encostes(ll=%d obst=%d) rolou_encostada=%d linha=%.1f (%s)" % [
-		_mode, flips_ll, sail_pierce, flips_cap, box_ticks, kite_in, near_ll, near_cap, rolled_ll, rig.flying_length() if rig.rope else 0.0, why])
+	print("PASS resumo modo=%s: linha×linha=%d furou_pipa=%d linha×obst=%d linha_em_caixa=%d pipa_dentro=%d encostes(ll=%d obst=%d) rolou_encostada=%d normal_trocou=%d/%d linha_louca=%d (máx %.1f m/tick) linha=%.1f (%s)" % [
+		_mode, flips_ll, sail_pierce, flips_cap, box_ticks, kite_in, near_ll, near_cap, rolled_ll, renormal_ll, renormal_cap, crazy_ticks, max_mv, rig.flying_length() if rig.rope else 0.0, why])
 	set_physics_process(false)
 	get_tree().quit()

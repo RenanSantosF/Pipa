@@ -202,6 +202,48 @@ func snapshot_frame() -> void:
 	_tether_ok = contact_count() == 0
 
 
+## Guarda contra "pulos" de topologia: tirar um nó faz a linha pular para a corda
+## entre os vizinhos; pôr um nó fora da reta (quina de telhado) faz ela pular para lá.
+## Esse pulo não é movimento — a detecção contínua do contato não o vê — e podia
+## jogar a linha através de outra. O mundo da física preenche com o teste do
+## triângulo varrido contra as outras linhas: (rope, a, b, c) -> livre?
+static var jump_guard: Callable = Callable()
+## Muda a cada nó inserido/removido (os contatos se relocalizam pelo material).
+var topo: int = 0
+
+
+func _jump_clear(a: Vector3, b: Vector3, c: Vector3) -> bool:
+	if not jump_guard.is_valid():
+		return true
+	return jump_guard.call(self, a, b, c)
+
+
+## Dá para tirar o nó i sem a linha pular através de outra linha?
+func can_remove_node(i: int) -> bool:
+	if i <= 0 or i >= pos.size():
+		return false
+	if i + 1 >= pos.size() and end_body == null:
+		return true   # ponta solta: só encurta
+	var c := pos[i + 1] if i + 1 < pos.size() else end_point()
+	return _jump_clear(pos[i - 1], pos[i], c)
+
+
+## Dá para pôr um nó em p entre os nós i-1 e i sem a linha pular através de outra?
+func can_insert_node(i: int, p: Vector3) -> bool:
+	if i <= 0:
+		return true
+	var c := pos[i] if i < pos.size() else end_point()
+	return _jump_clear(pos[i - 1], p, c)
+
+
+## Dá para levar o nó j até p sem a linha varrer outra linha no caminho?
+func can_move_node(j: int, p: Vector3) -> bool:
+	if j <= 0 or j >= pos.size():
+		return false
+	var c := pos[j + 1] if j + 1 < pos.size() else end_point()
+	return _jump_clear(pos[j - 1], pos[j], p) and _jump_clear(pos[j], p, c)
+
+
 ## Insere um nó no índice i (entre i-1 e o antigo i). Mantém todos os arrays.
 func insert_node(i: int, p: Vector3, v: Vector3, rest_before: float, rest_after: float) -> void:
 	pos.insert(i, p)
@@ -218,6 +260,7 @@ func insert_node(i: int, p: Vector3, v: Vector3, rest_before: float, rest_after:
 		frame_pos.insert(i, p)
 	rest[i - 1] = rest_before
 	rest.insert(i, rest_after)
+	topo += 1
 	_rebuild_masses()
 
 
@@ -240,6 +283,7 @@ func remove_node(i: int) -> void:
 	c_hold.remove_at(i)
 	if frame_pos.size() == pos.size() + 1:
 		frame_pos.remove_at(i)
+	topo += 1
 	_rebuild_masses()
 
 
@@ -274,7 +318,10 @@ func _rebuild_masses() -> void:
 			l += rest[i] * 0.5
 		if i > 0:
 			l += rest[i - 1] * 0.5
-		var m := maxf(type.mass_per_meter * l, 0.00005)
+		# Nó nenhum mais leve que 1 m de linha: nós de apoio (fio, quina de telhado)
+		# criam trechos de poucos cm, e um nó de 0,05 g preso a vizinhos 20× mais
+		# pesados levava trancos de metros por subpasso (a linha "enlouquecia").
+		var m := maxf(type.mass_per_meter * l, type.mass_per_meter * MIN_NODE_MASS_LEN)
 		inv_mass[i] = 1.0 / m
 	if hand_fixed and n > 0:
 		inv_mass[0] = 0.0
@@ -301,10 +348,34 @@ func _update_material_coords() -> void:
 			mat_s[i] = s
 
 
+## Força máxima da mão puxando (N): com a linha já tão tensa (pipa presa no fio, linha
+## apoiada no telhado), a linha não vem — a mão escorrega nela. Sem isso, recolher com
+## a pipa presa encurtava a linha abaixo do caminho dela e o solver arremessava os nós
+## (a linha "enlouquecia" e atravessava tudo). Puxada normal fica em 5–15 N.
+const MAX_PULL_TENSION := 25.0
+## Trava geométrica de segurança: o trecho da mão esticado além disso também não puxa.
+const MAX_PULL_STRAIN := 0.25
+## Massa mínima de um nó, em metros de linha.
+const MIN_NODE_MASS_LEN := 1.0
+## Velocidade máxima de um nó da linha nas restrições (m/s). Linha de pipa de verdade
+## não passa disso nem chicoteando; acima disso é o solver brigando (trecho esticado
+## além do caminho, nó de apoio preso) — e um nó voando atravessa o que estiver na
+## frente. Limitar segura a briga sem mudar o voo normal.
+const MAX_NODE_SPEED := 30.0
+
+
 ## Linha entrando (+) ou saindo (−) pela mão. Mantém o material do resto da linha.
 func feed(delta_len: float) -> void:
 	if pos.size() < 2 or not hand_fixed:
 		return
+	if delta_len < 0.0:
+		if tension_hand > MAX_PULL_TENSION:
+			return
+		var l0 := pos[0].distance_to(pos[1])
+		var min_rest := l0 / (1.0 + MAX_PULL_STRAIN)
+		delta_len = maxf(delta_len, minf(min_rest - rest[0], 0.0))
+		if delta_len == 0.0:
+			return
 	rest[0] = maxf(rest[0] + delta_len, 0.02)
 	# Insere nós perto da mão quando o primeiro segmento fica longo.
 	while rest[0] > segment_target * 1.5:
@@ -320,6 +391,8 @@ func feed(delta_len: float) -> void:
 	# Recolhendo: o trecho junto da mão sai de qualquer contato (a mão puxa a linha
 	# de cima do telhado/galho) e o nó é absorvido.
 	while rest[0] < segment_target * 0.4 and pos.size() > min_nodes:
+		if not can_remove_node(1):
+			break   # outra linha no caminho do pulo: espera ela sair
 		if pin_obstacle[1] >= 0:
 			clear_contact(1)
 		remove_node(1)
@@ -330,7 +403,7 @@ func feed(delta_len: float) -> void:
 func _coarsen() -> void:
 	var i := 2
 	while i < pos.size() - 1:
-		if pinned[i] == 0 and pin_obstacle[i] < 0:
+		if pinned[i] == 0 and pin_obstacle[i] < 0 and can_remove_node(i):
 			remove_node(i)
 		i += 1
 	segment_target *= 2.0
@@ -392,11 +465,24 @@ func predict(h: float) -> void:
 	_lam_tether = 0.0
 
 
+static var dbg_rope: Rope = null
+func _dbg(tag: String, p0: PackedVector3Array) -> void:
+	var mv := 0.0
+	var mk := -1
+	for k in mini(p0.size(), pos.size()):
+		if pos[k].distance_to(p0[k]) > mv:
+			mv = pos[k].distance_to(p0[k])
+			mk = k
+	if mv > 0.2:
+		print("FASE    rope.%s: %.2f no nó %d (obst %d) comprimentos %s" % [tag, mv, mk, pin_obstacle[mk], str([rest[maxi(mk - 1, 0)], rest[mini(mk, rest.size() - 1)], pos[mk].distance_to(pos[maxi(mk - 1, 0)]), pos[mk].distance_to(pos[mini(mk + 1, pos.size() - 1)])])])
+
+
 func solve(h: float) -> void:
 	var n := pos.size()
 	var seg_n := segment_count()
 	var inv_h2 := 1.0 / (h * h)
 	var ea := type.axial_stiffness
+	var dbg0 := pos.duplicate() if dbg_rope == self else PackedVector3Array()
 	# Varredura mão→pipa e, com física mais lenta (30 Hz), também pipa→mão: os nós
 	# da linha são muito mais leves que a pipa, e uma varredura só deixa o tranco da
 	# mão "morrer" na linha (a linha estica em vez de puxar a pipa).
@@ -407,6 +493,16 @@ func solve(h: float) -> void:
 		else:
 			for i in range(seg_n - 1, -1, -1):
 				_solve_segment(i, n, inv_h2, ea)
+	var dmax := MAX_NODE_SPEED * h
+	var dmax2 := dmax * dmax
+	for i in range(1, n):
+		if inv_mass[i] <= 0.0:
+			continue
+		var dsp := pos[i] - prev[i]
+		if dsp.length_squared() > dmax2:
+			pos[i] = prev[i] + dsp.normalized() * dmax
+	if dbg_rope == self:
+		_dbg("segmentos", dbg0)
 	# Alcance (long-range attachment): a pipa nunca fica mais longe da mão do que o
 	# comprimento da linha (+ elasticidade). Os nós da linha são ~80× mais leves que
 	# a pipa e o solver em cadeia converge devagar: sem isto a linha "esticava" 20–30%
@@ -437,8 +533,11 @@ func solve(h: float) -> void:
 	if seg_n > 0:
 		_lam_hand_sum += lam[0] + _lam_tether
 		_lam_end_sum += lam[seg_n - 1] + _lam_tether
+	var dbg1 := pos.duplicate() if dbg_rope == self else PackedVector3Array()
 	if obstacles != null:
 		obstacles.solve_contacts(self)
+	if dbg_rope == self:
+		_dbg("cenário", dbg1)
 	if _lam_sum.size() != seg_n:
 		_lam_sum.resize(seg_n)
 		_lam_sum.fill(0.0)

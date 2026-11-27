@@ -35,13 +35,19 @@ const REEL_HARD_TENSION := 25.0
 ## interrompido pelo próximo toque), tempo do balanço (s), força do cabresto (×) e quanto
 ## tempo o rumo fica segurado sem mexer (s). Por tamanho [P, M, G] o tempo é escalado.
 static var DESB_ANGLE_DEG := 110.0
-static var DESB_TIME := 0.22
+static var DESB_TIME := 0.5
 static var DESB_FORCE := 1.0
-static var DESB_HOLD := 1.8
+static var DESB_HOLD := 1.4
+## Os últimos DESB_FADE s do "segurar o rumo" vão soltando aos poucos (ela começa a
+## voltar para cima com a rabiola, sem tranco). Mão aberta (descarregando) solta logo.
+const DESB_FADE := 0.8
+## Força mínima do cabresto com a linha frouxa (N): quase nada — linha sem tração
+## não vira a pipa.
+const DESB_AUTH_FLOOR := 0.2
 const DESB_TIME_BY_SIZE := [0.75, 1.0, 1.35]
 const DESB_SEQ_RESET := 0.5
 
-static var DESB_WN := 16.0
+static var DESB_WN := 20.0
 const DESB_ZETA := 0.95
 ## Braço da perna do cabresto (m): torque máximo = tração × braço (pipa M).
 const DESB_ARM := 0.13
@@ -54,6 +60,7 @@ var desb_count: int = 0
 var _desb_tau: float = 0.3
 var _desb_until: float = -10.0
 var _desb_clock: float = 0.0
+var _desb_open: float = 0.0
 
 
 ## Um toque de desbico (chamado pela mão quando a puxadinha acontece).
@@ -91,6 +98,15 @@ func _desbico_substep(h: float) -> void:
 		desb_active = false
 		body.ext_torque = Vector3.ZERO
 		return
+	# Mão aberta (dando linha/descarregando): o cabresto não segura nada.
+	if grip < 0.4:
+		_desb_open += h
+		if _desb_open > 0.15:
+			desb_active = false
+			body.ext_torque = Vector3.ZERO
+			return
+	else:
+		_desb_open = 0.0
 	desb_hold = wrapf(desb_hold + desb_rate * h, -PI, PI)
 	desb_rate *= exp(-h / _desb_tau)
 	var d := body.x - hand_position()
@@ -102,12 +118,13 @@ func _desbico_substep(h: float) -> void:
 	var wd := body.w.dot(d)
 	var i_d := body.inertia.z * 3.0
 	var tq := i_d * (DESB_WN * DESB_WN * err + 2.0 * DESB_ZETA * DESB_WN * (desb_rate - wd))
-	var auth := DESB_ARM * DESB_FORCE * (profile.height / 0.65) * (rope.tension_end + 1.0)
-	body.ext_torque = d * clampf(tq, -auth, auth)
+	var fade := clampf((_desb_until - _desb_clock) / DESB_FADE, 0.0, 1.0)
+	var auth := DESB_ARM * DESB_FORCE * (profile.height / 0.65) * (rope.tension_end + DESB_AUTH_FLOOR) * fade
+	body.ext_torque = d * clampf(tq * fade, -auth, auth)
 
 
 ## Amortecimento residual de rotação da pipa física (balanços do desbico claros).
-static var ROT_DAMP_PHYSICAL := 0.4
+static var ROT_DAMP_PHYSICAL := 1.2
 ## Comprimento da rabiola na pipa física (× o do perfil), por rabiola [curta, média,
 ## grande]. Na física real é a rabiola que segura a pipa: a curta do perfil (55%)
 ## deixava a pipinha e a média instáveis (davam looping e caíam).
@@ -477,6 +494,7 @@ func pre_frame(dt: float) -> void:
 		if physical:
 			# Física real: nenhum atuador artificial chega na pipa, venha de onde vier
 			# (a mão antiga ainda escreve esses campos em sondas e no teste de combate).
+			body.rot_damp_scale = ROT_DAMP_PHYSICAL   # barra "Calma" vale na hora
 			body.sail_asym = 0.0
 			body.spin_bias = 0.0
 			body.steer_dir = Vector3.ZERO

@@ -52,18 +52,33 @@ func _physics_process(dt: float) -> void:
 	combat.detect(rigs)
 	grabs.detect(rigs)
 	for _i in sub:
+		var dbg_r: KiteRig = debug_rope_rig if is_instance_valid(debug_rope_rig) and debug_rope_rig.rope != null else null
+		Rope.dbg_rope = dbg_r.rope if dbg_r else null
+		var dbg0 := dbg_r.rope.pos.duplicate() if dbg_r else PackedVector3Array()
 		for r in rigs:
 			r.predict(h)
+		if dbg_r:
+			_dbg_phase("predict", dbg_r, dbg0)
 		for r in rigs:
 			r.solve(h)
 			r.pushed_by_line = false
+		if dbg_r:
+			_dbg_phase("solve", dbg_r, dbg0)
 		# Enganches antes do contato linha × linha: o contato tem a palavra final (um
 		# enganche puxando a linha não pode arrastá-la através de outra linha).
 		grabs.solve(h)
 		combat.solve(h)
+		if dbg_r:
+			_dbg_phase("contato", dbg_r, dbg0)
 		# O cenário é rígido: depois do empurra-empurra entre linhas, os nós apoiados
 		# em fio/poste/telhado voltam para fora (uma linha não empurra a outra para
 		# dentro da casa).
+		if LineCombat.DEBUG_TRACE:
+			for c in combat.contacts:
+				if c.ia < c.a.rope.segment_count() and c.ib < c.b.rope.segment_count():
+					var qa := c.a.rope.segment_points(c.ia)
+					var qb := c.b.rope.segment_points(c.ib)
+					print("TRACE   depois do contato sep=%.3f" % (qb[0].lerp(qb[1], c.tb) - qa[0].lerp(qa[1], c.ta)).dot(c.normal))
 		for r in rigs:
 			if r.rope != null and r.rope.obstacles != null and r.pushed_by_line:
 				r.rope.obstacles.solve_contacts(r.rope)
@@ -74,8 +89,30 @@ func _physics_process(dt: float) -> void:
 					var po := r.rope.obstacles.kite_push_out(r.body.x, r.flight.kite_radius())
 					if po != r.body.x:
 						r.body.x = po
+				elif r.body != null and not r.snagged and not r.held:
+					# Pipa física: sólida para o MESMO cenário da linha (casas, fios,
+					# postes). Só com o colisor do Godot ela podia parar dentro da laje do
+					# telhado que a linha enxerga — e a linha entrava junto com ela.
+					var rad := maxf(r.profile.height * 0.32, 0.14)
+					var po2 := r.rope.obstacles.kite_push_out(r.body.x, rad)
+					if po2 != r.body.x:
+						var nrm := (po2 - r.body.x).normalized()
+						r.body.x = po2
+						var vn := r.body.v.dot(nrm)
+						if vn < 0.0:
+							r.body.v -= nrm * vn
+		if LineCombat.DEBUG_TRACE:
+			for c in combat.contacts:
+				if c.ia < c.a.rope.segment_count() and c.ib < c.b.rope.segment_count():
+					var qa := c.a.rope.segment_points(c.ia)
+					var qb := c.b.rope.segment_points(c.ib)
+					print("TRACE   depois do cenário sep=%.3f" % (qb[0].lerp(qb[1], c.tb) - qa[0].lerp(qa[1], c.ta)).dot(c.normal))
+		if dbg_r:
+			_dbg_phase("cenário", dbg_r, dbg0)
 		for r in rigs:
 			r.finalize(h)
+		if dbg_r:
+			_dbg_phase("final", dbg_r, dbg0)
 	combat.post_frame(dt, h, sub)
 	# A linha que encostou na pipa neste tick já laça agora (não no tick seguinte).
 	combat.detect_kites(rigs)
@@ -84,8 +121,12 @@ func _physics_process(dt: float) -> void:
 	var tw := Time.get_ticks_usec()
 	_collide_with_world()
 	world_ms = float(Time.get_ticks_usec() - tw) / 1000.0
+	var dbg_post: KiteRig = debug_rope_rig if is_instance_valid(debug_rope_rig) and debug_rope_rig.rope != null else null
+	var dbg_p0 := dbg_post.rope.pos.duplicate() if dbg_post else PackedVector3Array()
 	for r in rigs:
 		r.post_frame(dt, h)
+	if dbg_post and dbg_post.rope != null:
+		_dbg_phase("pós-tick(n%d→%d)" % [dbg_p0.size(), dbg_post.rope.pos.size()], dbg_post, dbg_p0)
 	# Cortes por atrito (quem cortou = dono da outra linha do contato).
 	for req in combat.cut_requests:
 		var loser: KiteRig = req[0]
@@ -228,6 +269,21 @@ func _grab_events(collected: Array) -> void:
 
 
 ## Contato mais forte agora (para som/vibração/HUD).
+## Depuração: mostra quanto cada fase do subpasso mexe na linha desta pipa.
+var debug_rope_rig: KiteRig = null
+func _dbg_phase(phase: String, r: KiteRig, p0: PackedVector3Array) -> void:
+	var mv := 0.0
+	var mk := -1
+	for k in mini(p0.size(), r.rope.pos.size()):
+		var d := r.rope.pos[k].distance_to(p0[k])
+		if d > mv:
+			mv = d
+			mk = k
+	if mv > 0.3:
+		print("FASE %s: %.2f m no nó %d/%d (obst=%d pin=%d m⁻¹=%.1f rest=%.2f/%.2f)" % [phase, mv, mk, r.rope.pos.size(), r.rope.pin_obstacle[mk], r.rope.pinned[mk], r.rope.inv_mass[mk],
+			r.rope.rest[mk - 1] if mk > 0 else -1.0, r.rope.rest[mk] if mk < r.rope.rest.size() else -1.0])
+
+
 func strongest_contact_for(rig: KiteRig) -> LineCombat.Contact:
 	var best: LineCombat.Contact = null
 	for c in combat.contacts:

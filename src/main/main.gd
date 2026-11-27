@@ -120,6 +120,8 @@ func _ready() -> void:
 			seed(int(a.substr(7)))
 		elif a.begins_with("--quality="):
 			GameConfig.apply_quality(int(a.substr(10)))
+	# O vizinho da cena ficou pronto antes desta semente: re-semeia (testes reproduzíveis).
+	bot.reseed(randi())
 	var street: StreetBuilder = $World/StreetBuilder
 	player.global_position = street.spawn_point
 	var z0 := street.spawn_point.z

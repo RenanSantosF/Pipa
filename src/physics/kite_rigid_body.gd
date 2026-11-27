@@ -29,6 +29,18 @@ var profile: KiteProfile
 var mass: float = 0.03
 var inertia := Vector3.ONE
 var inv_inertia := Vector3.ONE
+## MASSA ADICIONAL do ar (v0.22): a vela não acelera sem acelerar junto o ar em volta
+## dela — numa placa de 65 cm isso é várias vezes o peso do papel. Entra na INÉRCIA
+## (translação e giro de arfagem/rolagem), não no PESO: a pipa fica mais pesada e
+## mais lenta de mexer, sem voar mais baixa. Em volta da normal da vela (o eixo do
+## desbico) quase não arrasta ar.
+static var ADDED_MASS := 1.0
+static var ADDED_INERTIA := 1.2
+const ADDED_INERTIA_NORMAL := 0.25
+var _base_inertia := Vector3.ONE
+var _added_key := -1.0
+## Massa que resiste à aceleração (papel + ar arrastado). O peso usa `mass`.
+var inertial_mass: float = 0.03
 
 var x := Vector3.ZERO           ## centro de massa (mundo)
 var v := Vector3.ZERO
@@ -117,8 +129,8 @@ func _init(p: KiteProfile) -> void:
 	var h := p.height
 	var wd := p.width
 	# Losango: a maior parte da massa está nas varetas (espinha + 2 travessas).
-	inertia = Vector3(mass * h * h / 18.0 + 0.00008, mass * wd * wd / 16.0 + 0.00008, mass * (h * h / 18.0 + wd * wd / 16.0) + 0.0001)
-	inv_inertia = Vector3(1.0 / inertia.x, 1.0 / inertia.y, 1.0 / inertia.z)
+	_base_inertia = Vector3(mass * h * h / 18.0 + 0.00008, mass * wd * wd / 16.0 + 0.00008, mass * (h * h / 18.0 + wd * wd / 16.0) + 0.0001)
+	_update_added()
 	# Pipa brasileira (foto de referência): a vareta passa ACIMA do papel (cabeça),
 	# a travessa envergada é a borda de cima do papel, os lados descem quase retos
 	# até os "ombros" e fecham em V na ponta de baixo. Da cabeça saem linhas até as
@@ -217,17 +229,17 @@ func mul_inv_inertia(vec: Vector3) -> Vector3:
 ## Massa inversa generalizada de um ponto (offset r) na direção n.
 func inverse_mass_at(r: Vector3, n: Vector3) -> float:
 	if kinematic:
-		return 1.0 / mass
+		return 1.0 / inertial_mass
 	var rn := r.cross(n)
-	return 1.0 / mass + rn.dot(mul_inv_inertia(rn))
+	return 1.0 / inertial_mass + rn.dot(mul_inv_inertia(rn))
 
 
 ## Correção posicional XPBD aplicada num ponto do corpo.
 func apply_correction(r: Vector3, corr: Vector3) -> void:
 	if kinematic:
-		x += corr / mass
+		x += corr / inertial_mass
 		return
-	x += corr / mass
+	x += corr / inertial_mass
 	var dw := mul_inv_inertia(r.cross(corr))
 	q = (q + Quaternion(dw.x, dw.y, dw.z, 0.0) * q * 0.5).normalized()
 
@@ -374,8 +386,21 @@ func add_torque(t: Vector3) -> void:
 	_torque += t
 
 
+## Inércia efetiva com a massa adicional do ar (recalcula se as barras mudarem).
+func _update_added() -> void:
+	var key := ADDED_MASS * 1000.0 + ADDED_INERTIA
+	if key == _added_key:
+		return
+	_added_key = key
+	inertial_mass = mass * (1.0 + ADDED_MASS)
+	inertia = Vector3(_base_inertia.x * (1.0 + ADDED_INERTIA), _base_inertia.y * (1.0 + ADDED_INERTIA),
+		_base_inertia.z * (1.0 + ADDED_INERTIA * ADDED_INERTIA_NORMAL))
+	inv_inertia = Vector3(1.0 / inertia.x, 1.0 / inertia.y, 1.0 / inertia.z)
+
+
 ## Predição do subpasso (integração explícita das forças).
 func predict(h: float) -> void:
+	_update_added()
 	_x_prev = x
 	_q_prev = q
 	if kinematic:
@@ -384,7 +409,7 @@ func predict(h: float) -> void:
 		var kf := minf(h / FLEX_TAU, 1.0)
 		for i in 2:
 			flex[i] += (_half_normal_force[i] * flex_per_n - flex[i]) * kf
-	v += _force / mass * h
+	v += _force / inertial_mass * h
 	w += mul_inv_inertia(_torque) * h
 	if _roll_k > 0.0:
 		var spine: Vector3 = q * Vector3.UP

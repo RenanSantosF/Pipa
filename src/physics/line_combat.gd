@@ -19,6 +19,7 @@ extends RefCounted
 ## mas é checado a cada subpasso — por isso as linhas não "pulam" uma pela outra
 ## entre dois quadros.
 static var DEBUG_FLIPS := false
+static var DEBUG_TRACE := false
 const DETECT_RADIUS := 0.7
 const RELEASE_DISTANCE := 1.0
 const CONTACT_GAP := 0.003
@@ -59,6 +60,13 @@ class Contact:
 	var crossed: bool = false
 	## Encostadas de verdade no último tick (o contato especulativo existe antes).
 	var touching: bool = false
+	## Material do ponto de contato e versão da topologia das linhas quando foi visto:
+	## se uma linha ganhou/perdeu nós, o contato volta para o mesmo ponto do material
+	## (o número do trecho mudou).
+	var s_a: float = 0.0
+	var s_b: float = 0.0
+	var topo_a: int = -1
+	var topo_b: int = -1
 
 
 var contacts: Array[Contact] = []
@@ -69,6 +77,67 @@ var _prev_pts: Dictionary = {}
 const CROSS_RADIUS := 2.0
 ## Pedidos de corte do último tick: [rig, s_material].
 var cut_requests: Array = []
+
+
+## Pipas do último detect (para a guarda de pulos de topologia).
+var _guard_rigs: Array[KiteRig] = []
+
+
+func _init() -> void:
+	Rope.jump_guard = jump_clear
+
+
+## A linha `rope` vai pular da corda a–c para a–b–c (ou o contrário): o triângulo
+## varrido corta alguma outra linha? Então não pode (ela atravessaria).
+func jump_clear(rope: Rope, a: Vector3, b: Vector3, c: Vector3) -> bool:
+	var tri := AABB(a, Vector3.ZERO).expand(b).expand(c).grow(0.01)
+	for r in _guard_rigs:
+		if not _has_line(r) or r.rope == rope:
+			continue
+		var pts := _rope_points(r.rope)
+		if not tri.intersects(_aabb(pts, 0, pts.size() - 1)):
+			continue
+		for k in pts.size() - 1:
+			var p := pts[k]
+			var q := pts[k + 1]
+			if not tri.intersects(AABB(p, Vector3.ZERO).expand(q)):
+				continue
+			if _seg_hits_tri(p, q, a, b, c):
+				return false
+	return true
+
+
+## Segmento p–q atravessa o triângulo a–b–c? (Möller–Trumbore)
+static func _seg_hits_tri(p: Vector3, q: Vector3, a: Vector3, b: Vector3, c: Vector3) -> bool:
+	var e1 := b - a
+	var e2 := c - a
+	var d := q - p
+	var hv := d.cross(e2)
+	var det := e1.dot(hv)
+	if absf(det) < 1e-12:
+		return false
+	var f := 1.0 / det
+	var sv := p - a
+	var u := f * sv.dot(hv)
+	if u < 0.0 or u > 1.0:
+		return false
+	var qv := sv.cross(e1)
+	var v := f * d.dot(qv)
+	if v < 0.0 or u + v > 1.0:
+		return false
+	var t := f * e2.dot(qv)
+	return t >= 0.0 and t <= 1.0
+
+
+## Trecho (e fração) da linha onde fica o ponto de material `s`.
+static func _seg_at_s(r: Rope, s: float) -> Vector2:
+	var n := r.segment_count()
+	for i in n:
+		var s0 := r.material_at(i, 0.0)
+		var s1 := r.material_at(i, 1.0)
+		if (s - s0) * (s - s1) <= 0.0:
+			return Vector2(i, (s - s0) / (s1 - s0) if absf(s1 - s0) > 1e-6 else 0.0)
+	return Vector2(0, 0.0) if s > r.material_at(0, 0.0) else Vector2(n - 1, 1.0)
 
 
 func clear_for(rig: KiteRig) -> void:
@@ -86,6 +155,8 @@ static func _has_line(r: KiteRig) -> bool:
 
 
 func detect(rigs: Array[KiteRig]) -> void:
+	_guard_rigs = rigs
+	Rope.jump_guard = jump_clear
 	for i in range(contacts.size() - 1, -1, -1):
 		var c := contacts[i]
 		if not (_has_line(c.a) and _has_line(c.b) and (c.a.is_flying() or c.b.is_flying())):
@@ -173,6 +244,7 @@ func _detect_kite(owner: KiteRig, other: KiteRig) -> void:
 		c.sa_prev = owner.rope.material_at(c.ia, 1.0)
 		c.sb_prev = other.rope.material_at(j, t)
 		c.position = body.x
+		_remember_material(c)
 		contacts.append(c)
 		return
 
@@ -279,6 +351,7 @@ func _test_segments(ra: KiteRig, rb: KiteRig, pa: PackedVector3Array, pb: Packed
 	c.sa_prev = sa
 	c.sb_prev = sb
 	c.position = (p_a + p_b) * 0.5
+	_remember_material(c)
 	contacts.append(c)
 
 
@@ -448,7 +521,15 @@ func solve(h: float) -> void:
 			var db_s := _disp(rb, c.ib, h).lerp(_disp(rb, c.ib + 1, h), c.tb)
 			var d_prev := (pb - db_s) - (pa - da_s)
 			var n_before := c.normal
-			var interior := c.ta > 0.0 and c.ta < 1.0 and c.tb > 0.0 and c.tb < 1.0
+			# "Interior" = o ponto mais próximo não está numa PONTA DE VERDADE da linha
+			# (mão ou nó do cabresto). Um nó do meio da linha (a linha continua do
+			# outro lado) conta como interior: ali a separação entre os pontos mais
+			# próximos tem só 3 mm e gira à toa, e só a perpendicular comum às duas
+			# linhas separa de verdade (segurando em outra direção elas passavam uma
+			# pela outra).
+			var end_a := (c.ta <= 0.0 and c.ia == 0) or (c.ta >= 1.0 and c.ia == ra.segment_count() - 1)
+			var end_b := (c.tb <= 0.0 and c.ib == 0) or (c.tb >= 1.0 and c.ib == rb.segment_count() - 1)
+			var interior := not end_a and not end_b
 			var ea := pa_pts[1] - pa_pts[0]
 			var eb := pb_pts[1] - pb_pts[0]
 			var cr := ea.cross(eb)
@@ -461,7 +542,7 @@ func solve(h: float) -> void:
 				elif n.dot(c.normal) != 0.0:
 					c.normal = n * signf(n.dot(c.normal))
 			elif d_prev.length() > 1e-5:
-				# Ponta de trecho ou quase paralelas: a separação do começo do subpasso.
+				# Ponta de verdade ou quase paralelas: a separação do começo do subpasso.
 				c.normal = d_prev.normalized()
 			if DEBUG_FLIPS and n_before.dot(c.normal) < -0.2:
 				print("FLIP n %d/%d t=%.2f/%.2f interior=%s par=%s |dprev|=%.4f |d|=%.4f dot=%.2f" % [c.ia, c.ib, c.ta, c.tb, str(interior), str(crl <= 0.25 * sqrt(ea.length_squared() * eb.length_squared())), d_prev.length(), d.length(), n_before.dot(c.normal)])
@@ -479,6 +560,7 @@ func solve(h: float) -> void:
 				# O ponto principal está separado, mas em linhas deitadas uma na outra
 				# as pontas da sobreposição podem não estar.
 				_push_overlap(c, nrm)
+				_push_node_neighbors(c, h)
 				continue
 			# Atravessou muito (puxada forte): volta em alguns subpassos, sem explodir.
 			violation = minf(CONTACT_GAP - sep, MAX_PUSH if c.crossed else MAX_PUSH_SPEC)
@@ -492,6 +574,11 @@ func solve(h: float) -> void:
 		var wb0 := _weight(rb, c.ib, nrm) * ub * ub
 		var wb1 := _weight(rb, c.ib + 1, nrm) * c.tb * c.tb
 		var wsum := wa0 + wa1 + wb0 + wb1
+		if DEBUG_TRACE:
+			print("TRACE %d/%d t=%.2f/%.2f sep=%.3f viol=%.3f w=%.3f/%.3f/%.3f/%.3f n=%s pinA=%d,%d pinB=%d,%d X=%s" % [c.ia, c.ib, c.ta, c.tb,
+				d.dot(nrm), violation, wa0, wa1, wb0, wb1, str(nrm.snapped(Vector3.ONE * 0.01)),
+				ra.pin_obstacle[c.ia] if c.ia < ra.pos.size() else -9, ra.pin_obstacle[c.ia + 1] if c.ia + 1 < ra.pos.size() else -9,
+				rb.pin_obstacle[c.ib] if c.ib < rb.pos.size() else -9, rb.pin_obstacle[c.ib + 1] if c.ib + 1 < rb.pos.size() else -9, str(c.crossed)])
 		if wsum <= 0.0:
 			continue
 		var lam := violation / wsum
@@ -510,6 +597,7 @@ func solve(h: float) -> void:
 		# são retos: se as duas PONTAS da parte sobreposta ficam do lado certo, o trecho
 		# inteiro fica. Empurra também nessas duas pontas, com a mesma normal.
 		_push_overlap(c, nrm)
+		_push_node_neighbors(c, h)
 		# Atrito de Coulomb entre as linhas: o deslizamento relativo do subpasso é
 		# limitado por μ × (correção normal). Linhas apertadas "pegam" e escorregam
 		# com resistência (relo), em vez de deslizar livres.
@@ -558,6 +646,55 @@ func _push_overlap(c: Contact, nrm: Vector3) -> void:
 			c.b.pushed_by_line = true
 
 
+## Contato num NÓ do meio de uma linha (a linha dobra ali em volta da outra): os DOIS
+## pares de trechos que se encontram no nó tocam a outra linha, e o contato só cuida
+## de um. O par vizinho também é segurado, com a perpendicular dele e o lado medido
+## no começo do subpasso.
+func _push_node_neighbors(c: Contact, h: float) -> void:
+	var ra := c.a.rope
+	var rb := c.b.rope
+	var pairs: Array[Vector2i] = []
+	if c.ta <= 0.0 and c.ia > 0:
+		pairs.append(Vector2i(c.ia - 1, c.ib))
+	elif c.ta >= 1.0 and c.ia < ra.segment_count() - 1:
+		pairs.append(Vector2i(c.ia + 1, c.ib))
+	if c.tb <= 0.0 and c.ib > 0:
+		pairs.append(Vector2i(c.ia, c.ib - 1))
+	elif c.tb >= 1.0 and c.ib < rb.segment_count() - 1:
+		pairs.append(Vector2i(c.ia, c.ib + 1))
+	for pr in pairs:
+		var qa := ra.segment_points(pr.x)
+		var qb := rb.segment_points(pr.y)
+		var res := closest_segments(qa[0], qa[1], qb[0], qb[1])
+		var t1: float = res[0]
+		var t2: float = res[1]
+		var pa := qa[0].lerp(qa[1], t1)
+		var pb := qb[0].lerp(qb[1], t2)
+		var d := pb - pa
+		var da_s := _disp(ra, pr.x, h).lerp(_disp(ra, pr.x + 1, h), t1)
+		var db_s := _disp(rb, pr.y, h).lerp(_disp(rb, pr.y + 1, h), t2)
+		var d_prev := (pb - db_s) - (pa - da_s)
+		var ea := qa[1] - qa[0]
+		var eb := qb[1] - qb[0]
+		var cr := ea.cross(eb)
+		var crl := cr.length()
+		var n := Vector3.ZERO
+		if crl > 0.25 * sqrt(ea.length_squared() * eb.length_squared()):
+			n = cr / crl
+			var f_old := d_prev.dot(n)
+			if absf(f_old) > 1e-6:
+				n *= signf(f_old)
+			elif n.dot(c.normal) < 0.0:
+				n = -n
+		elif d_prev.length() > 1e-5:
+			n = d_prev.normalized()
+		else:
+			continue
+		var lam := _push_point(ra, rb, pr.x, pr.y, t1, t2, n, c.crossed)
+		if lam > 0.0:
+			c.impulse += lam
+
+
 ## Garante a separação ≥ CONTACT_GAP ao longo de `nrm` no ponto (ta, tb) dos trechos
 ## ia/ib. Devolve o multiplicador aplicado.
 func _push_point(ra: Rope, rb: Rope, ia: int, ib: int, ta: float, tb: float, nrm: Vector3, crossed: bool) -> float:
@@ -596,6 +733,12 @@ static func _disp(r: Rope, idx: int, h: float) -> Vector3:
 ## Massa inversa do ponto `idx` da linha (o índice depois do último nó é o cabresto).
 static func _weight(r: Rope, idx: int, dir: Vector3) -> float:
 	if idx < r.pos.size():
+		# Nó apoiado no cenário (poste, fio, telhado): o cenário é rígido e corrige
+		# depois — para o contato com a outra linha ele é FIXO, e quem sai é a outra
+		# linha (senão o contato empurrava o nó para o poste, o poste devolvia, e a
+		# outra linha passava através).
+		if r.pin_obstacle[idx] >= 0:
+			return 0.0
 		return r.inv_mass[idx]
 	if r.end_body != null:
 		return r.end_body.inverse_mass_at(r.end_body.q * r.end_local, dir)
@@ -624,6 +767,9 @@ func _refresh(c: Contact, occ = null) -> void:
 		var other_rope := c.b.rope if c.hook_side == 0 else c.a.rope
 		var pe := owner_rope.end_point()
 		var j := clampi(c.ib if c.hook_side == 0 else c.ia, 0, other_rope.segment_count() - 1)
+		var other_topo := c.topo_b if c.hook_side == 0 else c.topo_a
+		if other_topo >= 0 and other_topo != other_rope.topo:
+			j = clampi(int(_seg_at_s(other_rope, c.s_b if c.hook_side == 0 else c.s_a).x), 0, other_rope.segment_count() - 1)
 		var tt := 0.0
 		for _k in 3:
 			var sp := other_rope.segment_points(j)
@@ -645,9 +791,25 @@ func _refresh(c: Contact, occ = null) -> void:
 			c.tb = 1.0
 			c.ia = j
 			c.ta = tt
+		_remember_material(c)
 		return
+	var dbg_before := Vector4(c.ia, c.ib, c.ta, c.tb)
+	var dbg_topo := c.topo_a != c.a.rope.topo or c.topo_b != c.b.rope.topo
+	if c.topo_a >= 0 and c.topo_a != c.a.rope.topo:
+		var la := _seg_at_s(c.a.rope, c.s_a)
+		c.ia = int(la.x)
+		c.ta = la.y
+	if c.topo_b >= 0 and c.topo_b != c.b.rope.topo:
+		var lb := _seg_at_s(c.b.rope, c.s_b)
+		c.ib = int(lb.x)
+		c.tb = lb.y
 	c.ia = clampi(c.ia, 0, seg_a - 1)
 	c.ib = clampi(c.ib, 0, seg_b - 1)
+	# Acompanha o ponto mais próximo procurando nos 3×3 pares de trechos vizinhos. Andar
+	# um trecho por vez falhava quando as duas linhas DOBRAM no cruzamento (a linha
+	# apertada dobra num nó em volta da outra): o ponto mais próximo fica na junta, o
+	# contato ia e voltava entre os dois trechos da junta e não chegava no par onde as
+	# linhas se cruzavam — que ficava sem proteção e atravessava.
 	for _k in 2:
 		var pa := c.a.rope.segment_points(c.ia)
 		var pb := c.b.rope.segment_points(c.ib)
@@ -663,21 +825,37 @@ func _refresh(c: Contact, occ = null) -> void:
 		var eb: Vector3 = pb[1] - pb[0]
 		if ea.cross(eb).length() < 0.25 * sqrt(ea.length_squared() * eb.length_squared()):
 			break
-		var moved := false
-		if c.ta <= 0.0 and c.ia > 0:
-			c.ia -= 1
-			moved = true
-		elif c.ta >= 1.0 and c.ia < seg_a - 1:
-			c.ia += 1
-			moved = true
-		if c.tb <= 0.0 and c.ib > 0:
-			c.ib -= 1
-			moved = true
-		elif c.tb >= 1.0 and c.ib < seg_b - 1:
-			c.ib += 1
-			moved = true
-		if not moved:
+		var best_d: float = res[2]
+		var bi := c.ia
+		var bj := c.ib
+		var bta := c.ta
+		var btb := c.tb
+		for da in [-1, 0, 1]:
+			for db in [-1, 0, 1]:
+				if da == 0 and db == 0:
+					continue
+				var ja: int = c.ia + da
+				var jb: int = c.ib + db
+				if ja < 0 or ja >= seg_a or jb < 0 or jb >= seg_b:
+					continue
+				var qa := c.a.rope.segment_points(ja)
+				var qb := c.b.rope.segment_points(jb)
+				var r2 := closest_segments(qa[0], qa[1], qb[0], qb[1])
+				if float(r2[2]) < best_d - 1e-5:
+					best_d = r2[2]
+					bi = ja
+					bj = jb
+					bta = r2[0]
+					btb = r2[1]
+		if bi == c.ia and bj == c.ib:
 			break
+		c.ia = bi
+		c.ib = bj
+		c.ta = bta
+		c.tb = btb
+	if DEBUG_TRACE and (dbg_before.x != c.ia or dbg_before.y != c.ib):
+		print("TRACE   refresh %s → %d/%d t=%.2f/%.2f topo=%s s=%.2f/%.2f" % [str(dbg_before), c.ia, c.ib, c.ta, c.tb, str(dbg_topo), c.s_a, c.s_b])
+	_remember_material(c)
 	# Chegou na pipa (ponta com corpo), ENCOSTADA → laça no cabresto.
 	if not c.hooked and c.touching:
 		if c.a.rope.end_body != null and c.ia == seg_a - 1 and c.ta >= 0.999:
@@ -686,6 +864,13 @@ func _refresh(c: Contact, occ = null) -> void:
 		elif c.b.rope.end_body != null and c.ib == seg_b - 1 and c.tb >= 0.999:
 			c.hooked = true
 			c.hook_side = 1
+
+
+static func _remember_material(c: Contact) -> void:
+	c.s_a = c.a.rope.material_at(c.ia, c.ta)
+	c.s_b = c.b.rope.material_at(c.ib, c.tb)
+	c.topo_a = c.a.rope.topo
+	c.topo_b = c.b.rope.topo
 
 
 # --- Desgaste (por tick) -------------------------------------------------------

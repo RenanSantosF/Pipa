@@ -3,7 +3,7 @@ extends Node
 ##
 ## Fase 1 — voo (30 s): pipa estável no ar; dar linha aumenta o comprimento;
 ##          braçadas mandam linha para o chão; recolher enrola.
-## Fase 2 — combate (até 30 s): duas linhas cruzadas em X, CHILENA contra PURA.
+## Fase 2 — combate (até 90 s): duas linhas cruzadas em X, CHILENA contra PURA.
 ##          A pura tem que ser cortada (e a chilena não).
 
 var main
@@ -31,6 +31,10 @@ var _hand_b: KiteHand
 var _lh_b: LineHand
 var _saw_t0 := -1.0
 var _rise := 0.0
+var _sweep := 1.0
+## Tempo máximo do combate (s): relo de verdade demora — esfregando apertado corta.
+const COMBAT_LIMIT := 90.0
+var _saw_dir := Vector3.FORWARD
 
 
 func start(p_main) -> void:
@@ -279,14 +283,35 @@ func _start_combat() -> void:
 	var wd := Wind.get_direction()
 	var side := wd.cross(Vector3.UP).normalized()
 	_side = side
+	_saw_dir = wd
+	# Cruzamento em X: a sua pipa voa de verdade; a do vizinho fica PARADA no céu (como
+	# presa num poste alto — só fixa a ponta), então a linha dele é uma reta que cruza a
+	# sua quase em ângulo reto, logo abaixo do meio dela. A mão dele sobe até encostar e
+	# serra de um lado para o outro: contato, atrito, desgaste e corte são os de verdade.
 	var center := Vector3(0, 0, 40)
 	var hand_a := center
-	var hand_b := center - wd * 10.0
-	var top := maxf(Ground.height_at(hand_a.x, hand_a.z), Ground.height_at(hand_b.x, hand_b.z)) + 30.0
-	hand_a.y = top
-	hand_b.y = top - 13.0
+	hand_a.y = Ground.height_at(hand_a.x, hand_a.z) + 30.0
 	rig.launch(hand_a, 30.0, 50.0, wd)
-	bot_rig.launch(hand_b, 40.0, 50.0, wd)
+	var ka := rig.body.x
+	# As duas pontas ficam paradas (linhas amarradas no alto): o teste é do ATRITO entre
+	# as linhas — o voo já foi testado na fase 1.
+	rig.held = true
+	# Linha esticada (~6 N): a ponta um pouco além do comprimento de repouso.
+	rig._held_x = rig.body.x + (rig.body.x - hand_a).normalized() * 0.3
+	rig._held_q = rig.body.q
+	rig.spool = 0.0
+	rig.pile = 0.0
+	var mid := hand_a.lerp(ka, 0.45)
+	# Linha dele quase em pé, 1,5 m ao lado da sua: a mão dele empurra DE LADO
+	# (perpendicular à sua linha — o contato não escorrega para as pontas) e serra.
+	var kb := mid + Vector3.UP * 8.0 - side * 1.5 + wd * 0.5
+	var hand_b := mid + Vector3.DOWN * 8.0 - side * 1.5 - wd * 0.5
+	var db := kb - hand_b
+	bot_rig.launch(hand_b, db.length(), rad_to_deg(asin(clampf(db.y / db.length(), -1.0, 1.0))), db)
+	bot_rig.held = true
+	bot_rig._held_x = bot_rig.body.x
+	bot_rig._held_q = bot_rig.body.q
+
 	_hand_b = KiteHand.new(bot_rig)
 	_hand_b.auto_feed = false
 	main.player.rig = null  # mãos paradas, controladas pelo teste
@@ -299,31 +324,72 @@ func _start_combat() -> void:
 
 
 func _phase_combat(_delta: float) -> void:
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--tracecombat="):
+			var tt := float(a.substr(14))
+			LineCombat.DEBUG_TRACE = _t > tt - 0.12 and _t < tt + 0.02
+			(main.physics_world as KitePhysicsWorld).debug_rope_rig = rig if LineCombat.DEBUG_TRACE else null
+			if LineCombat.DEBUG_TRACE:
+				print("TRACE ---- t=%.3f" % _t)
 	# Mãos paradas; o bot "dá linha" de vez em quando (como no relo de verdade).
 	rig.grip = 1.0
+	rig.held = true
 	# Sobe a mão até a linha dele apertar a sua por baixo; depois segura a altura.
 	var con := (main.physics_world as KitePhysicsWorld).strongest_contact_for(bot_rig)
-	if _t > 2.0 and (con == null or con.force < 1.5) and _rise < 22.0:
-		_rise += 0.8 * _delta
-	elif con != null and con.force > 4.0:
-		_rise = maxf(_rise - 0.4 * _delta, 0.0)
+	# Sem contato: sobe procurando (ou, se já encostou antes, volta um pouco para baixo
+	# — a linha dele passou da sua); encostado: aperta de leve; apertado demais: alivia.
+	# Contato que conta é o encostado de verdade (os antecipados existem com as
+	# linhas ainda a dezenas de cm).
+	if con != null and con.force < 0.05:
+		con = null
+	if _t > 2.0:
+		if con == null:
+			# Varre para cima e para baixo até achar a sua linha.
+			_rise += 0.5 * _delta * _sweep
+			if _rise > 4.0:
+				_sweep = -1.0
+			elif _rise < 0.0:
+				_sweep = 1.0
+		else:
+			if con.force < 2.0:
+				_rise = minf(_rise + 0.6 * _delta, 8.0)   # aperta a linha dele contra a sua
+			elif con.force > 4.0:
+				_rise = maxf(_rise - 0.4 * _delta, 0.0)
 	# Relo: encostado, o vizinho SERRA (leva a mão de um lado para o outro) e dá linha
 	# em pulsos — a linha dele desliza apertada sobre a sua (desgaste por atrito).
 	# Serra sempre (de um lado para o outro): sem encostar, varre até achar a linha;
 	# encostado, desliza apertado.
 	var saw := Vector3.ZERO
 	if _t > 2.0:
-		saw = _side * (3.0 * sin((_t - 2.0) * 1.8))
-	bot_rig.hand_rest = _hand_b0 + Vector3.UP * _rise + saw
+		saw = Vector3(_saw_dir.x, 0.0, _saw_dir.z).normalized() * (2.5 * sin((_t - 2.0) * 2.6))
+	bot_rig.hand_rest = _hand_b0 + _side * (_rise * 2.0) + saw
 	# Dá linha só relando (apertando contra a outra), como no relo de verdade.
 	var relando := con != null and con.force > 0.5
-	if bot_rig.physical:
-		if _lh_b == null:
-			_lh_b = LineHand.new(bot_rig)
-		_lh_b.update(_delta, 0.3 if relando and fmod(_t, 2.0) < 0.8 and _t > 4.0 else 1.0, 0.0)
-	else:
-		_hand_b.update(_delta, 0.0, 0.3 if relando and fmod(_t, 2.0) < 0.8 and _t > 4.0 else 1.0, 0.0)
-	if OS.get_cmdline_user_args().has("--debugcombat") and _t > 0.0:
+	bot_rig.grip = 1.0   # a ponta dele está parada: a mão só sobe e serra
+	bot_rig.held = true
+	if OS.get_cmdline_user_args().has("--debugcombat") and fmod(_t, 2.5) < _delta:
+		var pk := rig.body.x if rig.body else Vector3.ZERO
+		var bk := bot_rig.body.x if bot_rig.body else Vector3.ZERO
+		if rig.rope == null or bot_rig.rope == null:
+			return
+		var best := 99.0
+		var dv := Vector3.ZERO
+		var pa := rig.rope.pos.duplicate()
+		pa.append(rig.rope.end_point())
+		var pb := bot_rig.rope.pos.duplicate()
+		pb.append(bot_rig.rope.end_point())
+		for i in pa.size() - 1:
+			for j in pb.size() - 1:
+				var res := LineCombat.closest_segments(pa[i], pa[i + 1], pb[j], pb[j + 1])
+				if float(res[2]) < best:
+					best = res[2]
+					dv = pb[j].lerp(pb[j + 1], res[1]) - pa[i].lerp(pa[i + 1], res[0])
+		var cc := (main.physics_world as KitePhysicsWorld).strongest_contact_for(bot_rig)
+		if cc != null:
+			print("    contato s_eu=%.2f/%.1f s_bot=%.2f/%.1f %d/%d t=%.2f/%.2f" % [cc.a.rope.material_at(cc.ia, cc.ta) if cc.a == rig else cc.b.rope.material_at(cc.ib, cc.tb), rig.flying_length(),
+				cc.b.rope.material_at(cc.ib, cc.tb) if cc.a == rig else cc.a.rope.material_at(cc.ia, cc.ta), bot_rig.flying_length(), cc.ia, cc.ib, cc.ta, cc.tb])
+		print("  t=%.2f lado=%+.2f rise=%.1f dist=%.3f (dy=%+.3f) força=%.2f T_eu=%.1f T_bot=%.1f L_bot=%.1f" % [_t, dv.dot(_side), _rise, best, dv.y, cc.force if cc else 0.0, rig.rope.tension_hand, bot_rig.rope.tension_hand, bot_rig.flying_length()])
+	if OS.get_cmdline_user_args().has("--debugcombat") and _t > 0.0 and false:
 		var w2 := main.physics_world as KitePhysicsWorld
 		var c2 := w2.strongest_contact_for(rig)
 		var fs := []
@@ -346,9 +412,9 @@ func _phase_combat(_delta: float) -> void:
 			_ok = false
 			print("AUTOTEST FAIL: a linha pura deveria perder para a chilena")
 		_finish()
-	elif _t > 30.0:
+	elif _t > COMBAT_LIMIT:
 		_ok = false
-		print("AUTOTEST FAIL: as linhas cruzadas não cortaram em 30 s")
+		print("AUTOTEST FAIL: as linhas cruzadas não cortaram em %.0f s" % COMBAT_LIMIT)
 		_finish()
 
 

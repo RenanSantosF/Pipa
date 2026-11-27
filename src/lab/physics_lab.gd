@@ -105,6 +105,18 @@ func _ready() -> void:
 			KiteRig.DESB_ANGLE_DEG = float(a.substr(7))
 		elif a.begins_with("--dtime="):
 			KiteRig.DESB_TIME = float(a.substr(8))
+		elif a.begins_with("--rotd="):
+			KiteRig.ROT_DAMP_PHYSICAL = float(a.substr(7))
+		elif a.begins_with("--dhold2="):
+			KiteRig.DESB_HOLD = float(a.substr(9))
+		elif a.begins_with("--wtop="):
+			Wind.shear_top = float(a.substr(7))
+		elif a.begins_with("--camfov="):
+			_cam_fov = float(a.substr(9))
+		elif a.begins_with("--addm="):
+			KiteRigidBody.ADDED_MASS = float(a.substr(7))
+		elif a.begins_with("--addi="):
+			KiteRigidBody.ADDED_INERTIA = float(a.substr(7))
 		elif a.begins_with("--tug="):
 			LineHand.TUG_LEN = float(a.substr(6))
 		elif a.begins_with("--dhold="):
@@ -272,6 +284,17 @@ func _plan(seq: String) -> void:
 				t3 += 0.3
 			_log_every = 0.2
 			_end_t = s + 12.0
+		"volta":
+			# Vira para a direita (2 toques) e PARA de desbicar: ela tem que voltar sozinha
+			# para cima. Depois vira de novo e DESCARREGA (mão aberta 3 s): também volta.
+			_ev(s, "tap")
+			_ev(s + 0.25, "tap")
+			_ev(s + 8.0, "tap")
+			_ev(s + 8.25, "tap")
+			_ev(s + 9.0, "grip", 0.0)
+			_ev(s + 12.0, "grip", 1.0)
+			_log_every = 0.25
+			_end_t = s + 17.0
 		"soltar":
 			_ev(s, "grip", 0.0)
 			_ev(s + 3.0, "grip", 1.0)
@@ -619,6 +642,7 @@ func _interactive_input() -> void:
 
 
 var _shot_n := 0
+var _cam_fov := 0.0
 
 
 ## --shots: salva quadros da câmera (olho e lado) em build/lab/ para revisão visual.
@@ -626,15 +650,16 @@ func _shots() -> void:
 	if not OS.get_cmdline_user_args().has("--shots"):
 		return
 	var times := [6.0, 6.6, 12.3, 12.5, 14.0]
-	if _shot_n >= times.size() * 2 or _t < float(times[_shot_n / 2]):
+	var per := 1 if _cam_fov > 0.0 else 2   # com --camfov só a vista do olho
+	if _shot_n >= times.size() * per or _t < float(times[_shot_n / per]):
 		return
-	_cam_side = _shot_n % 2 == 1
+	_cam_side = per == 2 and _shot_n % 2 == 1
 	await RenderingServer.frame_post_draw
 	var dir := ProjectSettings.globalize_path("res://build/lab")
 	DirAccess.make_dir_recursive_absolute(dir)
 	get_viewport().get_texture().get_image().save_png("%s/lab_%02d_%s.png" % [dir, _shot_n, "lado" if _cam_side else "olho"])
 	_shot_n += 1
-	if _shot_n >= times.size() * 2:
+	if _shot_n >= times.size() * per:
 		get_tree().quit()
 
 
@@ -653,6 +678,8 @@ func _process(_delta: float) -> void:
 		cam.look_at(kp)
 		var d := cam.global_position.distance_to(kp)
 		cam.fov = clampf(rad_to_deg(2.0 * atan(2.4 / maxf(d, 1.0))), 12.0, 60.0)
+		if _cam_fov > 0.0:
+			cam.fov = _cam_fov   # como no jogo (teste visual de longe)
 	if label != null:
 		var m := measure()
 		var br := rig.rope.bridle if rig.rope else null

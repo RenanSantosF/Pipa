@@ -88,7 +88,7 @@ func build(lot_frame: Transform3D, width: float, front: float, depth: float, dro
 	var d_cur := hd
 	var top_brick := false
 	for s in stories:
-		var brick := s > 0 and _rng.randf() < 0.3
+		var brick := s > 0 and _rng.randf() < 0.06   # casas mais acabadas (v0.22)
 		var surface := "brick" if brick else "plaster"
 		var col := BRICK if brick else (color if s == 0 or _rng.randf() < 0.6 else _pick(WALL_COLORS))
 		_box(surface, Vector3(fx + d_cur * 0.5, y + STORY_H * 0.5, house_z), Vector3(d_cur, STORY_H, w_cur), col, true)
@@ -105,13 +105,13 @@ func build(lot_frame: Transform3D, width: float, front: float, depth: float, dro
 			d_cur = maxf(d_cur - _rng.randf_range(0.0, 2.5), 3.5)
 
 	# Cobertura.
-	if not top_brick and _rng.randf() < 0.4:
+	if not top_brick and _rng.randf() < 0.5:
 		_gable_roof(fx + d_cur * 0.5, y, d_cur, w_cur, house_z, color)
 	else:
 		_slab_roof(fx + d_cur * 0.5, y, d_cur, w_cur, house_z, color)
 
 	# Árvore no quintal.
-	if detail and _rng.randf() < 0.35 and depth - setback - hd > 2.5:
+	if detail and _rng.randf() < 0.07 and depth - setback - hd > 2.5:   # menos árvores (v0.22)
 		var tp := frame * Vector3(front + depth - 1.8, 0.0, _rng.randf_range(z0 + 1.5, z0 + width - 1.5))
 		_sb.add_tree(Vector3(tp.x, Ground.height_at(tp.x, tp.z), tp.z), "")
 

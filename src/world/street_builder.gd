@@ -186,8 +186,12 @@ func add_collider(xf: Transform3D, size: Vector3, line_obstacle: bool = true) ->
 
 # --- Relevo e ruas ---------------------------------------------------------------
 
+## MORRO (v0.22): o terreno sobe ao longo das ruas (+Z) — as ruas são LADEIRAS — e
+## desce para onde o vento leva a pipa (−Z). Você fica do meio para cima do morro: a
+## pipa sai por cima dos telhados de baixo (soltar fica mais fácil).
+const HILL_SLOPE := 0.12
 func raw_height(x: float, z: float) -> float:
-	return 0.11 * x + 1.6 * sin(z * 0.03 + x * 0.015) + 1.4 * _noise.get_noise_2d(x, z)
+	return HILL_SLOPE * z + 0.03 * x + 1.2 * sin(z * 0.03 + x * 0.015) + 1.0 * _noise.get_noise_2d(x, z)
 
 
 func _define_roads() -> void:
@@ -485,13 +489,23 @@ func _place_lot(pts: PackedVector3Array, i: int, side: float, front: float, widt
 	if nr2[2] != ri and nr2[2] >= 0 and float(nr2[0]) < float(roads[nr2[2]][1]) + float(roads[nr2[2]][2]) + 3.0:
 		return
 	_occupied.append([c2, maxf(width, depth) * 0.45])
-	var ground := p.y
-	var drop := ground - minf(Ground.height_at(back.x, back.z), Ground.height_at(center.x, center.z))
+	# Ladeira: o lote fica na altura do ponto MAIS ALTO do terreno embaixo dele e o
+	# embasamento (muro de arrimo) desce até o mais baixo — a casa não flutua do lado
+	# de baixo nem afunda do lado de cima.
 	var z_axis := out.cross(Vector3.UP).normalized()
+	var gmax := -INF
+	var gmin := INF
+	for fd in [front, front + depth * 0.5, front + depth]:
+		for fw in [-0.5, 0.0, 0.5]:
+			var q: Vector3 = p + out * float(fd) + z_axis * (float(fw) * width)
+			var gh := Ground.height_at(q.x, q.z)
+			gmax = maxf(gmax, gh)
+			gmin = minf(gmin, gh)
+	var drop := gmax - gmin
 	var basis := Basis(out, Vector3.UP, -z_axis)
 	if basis.determinant() < 0.0:
 		basis = Basis(out, Vector3.UP, z_axis)
-	var origin := Vector3(p.x, Ground.height_at(p.x + out.x * front, p.z + out.z * front) + 0.17, p.z)
+	var origin := Vector3(p.x, gmax + 0.17, p.z)
 	_houses.build(Transform3D(basis, origin), width, front, depth, drop, true)
 
 
@@ -544,10 +558,10 @@ func _build_campinho() -> void:
 			obstacles.add_cylinder(Vector3(post.x, y, post.z), 2.0, 0.06, "trave")
 		batch_for(zc).add_box(Transform3D(Basis.IDENTITY, Vector3(c.x, y + 2.0, float(gz))), Vector3(3.1, 0.1, 0.1), white)
 	_occupied.append([c, maxf(_pad.size.x, _pad.size.y) * 0.5])
-	for i in 6:
-		var tz := _pad.position.y + 2.0 + (_pad.size.y - 4.0) * float(i) / 5.0
+	for i in 2:   # duas mangueiras na beira do campinho (antes eram seis)
+		var tz := _pad.position.y + 4.0 + (_pad.size.y - 8.0) * float(i)
 		var tx := _pad.position.x - 1.0
-		add_tree(Vector3(tx, Ground.height_at(tx, tz), tz), "mango" if i % 2 == 0 else "")
+		add_tree(Vector3(tx, Ground.height_at(tx, tz), tz), "mango")
 
 
 # --- Árvores -------------------------------------------------------------------
@@ -665,14 +679,14 @@ func _build_street_trees() -> void:
 		var pts: PackedVector3Array = road[0]
 		var off: float = road[1] + road[2] * 0.6
 		for side in [-1.0, 1.0]:
-			var acc := _rng.randf_range(0.0, 15.0)
-			var gap := _rng.randf_range(14.0, 28.0)
+			var acc := _rng.randf_range(0.0, 30.0)
+			var gap := _rng.randf_range(45.0, 80.0)   # poucas árvores na rua (v0.22)
 			for i in range(1, pts.size() - 1):
 				acc += Vector2(pts[i].x - pts[i - 1].x, pts[i].z - pts[i - 1].z).length()
 				if acc < gap:
 					continue
 				acc = 0.0
-				gap = _rng.randf_range(14.0, 28.0)
+				gap = _rng.randf_range(45.0, 80.0)
 				var t := (pts[i + 1] - pts[i - 1])
 				t.y = 0.0
 				var n := t.normalized().cross(Vector3.UP).normalized() * float(side)

@@ -30,6 +30,8 @@ const MAX_PER_BOX := 12
 const LINE_RADIUS := 0.0015
 
 enum Kind { CANOPY, CAPSULE, BOX }
+## Trecho mínimo entre nós de apoio (m): menos que isso a linha fica instável.
+const MIN_WRAP_SEG := 0.2
 
 ## μ, θ para prender (rad), tensão de aperto (N), tempo de aperto (s), tranco que
 ## SOLTA mín/máx (N): no galho fino o galho quebra; no tronco/poste a linha
@@ -648,6 +650,16 @@ func _detect(rope: Rope) -> void:
 			continue   # dois toques quase no mesmo ponto do trecho
 		var frac := t / last_t
 		var l := rope.rest[i]
+		if l * frac < MIN_WRAP_SEG or l * (1.0 - frac) < MIN_WRAP_SEG:
+			# A quina fica a poucos cm de um nó: em vez de um trecho minúsculo (instável),
+			# leva esse nó para a quina (a linha dobra na beirada, sem cortar o canto).
+			var j: int = i if l * frac < MIN_WRAP_SEG else i + 1
+			if j >= 1 and j < rope.pos.size() and rope.pinned[j] == 0 and rope.can_move_node(j, h[2]):
+				rope.pos[j] = h[2]
+				rope.set_contact(j, h[3], h[4])
+			continue
+		if not rope.can_insert_node(i + 1, h[2]):
+			continue   # dobrar ali faria a linha pular através de outra linha
 		rope.insert_node(i + 1, h[2], rope.velocity_at(i, frac), l * frac, l * (1.0 - frac))
 		rope.set_contact(i + 1, h[3], h[4])
 		last_t = t
@@ -807,13 +819,15 @@ func _update_contacts(rope: Rope, dt: float) -> String:
 		if flat_on_top and i < rope.rest.size() and rope.rest[i - 1] + rope.rest[i] < rope.segment_target * 1.6:
 			# Nó a mais no meio do telhado com a linha reta: some (os vizinhos apoiam).
 			rope.clear_contact(i)
-			rope.remove_node(i)
+			if rope.can_remove_node(i):
+				rope.remove_node(i)
 			i -= 1
 			continue
 		if (dev < 0.04 and off_surface > 0.01) or slipped_off or off_surface > 0.35 or flat_on_top:
 			rope.clear_contact(i)
 			# Nó criado só para o contato (trecho curto) volta a ser um segmento só.
-			if i < rope.rest.size() and minf(rope.rest[i - 1], rope.rest[i]) < rope.segment_target * 0.7:
+			if i < rope.rest.size() and minf(rope.rest[i - 1], rope.rest[i]) < rope.segment_target * 0.7 \
+					and rope.can_remove_node(i):
 				rope.remove_node(i)
 			i -= 1
 			continue
@@ -883,9 +897,11 @@ func _capstan(rope: Rope, i: int, dev: float, t_hand: float, t_kite: float, mu: 
 		rope.rest[i] += move
 	# O trecho vizinho acabou: o próximo nó comum chega ao contato e a sobra
 	# continua passando (a linha inteira corre por cima, não só um segmento).
-	if rope.rest[i - 1] < 0.12 and i - 1 > 0 and rope.pin_obstacle[i - 1] < 0 and rope.pinned[i - 1] == 0:
+	if rope.rest[i - 1] < MIN_WRAP_SEG and i - 1 > 0 and rope.pin_obstacle[i - 1] < 0 and rope.pinned[i - 1] == 0 \
+			and rope.can_remove_node(i - 1):
 		rope.remove_node(i - 1)
-	elif i < rope.rest.size() and rope.rest[i] < 0.12 and i + 1 < rope.pos.size() and rope.pin_obstacle[i + 1] < 0 and rope.pinned[i + 1] == 0:
+	elif i < rope.rest.size() and rope.rest[i] < MIN_WRAP_SEG and i + 1 < rope.pos.size() and rope.pin_obstacle[i + 1] < 0 \
+			and rope.pinned[i + 1] == 0 and rope.can_remove_node(i + 1):
 		rope.remove_node(i + 1)
 
 

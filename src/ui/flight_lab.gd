@@ -30,9 +30,13 @@ const PHYS_PARAMS := [
 	["force", "Força do cabresto (×)", 0.3, 3.0, 0.05],
 	["hold", "Segura o rumo sem mexer (s)", 0.5, 5.0, 0.1],
 	["tug", "Puxadinha do toque (cm)", 2.0, 30.0, 0.5],
+	["weight", "Peso da pipa (ar arrastado ×)", 0.0, 3.0, 0.1],
+	["calm", "Calma (amortece balanço/tremida)", 0.2, 3.0, 0.1],
 ]
-const PHYS_DEFAULTS := {"angle": 110.0, "time": 0.22, "stiff": 16.0, "force": 1.0, "hold": 1.8, "tug": 8.0}
-const PHYS_FILE := "user://desbico.cfg"
+const PHYS_DEFAULTS := {"angle": 110.0, "time": 0.5, "stiff": 20.0, "force": 1.0, "hold": 1.4, "tug": 8.0,
+	"weight": 1.0, "calm": 1.2}
+## Arquivo novo na 0.22 (os padrões mudaram: valores salvos da 0.21 não valem mais).
+const PHYS_FILE := "user://desbico_v22.cfg"
 
 var rig: KiteRig
 var _readout: Label
@@ -51,6 +55,8 @@ static func phys_param(key: String) -> float:
 		"force": return KiteRig.DESB_FORCE
 		"hold": return KiteRig.DESB_HOLD
 		"tug": return LineHand.TUG_LEN * 100.0
+		"weight": return KiteRigidBody.ADDED_MASS
+		"calm": return KiteRig.ROT_DAMP_PHYSICAL
 	return 0.0
 
 
@@ -62,6 +68,10 @@ static func set_phys_param(key: String, v: float) -> void:
 		"force": KiteRig.DESB_FORCE = v
 		"hold": KiteRig.DESB_HOLD = v
 		"tug": LineHand.TUG_LEN = v / 100.0
+		"weight":
+			KiteRigidBody.ADDED_MASS = v
+			KiteRigidBody.ADDED_INERTIA = v * 1.2
+		"calm": KiteRig.ROT_DAMP_PHYSICAL = v
 
 
 static func _fmt(key: String, v: float) -> String:

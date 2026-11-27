@@ -26,6 +26,9 @@ const REF_HEIGHT := 10.0
 ## igual (soltar da mão funciona) e lá no alto ele fica 10–16% mais fraco — as pipas no
 ## alto andam mais devagar (v0.20).
 const SHEAR_EXPONENT := 0.15
+## Acima desta altura (m) o vento para de crescer: perto do chão igual (soltar da mão),
+## lá em cima mais calmo — a pipa e todos os movimentos dela ficam mais lentos.
+var shear_top: float = 10.0
 const GROUND_LEVEL := 0.0
 const ROOF_HEIGHT := 6.0
 
@@ -98,7 +101,7 @@ func get_gust_factor() -> float:
 ## Velocidade média do vento na altura h (sem turbulência).
 func get_speed_at_height(h: float) -> float:
 	var hh := maxf(h - GROUND_LEVEL, 0.5)
-	var shear := pow(hh / REF_HEIGHT, SHEAR_EXPONENT)
+	var shear := pow(minf(hh, shear_top) / REF_HEIGHT, SHEAR_EXPONENT)
 	var ground_block := clampf(hh / 3.0, 0.6, 1.0)
 	return base_speed * _cached_gust * shear * ground_block
 
