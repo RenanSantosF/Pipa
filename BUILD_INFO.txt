@@ -1,0 +1,3 @@
+commit=2acbb5161f8d0ed39c58eeadbe132bfa46f6c3bb
+branch=claude/kite-game-multiplayer-3d-f2dlkp
+built=2026-11-28T02:27:26Z

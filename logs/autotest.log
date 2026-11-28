@@ -1,0 +1,49 @@
+Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org
+
+AUTOTEST: início (vento 6.5 m/s, linha Cerol)
+AUTOTEST voo t=  2.0 alt= 15.41 el=  44 lat=  +0.4 T= 3.21 linha= 20.0 física=0.76ms presa=false rabiola_presa=-1 contatos=0 rumo=-4°
+AUTOTEST voo t=  4.0 alt= 14.91 el=  42 lat=  +0.2 T= 5.12 linha= 20.0 física=0.73ms presa=false rabiola_presa=-1 contatos=0 rumo=+0°
+AUTOTEST voo t=  6.0 alt= 15.26 el=  44 lat=  -0.3 T= 5.75 linha= 20.0 física=0.75ms presa=false rabiola_presa=-1 contatos=0 rumo=-0°
+AUTOTEST voo t=  8.0 alt= 13.09 el=  29 lat=  -0.5 T= 1.19 linha= 24.5 física=0.76ms presa=false rabiola_presa=-1 contatos=0 rumo=-1°
+AUTOTEST voo t= 10.0 alt= 12.90 el=  26 lat=  -0.4 T= 6.59 linha= 26.6 física=0.78ms presa=false rabiola_presa=-1 contatos=0 rumo=+1°
+AUTOTEST voo t= 12.0 alt= 16.78 el=  40 lat=  +0.6 T= 4.82 linha= 24.0 física=0.75ms presa=false rabiola_presa=-1 contatos=0 rumo=+0°
+AUTOTEST voo t= 14.0 alt= 17.18 el=  48 lat=  +0.0 T= 4.93 linha= 21.3 física=0.76ms presa=false rabiola_presa=-1 contatos=0 rumo=-3°
+AUTOTEST voo t= 16.0 alt= 16.15 el=  44 lat=  +0.6 T= 3.36 linha= 21.2 física=0.72ms presa=false rabiola_presa=-1 contatos=0 rumo=-1°
+AUTOTEST voo t= 18.0 alt= 15.33 el=  41 lat=  +0.9 T= 4.23 linha= 21.2 física=0.74ms presa=false rabiola_presa=-1 contatos=0 rumo=-1°
+AUTOTEST voo t= 20.0 alt= 15.63 el=  42 lat=  +0.9 T= 4.65 linha= 21.2 física=0.74ms presa=false rabiola_presa=-1 contatos=0 rumo=-3°
+AUTOTEST voo t= 22.0 alt= 13.49 el=  35 lat=  -3.3 T= 3.41 linha= 21.2 física=0.75ms presa=false rabiola_presa=-1 contatos=0 rumo=-2°
+AUTOTEST voo t= 24.0 alt= 11.36 el=  28 lat=  -5.4 T= 3.63 linha= 21.2 física=0.71ms presa=false rabiola_presa=-1 contatos=0 rumo=-65°
+AUTOTEST voo t= 26.0 alt=  8.50 el=  20 lat=  -9.0 T= 5.78 linha= 21.2 física=0.68ms presa=false rabiola_presa=-1 contatos=0 rumo=-60°
+AUTOTEST voo t= 28.0 alt= 11.81 el=  29 lat=  -7.6 T= 7.06 linha= 21.2 física=0.69ms presa=false rabiola_presa=-1 contatos=0 rumo=-8°
+AUTOTEST voo t= 30.0 alt= 15.02 el=  40 lat=  -2.8 T= 7.92 linha= 21.2 física=0.71ms presa=false rabiola_presa=-1 contatos=0 rumo=+1°
+AUTOTEST voo (física real): dar linha 20.0 → 26.6 m · puxar 26.6 → 21.4 m (elevação 26° → 48°) · giro do bico parada 5°/s, desbicando 241°/s · 2 toques +24° · 1 toque -97° · invertida 0 ticks · altura final 11.8 m
+AUTOTEST combate: Linha pura × Chilena
+AUTOTEST combate t=  1.0 contatos=0 força=0.00N desliz=0.00m/s desgaste pura=0.00 chilena=0.00
+AUTOTEST combate t=  2.0 contatos=0 força=0.00N desliz=0.00m/s desgaste pura=0.00 chilena=0.00
+AUTOTEST combate t=  3.0 contatos=0 força=0.00N desliz=0.00m/s desgaste pura=0.00 chilena=0.00
+AUTOTEST combate t=  4.0 contatos=2 força=0.00N desliz=0.00m/s desgaste pura=0.00 chilena=0.00
+AUTOTEST combate t=  5.0 contatos=2 força=0.00N desliz=0.00m/s desgaste pura=0.00 chilena=0.00
+AUTOTEST combate t=  6.0 contatos=1 força=0.39N desliz=1.33m/s desgaste pura=0.01 chilena=0.00
+AUTOTEST combate t=  7.0 contatos=2 força=0.34N desliz=3.21m/s desgaste pura=0.04 chilena=0.00
+AUTOTEST combate t=  8.0 contatos=2 força=0.71N desliz=1.71m/s desgaste pura=0.04 chilena=0.00
+AUTOTEST combate t=  9.0 contatos=2 força=1.13N desliz=1.07m/s desgaste pura=0.08 chilena=0.00
+AUTOTEST combate t= 10.0 contatos=2 força=0.92N desliz=0.00m/s desgaste pura=0.12 chilena=0.00
+AUTOTEST combate t= 11.0 contatos=1 força=1.78N desliz=0.20m/s desgaste pura=0.15 chilena=0.00
+AUTOTEST combate t= 12.0 contatos=2 força=1.56N desliz=1.45m/s desgaste pura=0.25 chilena=0.01
+AUTOTEST combate t= 13.0 contatos=2 força=2.17N desliz=1.39m/s desgaste pura=0.27 chilena=0.01
+AUTOTEST combate t= 14.0 contatos=1 força=1.98N desliz=0.48m/s desgaste pura=0.39 chilena=0.01
+AUTOTEST combate t= 15.0 contatos=1 força=2.04N desliz=0.00m/s desgaste pura=0.52 chilena=0.01
+AUTOTEST combate t= 16.0 contatos=2 força=2.80N desliz=0.00m/s desgaste pura=0.55 chilena=0.01
+AUTOTEST combate t= 17.0 contatos=2 força=2.02N desliz=0.89m/s desgaste pura=0.69 chilena=0.01
+AUTOTEST combate t= 18.0 contatos=2 força=2.88N desliz=1.05m/s desgaste pura=0.69 chilena=0.01
+AUTOTEST combate t= 19.0 contatos=2 força=1.98N desliz=1.15m/s desgaste pura=0.72 chilena=0.01
+AUTOTEST combate t= 20.0 contatos=2 força=2.22N desliz=0.00m/s desgaste pura=0.72 chilena=0.01
+AUTOTEST combate t= 21.0 contatos=2 força=2.80N desliz=0.00m/s desgaste pura=0.72 chilena=0.01
+AUTOTEST combate t= 22.0 contatos=1 força=2.02N desliz=0.05m/s desgaste pura=0.83 chilena=0.01
+AUTOTEST combate t= 23.0 contatos=1 força=3.23N desliz=0.26m/s desgaste pura=0.83 chilena=0.01
+AUTOTEST combate t= 24.0 contatos=1 força=2.01N desliz=1.28m/s desgaste pura=0.83 chilena=0.01
+AUTOTEST combate t= 25.0 contatos=1 força=2.68N desliz=0.70m/s desgaste pura=0.83 chilena=0.01
+AUTOTEST combate: corte em t=25.2 s, perdedor = Você
+AUTOTEST PASS
+WARNING: 8 ObjectDB instances were leaked at exit (run with `--verbose` for details).
+   at: cleanup (core/object/object.cpp:2536)

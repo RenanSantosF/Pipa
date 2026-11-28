@@ -1,0 +1,172 @@
+Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org
+
+LAB seq=voada linha=30 m vento=6.5 m/s tamanho=1 nó=(0.25, 0.30) flex=0.050 rad/N
+LAB t= 0.03 dist= 30.0 elev= 49.7° az=  -0.0° rumo=   +0.0° ataque=  0.0° rol=  -0.0° arf=  +0.0° vel= 0.0 T_mão= 0.00 T_nó= 0.00 pernas=0.00/0.00 linha= 30.0 diedro= 3/ 3°
+LAB t= 0.53 dist= 30.3 elev= 48.3° az=  -0.4° rumo=   -6.1° ataque= 35.1° rol=  -1.2° arf=  +3.9° vel= 1.3 T_mão= 4.47 T_nó= 4.50 pernas=3.93/2.91 linha= 30.0 diedro=10/10°
+LAB outra t=1.0 voando=true alt=42.1 T=0.73 enganches=0
+LAB t= 1.07 dist= 30.4 elev= 47.3° az=  -1.6° rumo=   -2.5° ataque= 29.9° rol=  -0.3° arf= +10.2° vel= 1.0 T_mão= 4.21 T_nó= 4.28 pernas=3.47/3.11 linha= 30.0 diedro= 9/ 9°
+LAB t= 1.57 dist= 30.4 elev= 46.4° az=  -2.1° rumo=   -3.0° ataque= 27.1° rol=  -0.0° arf= +13.2° vel= 0.9 T_mão= 4.05 T_nó= 4.12 pernas=3.20/3.14 linha= 30.0 diedro= 9/ 9°
+LAB outra t=2.0 voando=true alt=39.5 T=0.75 enganches=0
+LAB t= 2.07 dist= 30.3 elev= 45.7° az=  -2.1° rumo=   +0.0° ataque= 25.9° rol=  +0.1° arf= +13.6° vel= 0.8 T_mão= 3.75 T_nó= 3.81 pernas=2.94/2.93 linha= 30.0 diedro= 8/ 8°
+LAB t= 2.60 dist= 30.4 elev= 45.0° az=  -1.5° rumo=   +1.8° ataque= 25.8° rol=  +1.3° arf= +13.8° vel= 0.8 T_mão= 4.23 T_nó= 4.29 pernas=3.30/3.31 linha= 30.0 diedro= 9/ 9°
+LAB outra t=3.0 voando=true alt=36.5 T=1.59 enganches=0
+LAB t= 3.13 dist= 30.4 elev= 44.5° az=  -0.5° rumo=   +4.5° ataque= 24.5° rol=  +1.2° arf= +13.8° vel= 1.0 T_mão= 4.84 T_nó= 4.90 pernas=3.78/3.77 linha= 30.0 diedro=10/10°
+LAB t= 3.67 dist= 30.4 elev= 44.2° az=  +0.8° rumo=   +5.8° ataque= 24.1° rol=  +1.2° arf= +13.8° vel= 1.0 T_mão= 4.77 T_nó= 4.83 pernas=3.72/3.72 linha= 30.0 diedro= 9/10°
+LAB outra t=4.0 voando=true alt=34.3 T=3.72 enganches=0
+LAB t= 4.20 dist= 30.4 elev= 44.0° az=  +2.1° rumo=   +4.4° ataque= 23.7° rol=  -0.4° arf= +13.7° vel= 0.6 T_mão= 4.65 T_nó= 4.71 pernas=3.64/3.62 linha= 30.0 diedro= 9/ 9°
+LAB t= 4.73 dist= 30.4 elev= 43.8° az=  +2.4° rumo=   +1.6° ataque= 24.4° rol=  +0.3° arf= +13.9° vel= 0.1 T_mão= 4.78 T_nó= 4.84 pernas=3.73/3.73 linha= 30.0 diedro= 9/10°
+LAB outra t=5.0 voando=true alt=34.0 T=4.90 enganches=0
+LAB t= 5.27 dist= 30.4 elev= 43.8° az=  +2.2° rumo=   +0.7° ataque= 23.7° rol=  -0.5° arf= +13.8° vel= 0.2 T_mão= 5.21 T_nó= 5.27 pernas=4.07/4.05 linha= 30.0 diedro=10/10°
+LAB t= 5.80 dist= 30.4 elev= 44.0° az=  +1.6° rumo=   -3.0° ataque= 23.2° rol=  -1.2° arf= +13.8° vel= 0.8 T_mão= 5.19 T_nó= 5.25 pernas=4.05/4.03 linha= 30.0 diedro=10/10°
+LAB outra t=6.0 voando=true alt=34.2 T=5.01 enganches=0
+LAB t= 6.33 dist= 30.4 elev= 44.2° az=  +0.5° rumo=   -1.6° ataque= 23.5° rol=  +1.0° arf= +13.7° vel= 0.4 T_mão= 4.66 T_nó= 4.72 pernas=3.64/3.63 linha= 30.0 diedro= 9/ 9°
+LAB t= 6.87 dist= 30.4 elev= 44.2° az=  +0.5° rumo=   +0.1° ataque= 23.6° rol=  -0.3° arf= +13.7° vel= 0.2 T_mão= 4.56 T_nó= 4.62 pernas=3.57/3.55 linha= 30.0 diedro= 9/ 9°
+LAB outra t=7.0 voando=true alt=34.2 T=4.55 enganches=0
+LAB t= 7.40 dist= 30.4 elev= 43.9° az=  +0.4° rumo=   -0.1° ataque= 24.2° rol=  +0.4° arf= +13.8° vel= 0.3 T_mão= 4.74 T_nó= 4.80 pernas=3.70/3.69 linha= 30.0 diedro= 9/ 9°
+LAB t= 7.93 dist= 30.4 elev= 43.7° az=  +0.4° rumo=   -0.8° ataque= 23.8° rol=  -1.1° arf= +13.8° vel= 0.2 T_mão= 5.32 T_nó= 5.37 pernas=4.15/4.13 linha= 30.0 diedro=10/10°
+LAB outra t=8.0 voando=true alt=34.1 T=5.31 enganches=0
+LAB t= 8.47 dist= 30.4 elev= 43.9° az=  -0.2° rumo=   -2.6° ataque= 23.0° rol=  -0.1° arf= +13.8° vel= 0.5 T_mão= 5.21 T_nó= 5.27 pernas=4.06/4.05 linha= 30.0 diedro=10/10°
+LAB t= 9.00 dist= 30.4 elev= 43.9° az=  -0.5° rumo=   +0.5° ataque= 23.1° rol=  +0.7° arf= +13.7° vel= 0.3 T_mão= 4.38 T_nó= 4.44 pernas=3.43/3.41 linha= 30.0 diedro= 9/ 9°
+LAB outra t=9.0 voando=true alt=34.1 T=4.44 enganches=0
+LAB t= 9.53 dist= 30.4 elev= 43.5° az=  -0.1° rumo=   -0.3° ataque= 24.6° rol=  -0.5° arf= +14.0° vel= 0.5 T_mão= 4.32 T_nó= 4.38 pernas=3.37/3.39 linha= 30.0 diedro= 9/ 9°
+LAB outra t=10.0 voando=true alt=33.8 T=4.26 enganches=0
+LAB t=10.07 dist= 30.4 elev= 43.1° az=  -0.0° rumo=   +2.1° ataque= 24.9° rol=  +1.4° arf= +14.0° vel= 0.5 T_mão= 4.25 T_nó= 4.31 pernas=3.31/3.33 linha= 30.0 diedro= 9/ 9°
+LAB t=10.60 dist= 30.4 elev= 42.6° az=  +0.5° rumo=   +0.8° ataque= 25.2° rol=  -0.8° arf= +14.0° vel= 0.4 T_mão= 4.29 T_nó= 4.35 pernas=3.34/3.36 linha= 30.0 diedro= 9/ 9°
+LAB outra t=11.0 voando=true alt=33.5 T=4.70 enganches=0
+LAB t=11.13 dist= 30.4 elev= 42.4° az=  +0.4° rumo=   +0.6° ataque= 24.7° rol=  +0.9° arf= +14.0° vel= 0.1 T_mão= 5.07 T_nó= 5.13 pernas=3.94/3.95 linha= 30.0 diedro=10/10°
+LAB t=11.67 dist= 30.4 elev= 42.5° az=  +0.8° rumo=   +3.1° ataque= 23.3° rol=  +1.1° arf= +13.9° vel= 0.6 T_mão= 5.39 T_nó= 5.45 pernas=4.20/4.19 linha= 30.0 diedro=10/10°
+LAB: linha da outra pipa cortada (voada com 47 m de linha)
+LAB t=12.20 voada alt=33.9 
+LAB t=12.20 dist= 30.4 elev= 42.8° az=  +1.4° rumo=   +2.5° ataque= 23.1° rol=  -0.4° arf= +14.0° vel= 0.4 T_mão= 5.37 T_nó= 5.42 pernas=4.17/4.18 linha= 30.0 diedro=10/10°
+LAB t=12.73 voada alt=34.2 
+LAB t=12.73 dist= 30.4 elev= 43.1° az=  +1.5° rumo=   +1.8° ataque= 22.7° rol=  -0.2° arf= +13.7° vel= 0.2 T_mão= 5.18 T_nó= 5.24 pernas=4.04/4.02 linha= 30.0 diedro=10/10°
+LAB t=13.27 voada alt=32.8 
+LAB t=13.27 dist= 30.4 elev= 43.2° az=  +1.1° rumo=   -3.3° ataque= 23.3° rol=  -1.5° arf= +14.0° vel= 0.9 T_mão= 5.19 T_nó= 5.25 pernas=4.04/4.04 linha= 30.0 diedro=10/10°
+LAB EVENTO loose_kite_hooked t=13.57 LabRig → Outra_Voada
+LAB t=13.80 voada alt=31.6 enganchada em s=12.0 m (minha linha 30.0 m) força 0.07 N
+LAB t=13.80 dist= 30.4 elev= 43.3° az=  -0.2° rumo=   -1.3° ataque= 18.8° rol=  -1.1° arf= +25.2° vel= 0.8 T_mão= 4.88 T_nó= 4.75 pernas=2.95/4.22 linha= 30.0 diedro= 8/ 8°
+LAB t=14.33 voada alt=30.2 enganchada em s=12.0 m (minha linha 30.0 m) força 1.37 N
+LAB t=14.33 dist= 30.3 elev= 43.0° az=  -0.4° rumo=   +0.3° ataque= 25.3° rol=  +2.5° arf= +10.2° vel= 0.6 T_mão= 5.22 T_nó= 4.07 pernas=3.30/2.96 linha= 30.0 diedro= 8/ 8°
+LAB t=14.87 voada alt=28.7 enganchada em s=12.0 m (minha linha 30.0 m) força 2.17 N
+LAB t=14.87 dist= 30.3 elev= 42.4° az=  -0.0° rumo=   +3.1° ataque= 24.7° rol=  +0.3° arf= +12.6° vel= 0.7 T_mão= 6.58 T_nó= 4.41 pernas=3.44/3.34 linha= 30.0 diedro= 9/ 9°
+LAB t=15.40 voada alt=27.5 enganchada em s=12.0 m (minha linha 29.4 m) força 3.36 N
+LAB t=15.40 dist= 29.9 elev= 42.7° az=  +0.7° rumo=   +7.9° ataque= 22.2° rol=  +1.8° arf=  +7.0° vel= 2.5 T_mão=10.95 T_nó= 7.72 pernas=6.52/5.27 linha= 29.4 diedro=13/13°
+LAB t=15.93 voada alt=27.6 enganchada em s=12.0 m (minha linha 28.7 m) força 6.32 N
+LAB t=15.93 dist= 29.1 elev= 44.5° az=  +2.2° rumo=   +4.8° ataque= 20.2° rol=  +0.2° arf=  -0.5° vel= 2.4 T_mão=14.11 T_nó= 7.73 pernas=7.05/4.46 linha= 28.6 diedro=13/13°
+LAB t=16.43 voada alt=28.2 enganchada em s=12.0 m (minha linha 27.9 m) força 6.37 N
+LAB t=16.43 dist= 28.4 elev= 46.2° az=  +2.6° rumo=   +0.6° ataque= 19.7° rol=  -3.8° arf= -11.8° vel= 2.2 T_mão=19.90 T_nó= 7.36 pernas=7.21/2.99 linha= 27.9 diedro=13/12°
+LAB t=16.93 voada alt=28.7 enganchada em s=12.0 m (minha linha 27.2 m) força 6.33 N
+LAB t=16.93 dist= 27.6 elev= 47.5° az=  +0.8° rumo=   -8.2° ataque= 20.2° rol=  -4.8° arf= -21.5° vel= 2.5 T_mão=23.24 T_nó= 7.06 pernas=7.12/1.73 linha= 27.1 diedro=12/12°
+LAB t=17.43 voada alt=29.2 enganchada em s=12.0 m (minha linha 26.5 m) força 6.31 N
+LAB t=17.43 dist= 26.9 elev= 48.4° az=  -2.1° rumo=  -15.2° ataque= 20.8° rol=  -5.5° arf= -27.4° vel= 2.2 T_mão=25.05 T_nó= 6.76 pernas=6.84/0.97 linha= 26.5 diedro=12/11°
+LAB t=17.93 voada alt=29.6 enganchada em s=12.0 m (minha linha 26.1 m) força 6.34 N
+LAB t=17.93 dist= 26.5 elev= 48.5° az=  -5.1° rumo=  -16.7° ataque= 21.0° rol=  +2.7° arf= -29.1° vel= 1.4 T_mão=24.32 T_nó= 5.52 pernas=5.58/0.64 linha= 26.1 diedro=11/11°
+LAB t=18.43 voada alt=30.0 enganchada em s=12.0 m (minha linha 25.8 m) força 6.30 N
+LAB t=18.43 dist= 26.2 elev= 48.8° az=  -5.3° rumo=   -3.3° ataque= 21.0° rol= +11.0° arf= -29.0° vel= 1.1 T_mão=23.44 T_nó= 4.95 pernas=5.01/0.62 linha= 25.8 diedro= 9/10°
+LAB t=18.93 voada alt=30.2 enganchada em s=12.0 m (minha linha 25.6 m) força 6.26 N
+LAB t=18.93 dist= 26.0 elev= 48.6° az=  -2.3° rumo=  +12.3° ataque= 21.4° rol= +14.2° arf= -26.4° vel= 2.5 T_mão=20.99 T_nó= 4.49 pernas=4.55/0.80 linha= 25.6 diedro= 8/10°
+LAB t=19.43 voada alt=30.4 enganchada em s=12.0 m (minha linha 25.4 m) força 6.30 N
+LAB t=19.43 dist= 25.8 elev= 47.5° az=  +2.6° rumo=  +28.9° ataque= 20.5° rol= +13.7° arf= -24.1° vel= 3.7 T_mão=18.89 T_nó= 4.33 pernas=4.37/0.93 linha= 25.4 diedro= 8/ 9°
+LAB t=19.93 voada alt=30.6 enganchada em s=12.0 m (minha linha 25.3 m) força 6.35 N
+LAB t=19.93 dist= 25.6 elev= 46.0° az=  +7.4° rumo=  +30.6° ataque= 22.9° rol= -12.3° arf= -23.5° vel= 1.9 T_mão=18.14 T_nó= 5.04 pernas=5.09/1.12 linha= 25.2 diedro=10/10°
+LAB t=20.43 voada alt=30.8 enganchada em s=12.0 m (minha linha 24.7 m) força 6.34 N
+LAB t=20.43 dist= 25.2 elev= 46.3° az=  +6.2° rumo=   +2.7° ataque= 16.8° rol= -23.8° arf= -20.6° vel= 3.1 T_mão=24.40 T_nó= 6.50 pernas=6.53/1.89 linha= 24.7 diedro=13/ 9°
+LAB t=20.93 voada alt=30.9 enganchada em s=12.0 m (minha linha 24.1 m) força 6.32 N
+LAB t=20.93 dist= 24.5 elev= 46.3° az=  +0.1° rumo=  -31.2° ataque= 13.4° rol= -33.8° arf= -16.9° vel= 5.5 T_mão=25.28 T_nó= 5.23 pernas=5.17/1.96 linha= 24.1 diedro=11/ 7°
+LAB t=21.43 voada alt=31.0 enganchada em s=12.0 m (minha linha 23.8 m) força 6.33 N
+LAB t=21.43 dist= 24.2 elev= 42.8° az=  -8.6° rumo=  -62.5° ataque= 16.7° rol= -12.5° arf= -25.4° vel= 6.1 T_mão=24.72 T_nó= 4.79 pernas=4.84/0.91 linha= 23.8 diedro=11/ 8°
+LAB t=21.93 voada alt=31.0 enganchada em s=12.0 m (minha linha 23.5 m) força 6.30 N
+LAB t=21.93 dist= 23.9 elev= 39.7° az= -15.3° rumo=  -55.3° ataque= 20.3° rol= +15.4° arf= -20.6° vel= 3.3 T_mão=26.07 T_nó= 6.86 pernas=6.90/1.87 linha= 23.5 diedro=11/12°
+LAB t=22.43 voada alt=30.9 enganchada em s=12.0 m (minha linha 23.1 m) força 6.29 N
+LAB t=22.43 dist= 23.4 elev= 40.8° az= -16.8° rumo=  -20.8° ataque= 17.7° rol= +24.6° arf= -10.6° vel= 2.3 T_mão=24.96 T_nó= 5.82 pernas=5.63/2.59 linha= 23.0 diedro= 8/11°
+LAB t=22.93 voada alt=30.9 enganchada em s=12.0 m (minha linha 22.7 m) força 6.28 N
+LAB t=22.93 dist= 23.1 elev= 42.2° az= -12.4° rumo=  +11.6° ataque= 18.7° rol= +21.5° arf=  -9.8° vel= 3.7 T_mão=22.24 T_nó= 4.46 pernas=4.30/2.03 linha= 22.7 diedro= 8/10°
+LAB t=23.43 voada alt=30.9 enganchada em s=12.0 m (minha linha 22.5 m) força 6.28 N
+LAB t=23.43 dist= 22.9 elev= 42.0° az=  -5.3° rumo=  +34.1° ataque= 19.6° rol= +16.3° arf= -11.1° vel= 4.7 T_mão=20.67 T_nó= 5.35 pernas=5.21/2.29 linha= 22.5 diedro= 9/11°
+LAB t=23.93 voada alt=30.8 enganchada em s=12.0 m (minha linha 22.3 m) força 6.29 N
+LAB t=23.93 dist= 22.6 elev= 40.6° az=  +2.7° rumo=  +47.2° ataque= 20.6° rol=  +4.2° arf= -10.7° vel= 4.8 T_mão=19.03 T_nó= 6.04 pernas=5.89/2.58 linha= 22.2 diedro=10/11°
+LAB t=24.43 voada alt=30.6 enganchada em s=12.0 m (minha linha 21.7 m) força 6.23 N
+LAB t=24.43 dist= 22.2 elev= 40.4° az=  +9.0° rumo=  +37.3° ataque= 19.8° rol=  -7.2° arf=  -8.2° vel= 3.1 T_mão=23.89 T_nó= 7.25 pernas=6.98/3.36 linha= 21.7 diedro=12/12°
+LAB t=24.93 voada alt=30.4 enganchada em s=12.0 m (minha linha 21.1 m) força 6.24 N
+LAB t=24.93 dist= 21.5 elev= 42.1° az= +11.9° rumo=  +17.8° ataque= 20.4° rol= -11.0° arf=  -7.9° vel= 1.8 T_mão=24.20 T_nó= 6.74 pernas=6.47/3.17 linha= 21.1 diedro=12/11°
+LAB t=25.43 voada alt=30.2 enganchada em s=12.0 m (minha linha 20.6 m) força 6.24 N
+LAB t=25.43 dist= 21.0 elev= 44.1° az= +10.0° rumo=   -3.2° ataque= 20.6° rol= -11.7° arf=  -8.2° vel= 2.6 T_mão=24.27 T_nó= 6.51 pernas=6.25/3.04 linha= 20.6 diedro=12/10°
+LAB t=25.93 voada alt=30.1 enganchada em s=12.0 m (minha linha 20.1 m) força 6.24 N
+LAB t=25.93 dist= 20.5 elev= 45.4° az=  +4.5° rumo=  -20.9° ataque= 20.5° rol=  -9.0° arf= -11.0° vel= 3.5 T_mão=24.56 T_nó= 6.69 pernas=6.53/2.83 linha= 20.0 diedro=12/11°
+LAB t=26.43 voada alt=29.8 enganchada em s=12.0 m (minha linha 19.6 m) força 6.18 N
+LAB t=26.43 dist= 20.0 elev= 46.0° az=  -1.8° rumo=  -26.1° ataque= 20.8° rol=  +0.4° arf= -10.7° vel= 2.6 T_mão=21.93 T_nó= 5.91 pernas=5.76/2.51 linha= 19.6 diedro=11/11°
+LAB t=26.93 voada alt=29.5 enganchada em s=12.0 m (minha linha 19.2 m) força 6.15 N
+LAB t=26.93 dist= 19.6 elev= 46.8° az=  -4.9° rumo=  -18.7° ataque= 22.0° rol=  +1.9° arf=  -5.1° vel= 1.4 T_mão=17.62 T_nó= 5.65 pernas=5.32/2.90 linha= 19.2 diedro=10/11°
+LAB t=27.43 voada alt=29.1 enganchada em s=12.0 m (minha linha 18.5 m) força 6.14 N
+LAB t=27.43 dist= 18.9 elev= 48.3° az=  -7.8° rumo=  -16.0° ataque= 20.9° rol=  +3.7° arf=  +1.2° vel= 2.3 T_mão=23.67 T_nó= 7.15 pernas=6.41/4.32 linha= 18.4 diedro=12/12°
+LAB t=27.93 voada alt=28.8 enganchada em s=12.0 m (minha linha 17.7 m) força 6.22 N
+LAB t=27.93 dist= 18.1 elev= 50.3° az=  -8.7° rumo=   -6.5° ataque= 20.3° rol=  +2.1° arf=  -0.1° vel= 1.8 T_mão=24.71 T_nó= 6.86 pernas=6.23/4.03 linha= 17.7 diedro=12/12°
+LAB t=28.43 voada alt=28.5 enganchada em s=12.0 m (minha linha 17.2 m) força 6.24 N
+LAB t=28.43 dist= 17.5 elev= 51.3° az=  -8.3° rumo=   -2.9° ataque= 21.5° rol=  +3.3° arf=  -1.4° vel= 1.0 T_mão=23.78 T_nó= 5.48 pernas=5.02/3.12 linha= 17.1 diedro=10/10°
+LAB t=28.93 voada alt=28.1 enganchada em s=12.0 m (minha linha 16.7 m) força 6.19 N
+LAB t=28.93 dist= 17.0 elev= 51.2° az=  -6.2° rumo=   +4.3° ataque= 22.4° rol=  +1.8° arf=  +0.4° vel= 1.3 T_mão=21.27 T_nó= 4.89 pernas=4.40/2.92 linha= 16.6 diedro= 9/10°
+LAB t=29.43 voada alt=27.7 enganchada em s=12.0 m (minha linha 16.2 m) força 6.18 N
+LAB t=29.43 dist= 16.5 elev= 50.5° az=  -3.1° rumo=   +8.4° ataque= 22.7° rol=  +2.1° arf=  +4.9° vel= 1.6 T_mão=17.05 T_nó= 5.47 pernas=4.72/3.59 linha= 16.2 diedro=10/10°
+LAB t=29.93 voada alt=27.1 enganchada em s=12.0 m (minha linha 15.5 m) força 7.26 N
+LAB t=29.93 dist= 15.8 elev= 50.5° az=  +0.2° rumo=   +8.3° ataque= 21.4° rol=  +0.2° arf= +16.0° vel= 1.7 T_mão=15.04 T_nó= 6.85 pernas=5.12/5.43 linha= 15.5 diedro=12/12°
+LAB t=30.43 voada alt=26.7 enganchada em s=12.0 m (minha linha 14.8 m) força 6.69 N
+LAB t=30.43 dist= 15.1 elev= 51.4° az=  +2.8° rumo=   +9.5° ataque= 20.8° rol=  +3.1° arf= +16.2° vel= 1.7 T_mão=13.19 T_nó= 6.53 pernas=4.86/5.19 linha= 14.7 diedro=11/12°
+LAB t=30.93 voada alt=26.2 enganchada em s=12.0 m (minha linha 14.0 m) força 6.29 N
+LAB t=30.93 dist= 14.3 elev= 51.9° az=  +5.2° rumo=   +2.3° ataque= 20.5° rol=  -7.4° arf= +16.6° vel= 1.5 T_mão=12.31 T_nó= 6.05 pernas=4.48/4.83 linha= 14.0 diedro=11/11°
+LAB EVENTO kite_caught t=31.20 LabRig → Outra_Voada
+LAB t=31.43 dist= 13.8 elev= 52.1° az=  +3.2° rumo=   +2.1° ataque= 19.6° rol=  +1.9° arf= +13.4° vel= 0.5 T_mão= 3.79 T_nó= 3.81 pernas=2.95/2.92 linha= 13.5 diedro= 8/ 8°
+LAB t=31.93 dist= 13.8 elev= 49.6° az=  +2.5° rumo=   -5.4° ataque= 26.9° rol=  -2.8° arf= +16.1° vel= 1.7 T_mão= 3.46 T_nó= 3.49 pernas=2.59/2.78 linha= 13.5 diedro= 8/ 8°
+LAB outra t=32.0 voando=false alt=-1.0 T=3.56 enganches=0
+LAB t=32.47 dist= 13.8 elev= 46.8° az=  -0.5° rumo=   -2.3° ataque= 26.5° rol=  -0.0° arf= +16.7° vel= 1.0 T_mão= 4.05 T_nó= 4.08 pernas=3.00/3.27 linha= 13.5 diedro= 9/ 9°
+LAB outra t=33.0 voando=false alt=-1.0 T=3.56 enganches=0
+LAB t=33.00 dist= 13.8 elev= 45.3° az=  -1.6° rumo=   -3.2° ataque= 25.5° rol=  +0.6° arf= +16.9° vel= 0.5 T_mão= 4.46 T_nó= 4.49 pernas=3.29/3.61 linha= 13.5 diedro= 9/ 9°
+LAB t=33.53 dist= 13.8 elev= 44.6° az=  -0.7° rumo=   +2.2° ataque= 23.6° rol=  +0.3° arf= +16.8° vel= 0.7 T_mão= 4.97 T_nó= 5.00 pernas=3.68/4.01 linha= 13.5 diedro=10/10°
+LAB outra t=34.0 voando=false alt=-1.0 T=3.56 enganches=0
+LAB t=34.07 dist= 13.8 elev= 43.9° az=  +1.0° rumo=   +1.9° ataque= 23.4° rol=  +0.5° arf= +16.6° vel= 0.6 T_mão= 4.63 T_nó= 4.66 pernas=3.44/3.73 linha= 13.5 diedro= 9/ 9°
+LAB t=34.60 dist= 13.8 elev= 42.7° az=  +1.8° rumo=   +0.8° ataque= 24.3° rol=  -0.3° arf= +17.0° vel= 0.6 T_mão= 4.23 T_nó= 4.26 pernas=3.12/3.44 linha= 13.5 diedro= 9/ 9°
+LAB outra t=35.0 voando=false alt=-1.0 T=3.56 enganches=0
+LAB t=35.13 dist= 13.8 elev= 41.5° az=  +2.3° rumo=   +3.9° ataque= 25.8° rol=  +1.1° arf= +17.5° vel= 0.8 T_mão= 3.94 T_nó= 3.97 pernas=2.88/3.22 linha= 13.5 diedro= 8/ 8°
+LAB t=35.67 dist= 13.8 elev= 40.6° az=  +3.2° rumo=   -2.0° ataque= 27.3° rol=  -1.6° arf= +17.3° vel= 0.5 T_mão= 3.36 T_nó= 3.39 pernas=2.47/2.75 linha= 13.5 diedro= 8/ 8°
+LAB outra t=36.0 voando=false alt=-1.0 T=3.56 enganches=0
+LAB t=36.20 dist= 13.8 elev= 39.8° az=  +1.7° rumo=   -0.7° ataque= 26.9° rol=  +0.3° arf= +17.4° vel= 0.3 T_mão= 4.18 T_nó= 4.20 pernas=3.06/3.40 linha= 13.5 diedro= 9/ 9°
+LAB t=36.73 dist= 13.8 elev= 39.8° az=  +0.8° rumo=   -3.3° ataque= 25.6° rol=  -0.6° arf= +17.3° vel= 0.6 T_mão= 4.78 T_nó= 4.81 pernas=3.51/3.89 linha= 13.5 diedro=10/ 9°
+LAB outra t=37.0 voando=false alt=-1.0 T=3.56 enganches=0
+LAB t=37.27 dist= 13.8 elev= 40.7° az=  -0.5° rumo=   -2.7° ataque= 23.8° rol=  +0.1° arf= +17.2° vel= 0.7 T_mão= 5.52 T_nó= 5.54 pernas=4.06/4.46 linha= 13.5 diedro=10/10°
+LAB t=37.80 dist= 13.8 elev= 42.2° az=  -0.5° rumo=   +0.3° ataque= 22.7° rol=  +0.5° arf= +17.2° vel= 0.8 T_mão= 5.71 T_nó= 5.74 pernas=4.20/4.63 linha= 13.5 diedro=11/11°
+LAB outra t=38.0 voando=false alt=-1.0 T=3.56 enganches=0
+LAB t=38.33 dist= 13.8 elev= 43.4° az=  -0.4° rumo=   -2.3° ataque= 22.2° rol=  -0.9° arf= +17.1° vel= 0.5 T_mão= 5.25 T_nó= 5.28 pernas=3.87/4.25 linha= 13.5 diedro=10/10°
+LAB t=38.87 dist= 13.8 elev= 43.5° az=  -2.3° rumo=   -3.6° ataque= 22.7° rol=  +0.1° arf= +16.6° vel= 0.6 T_mão= 4.95 T_nó= 4.98 pernas=3.68/3.98 linha= 13.5 diedro=10/10°
+LAB outra t=39.0 voando=false alt=-1.0 T=3.56 enganches=0
+LAB t=39.40 dist= 13.8 elev= 42.8° az=  -3.4° rumo=   -2.5° ataque= 23.4° rol=  -0.5° arf= +16.9° vel= 0.4 T_mão= 5.29 T_nó= 5.32 pernas=3.91/4.27 linha= 13.5 diedro=10/10°
+LAB t=39.93 dist= 13.8 elev= 42.4° az=  -4.5° rumo=   -2.4° ataque= 23.4° rol=  +0.7° arf= +17.3° vel= 0.2 T_mão= 5.14 T_nó= 5.17 pernas=3.78/4.17 linha= 13.5 diedro=10/10°
+LAB outra t=40.0 voando=false alt=-1.0 T=3.56 enganches=0
+LAB t=40.47 dist= 13.8 elev= 42.3° az=  -3.9° rumo=   +1.6° ataque= 23.0° rol=  +0.4° arf= +17.2° vel= 0.5 T_mão= 5.17 T_nó= 5.19 pernas=3.80/4.19 linha= 13.5 diedro=10/10°
+LAB outra t=41.0 voando=false alt=-1.0 T=3.56 enganches=0
+LAB t=41.00 dist= 13.8 elev= 42.0° az=  -2.1° rumo=   +2.5° ataque= 24.1° rol=  -0.6° arf= +17.8° vel= 0.5 T_mão= 5.01 T_nó= 5.04 pernas=3.65/4.09 linha= 13.5 diedro=10/10°
+LAB t=41.53 dist= 13.8 elev= 42.4° az=  -1.0° rumo=   +2.7° ataque= 24.8° rol=  +0.1° arf= +17.9° vel= 0.5 T_mão= 4.36 T_nó= 4.39 pernas=3.17/3.58 linha= 13.5 diedro= 9/ 9°
+LAB outra t=42.0 voando=false alt=-1.0 T=3.56 enganches=0
+LAB t=42.07 dist= 13.8 elev= 43.1° az=  -0.7° rumo=   -2.3° ataque= 24.5° rol=  -1.3° arf= +17.0° vel= 0.6 T_mão= 4.51 T_nó= 4.53 pernas=3.32/3.65 linha= 13.5 diedro= 9/ 9°
+LAB t=42.60 dist= 13.8 elev= 43.4° az=  -3.4° rumo=   -5.0° ataque= 23.8° rol=  -0.1° arf= +16.9° vel= 1.0 T_mão= 4.63 T_nó= 4.65 pernas=3.42/3.74 linha= 13.5 diedro= 9/ 9°
+LAB outra t=43.0 voando=false alt=-1.0 T=3.56 enganches=0
+LAB t=43.13 dist= 13.8 elev= 43.1° az=  -4.4° rumo=   +1.3° ataque= 25.0° rol=  +1.2° arf= +17.3° vel= 0.5 T_mão= 4.48 T_nó= 4.51 pernas=3.28/3.65 linha= 13.5 diedro= 9/ 9°
+LAB t=43.67 dist= 13.8 elev= 43.3° az=  -3.5° rumo=   -1.6° ataque= 24.5° rol=  -0.0° arf= +17.5° vel= 0.3 T_mão= 4.66 T_nó= 4.69 pernas=3.41/3.80 linha= 13.5 diedro= 9/ 9°
+LAB outra t=44.0 voando=false alt=-1.0 T=3.56 enganches=0
+LAB t=44.20 dist= 13.8 elev= 43.5° az=  -2.1° rumo=   +7.7° ataque= 23.7° rol=  +1.8° arf= +16.7° vel= 1.4 T_mão= 4.23 T_nó= 4.26 pernas=3.13/3.42 linha= 13.5 diedro= 9/ 9°
+LAB t=44.73 dist= 13.8 elev= 42.6° az=  +1.8° rumo=   +5.1° ataque= 24.4° rol=  -0.8° arf= +17.2° vel= 0.8 T_mão= 5.10 T_nó= 5.13 pernas=3.75/4.13 linha= 13.5 diedro=10/10°
+LAB outra t=45.0 voando=false alt=-1.0 T=3.56 enganches=0
+LAB t=45.27 dist= 13.8 elev= 42.3° az=  +3.3° rumo=   +5.5° ataque= 23.3° rol=  -0.1° arf= +17.6° vel= 0.5 T_mão= 5.38 T_nó= 5.41 pernas=3.94/4.38 linha= 13.5 diedro=10/10°
+LAB t=45.80 dist= 13.8 elev= 42.6° az=  +4.0° rumo=   +2.3° ataque= 23.8° rol=  +0.1° arf= +17.5° vel= 0.2 T_mão= 4.84 T_nó= 4.86 pernas=3.54/3.94 linha= 13.5 diedro= 9/10°
+LAB outra t=46.0 voando=false alt=-1.0 T=3.56 enganches=0
+LAB t=46.33 dist= 13.8 elev= 43.1° az=  +3.8° rumo=   +0.2° ataque= 23.9° rol=  -0.8° arf= +17.4° vel= 0.4 T_mão= 5.14 T_nó= 5.17 pernas=3.77/4.18 linha= 13.5 diedro=10/10°
+LAB t=46.87 dist= 13.8 elev= 43.9° az=  +1.6° rumo=   -5.0° ataque= 23.2° rol=  -1.0° arf= +17.1° vel= 1.2 T_mão= 5.39 T_nó= 5.42 pernas=3.97/4.36 linha= 13.5 diedro=10/10°
+LAB outra t=47.0 voando=false alt=-1.0 T=3.56 enganches=0
+LAB t=47.40 dist= 13.8 elev= 44.7° az=  -1.6° rumo=   -4.1° ataque= 23.2° rol=  +0.3° arf= +17.4° vel= 0.8 T_mão= 5.13 T_nó= 5.16 pernas=3.76/4.17 linha= 13.5 diedro=10/10°
+LAB t=47.93 dist= 13.8 elev= 45.5° az=  -2.7° rumo=   -1.9° ataque= 23.5° rol=  +0.5° arf= +16.9° vel= 0.2 T_mão= 4.32 T_nó= 4.35 pernas=3.19/3.50 linha= 13.5 diedro= 9/ 9°
+LAB outra t=48.0 voando=false alt=-1.0 T=3.56 enganches=0
+LAB resumo seq=voada: antes (8–12 s) elevação média 43.1° (42.4..43.9), azimute -0.5..1.2°, rumo -3..4°, tração média 4.75 N
+LAB resumo depois (12 s+): rumo -66..47°, azimute -17.1..11.9°, altura 10.1..22.1 m, tração máx 26.7 N, linha 13.5 m
+LAB balanços (picos de giro °/s): -61 +93 -122 +85 -52 +44 -54 
+LAB BALANÇO médio 6° (5 balanços)
+LAB ANDA médio 8.3° (2.0 m a 14 m) por vai-e-volta (21)
+LAB GIRO parado=5°/s toques=17°/s
+LAB SCORE elev=44.6 rumo_rms=16.2 aoa=22.4 y_min=10.1 invertida=0% picos=7

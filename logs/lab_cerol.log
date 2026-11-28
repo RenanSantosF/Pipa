@@ -1,0 +1,114 @@
+Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org
+
+LAB seq=rabiolacerol linha=30 m vento=6.5 m/s tamanho=1 nó=(0.25, 0.30) flex=0.050 rad/N
+LAB t= 0.03 rabiola 12 nós · presa=false força=0.00 N · minha pipa alt 24.2 az -0°
+LAB t= 0.03 dist= 30.0 elev= 49.7° az=  -0.0° rumo=   +0.0° ataque=  0.0° rol=  -0.0° arf=  +0.0° vel= 0.0 T_mão= 0.00 T_nó= 0.00 pernas=0.00/0.00 linha= 30.0 diedro= 3/ 3°
+LAB t= 0.53 rabiola 12 nós · presa=false força=0.00 N · minha pipa alt 23.9 az -0°
+LAB t= 0.53 dist= 30.3 elev= 48.3° az=  -0.4° rumo=   -6.1° ataque= 35.1° rol=  -1.2° arf=  +3.9° vel= 1.3 T_mão= 4.47 T_nó= 4.50 pernas=3.93/2.91 linha= 30.0 diedro=10/10°
+LAB t= 1.07 rabiola 12 nós · presa=false força=0.00 N · minha pipa alt 23.6 az -2°
+LAB t= 1.07 dist= 30.4 elev= 47.3° az=  -1.6° rumo=   -2.5° ataque= 29.9° rol=  -0.3° arf= +10.2° vel= 1.0 T_mão= 4.21 T_nó= 4.28 pernas=3.47/3.11 linha= 30.0 diedro= 9/ 9°
+LAB t= 1.57 rabiola 12 nós · presa=false força=0.00 N · minha pipa alt 23.3 az -2°
+LAB t= 1.57 dist= 30.4 elev= 46.4° az=  -2.1° rumo=   -3.0° ataque= 27.1° rol=  -0.0° arf= +13.2° vel= 0.9 T_mão= 4.05 T_nó= 4.12 pernas=3.20/3.14 linha= 30.0 diedro= 9/ 9°
+LAB t= 2.07 rabiola 12 nós · presa=false força=0.00 N · minha pipa alt 23.0 az -2°
+LAB t= 2.07 dist= 30.3 elev= 45.7° az=  -2.1° rumo=   +0.0° ataque= 25.9° rol=  +0.1° arf= +13.6° vel= 0.8 T_mão= 3.75 T_nó= 3.81 pernas=2.94/2.93 linha= 30.0 diedro= 8/ 8°
+LAB t= 2.60 rabiola 12 nós · presa=false força=0.00 N · minha pipa alt 22.8 az -2°
+LAB t= 2.60 dist= 30.4 elev= 45.0° az=  -1.5° rumo=   +1.8° ataque= 25.8° rol=  +1.3° arf= +13.8° vel= 0.8 T_mão= 4.23 T_nó= 4.29 pernas=3.30/3.31 linha= 30.0 diedro= 9/ 9°
+LAB t= 3.13 rabiola 12 nós · presa=false força=0.00 N · minha pipa alt 22.6 az -0°
+LAB t= 3.13 dist= 30.4 elev= 44.5° az=  -0.5° rumo=   +4.5° ataque= 24.5° rol=  +1.2° arf= +13.8° vel= 1.0 T_mão= 4.84 T_nó= 4.90 pernas=3.78/3.77 linha= 30.0 diedro=10/10°
+LAB t= 3.67 rabiola 12 nós · presa=false força=0.00 N · minha pipa alt 22.5 az +1°
+LAB t= 3.67 dist= 30.4 elev= 44.2° az=  +0.8° rumo=   +5.8° ataque= 24.1° rol=  +1.2° arf= +13.8° vel= 1.0 T_mão= 4.77 T_nó= 4.83 pernas=3.72/3.72 linha= 30.0 diedro= 9/10°
+LAB t= 4.20 rabiola 12 nós · presa=false força=0.00 N · minha pipa alt 22.4 az +2°
+LAB t= 4.20 dist= 30.4 elev= 44.0° az=  +2.1° rumo=   +4.4° ataque= 23.7° rol=  -0.4° arf= +13.7° vel= 0.6 T_mão= 4.65 T_nó= 4.71 pernas=3.64/3.62 linha= 30.0 diedro= 9/ 9°
+LAB t= 4.73 rabiola 12 nós · presa=false força=0.00 N · minha pipa alt 22.3 az +2°
+LAB t= 4.73 dist= 30.4 elev= 43.8° az=  +2.4° rumo=   +1.6° ataque= 24.4° rol=  +0.3° arf= +13.9° vel= 0.1 T_mão= 4.78 T_nó= 4.84 pernas=3.73/3.73 linha= 30.0 diedro= 9/10°
+LAB t= 5.27 rabiola 12 nós · presa=false força=0.00 N · minha pipa alt 22.3 az +2°
+LAB t= 5.27 dist= 30.4 elev= 43.8° az=  +2.2° rumo=   +0.7° ataque= 23.7° rol=  -0.5° arf= +13.8° vel= 0.2 T_mão= 5.21 T_nó= 5.27 pernas=4.07/4.05 linha= 30.0 diedro=10/10°
+LAB t= 5.80 rabiola 12 nós · presa=false força=0.00 N · minha pipa alt 22.4 az +2°
+LAB t= 5.80 dist= 30.4 elev= 44.0° az=  +1.6° rumo=   -3.0° ataque= 23.2° rol=  -1.2° arf= +13.8° vel= 0.8 T_mão= 5.19 T_nó= 5.25 pernas=4.05/4.03 linha= 30.0 diedro=10/10°
+LAB t= 6.33 rabiola 12 nós · presa=false força=0.00 N · minha pipa alt 22.5 az +1°
+LAB t= 6.33 dist= 30.4 elev= 44.2° az=  +0.5° rumo=   -1.6° ataque= 23.5° rol=  +1.0° arf= +13.7° vel= 0.4 T_mão= 4.66 T_nó= 4.72 pernas=3.64/3.63 linha= 30.0 diedro= 9/ 9°
+LAB t= 6.87 rabiola 12 nós · presa=false força=0.00 N · minha pipa alt 22.5 az +1°
+LAB t= 6.87 dist= 30.4 elev= 44.2° az=  +0.5° rumo=   +0.1° ataque= 23.6° rol=  -0.3° arf= +13.7° vel= 0.2 T_mão= 4.56 T_nó= 4.62 pernas=3.57/3.55 linha= 30.0 diedro= 9/ 9°
+LAB t= 7.40 rabiola 12 nós · presa=false força=0.00 N · minha pipa alt 22.4 az +0°
+LAB t= 7.40 dist= 30.4 elev= 43.9° az=  +0.4° rumo=   -0.1° ataque= 24.2° rol=  +0.4° arf= +13.8° vel= 0.3 T_mão= 4.74 T_nó= 4.80 pernas=3.70/3.69 linha= 30.0 diedro= 9/ 9°
+LAB t= 7.93 rabiola 12 nós · presa=false força=0.00 N · minha pipa alt 22.3 az +0°
+LAB t= 7.93 dist= 30.4 elev= 43.7° az=  +0.4° rumo=   -0.8° ataque= 23.8° rol=  -1.1° arf= +13.8° vel= 0.2 T_mão= 5.32 T_nó= 5.37 pernas=4.15/4.13 linha= 30.0 diedro=10/10°
+LAB t= 8.47 rabiola 12 nós · presa=false força=0.00 N · minha pipa alt 22.4 az -0°
+LAB t= 8.47 dist= 30.4 elev= 43.9° az=  -0.2° rumo=   -2.6° ataque= 23.0° rol=  -0.1° arf= +13.8° vel= 0.5 T_mão= 5.21 T_nó= 5.27 pernas=4.06/4.05 linha= 30.0 diedro=10/10°
+LAB t= 9.00 rabiola 12 nós · presa=false força=0.00 N · minha pipa alt 22.4 az -0°
+LAB t= 9.00 dist= 30.4 elev= 43.9° az=  -0.5° rumo=   +0.5° ataque= 23.1° rol=  +0.7° arf= +13.7° vel= 0.3 T_mão= 4.38 T_nó= 4.44 pernas=3.43/3.41 linha= 30.0 diedro= 9/ 9°
+LAB t= 9.53 rabiola 12 nós · presa=false força=0.00 N · minha pipa alt 22.2 az -0°
+LAB t= 9.53 dist= 30.4 elev= 43.5° az=  -0.1° rumo=   -0.3° ataque= 24.6° rol=  -0.5° arf= +14.0° vel= 0.5 T_mão= 4.32 T_nó= 4.38 pernas=3.37/3.39 linha= 30.0 diedro= 9/ 9°
+LAB t=10.07 rabiola 12 nós · presa=false força=0.00 N · minha pipa alt 22.0 az -0°
+LAB t=10.07 dist= 30.4 elev= 43.1° az=  -0.0° rumo=   +2.1° ataque= 24.9° rol=  +1.4° arf= +14.0° vel= 0.5 T_mão= 4.25 T_nó= 4.31 pernas=3.31/3.33 linha= 30.0 diedro= 9/ 9°
+LAB t=10.60 rabiola 12 nós · presa=false força=0.00 N · minha pipa alt 21.9 az +1°
+LAB t=10.60 dist= 30.4 elev= 42.6° az=  +0.5° rumo=   +0.8° ataque= 25.2° rol=  -0.8° arf= +14.0° vel= 0.4 T_mão= 4.29 T_nó= 4.35 pernas=3.34/3.36 linha= 30.0 diedro= 9/ 9°
+LAB t=11.13 rabiola 12 nós · presa=false força=0.00 N · minha pipa alt 21.8 az +0°
+LAB t=11.13 dist= 30.4 elev= 42.4° az=  +0.4° rumo=   +0.6° ataque= 24.7° rol=  +0.9° arf= +14.0° vel= 0.1 T_mão= 5.07 T_nó= 5.13 pernas=3.94/3.95 linha= 30.0 diedro=10/10°
+LAB t=11.67 rabiola 12 nós · presa=false força=0.00 N · minha pipa alt 21.8 az +1°
+LAB t=11.67 dist= 30.4 elev= 42.5° az=  +0.8° rumo=   +3.1° ataque= 23.3° rol=  +1.1° arf= +13.9° vel= 0.6 T_mão= 5.39 T_nó= 5.45 pernas=4.20/4.19 linha= 30.0 diedro=10/10°
+LAB t=12.20 rabiola 12 nós · presa=false força=0.00 N · minha pipa alt 22.0 az +1°
+LAB t=12.20 dist= 30.4 elev= 42.8° az=  +1.4° rumo=   +2.5° ataque= 23.1° rol=  -0.4° arf= +14.0° vel= 0.4 T_mão= 5.37 T_nó= 5.42 pernas=4.17/4.18 linha= 30.0 diedro=10/10°
+LAB t=12.73 rabiola 12 nós · presa=false força=0.00 N · minha pipa alt 22.1 az +1°
+LAB t=12.73 dist= 30.4 elev= 43.1° az=  +1.5° rumo=   +1.8° ataque= 22.7° rol=  -0.2° arf= +13.7° vel= 0.2 T_mão= 5.18 T_nó= 5.24 pernas=4.04/4.02 linha= 30.0 diedro=10/10°
+LAB t=13.27 rabiola 12 nós · presa=false força=0.00 N · minha pipa alt 22.1 az +1°
+LAB t=13.27 dist= 30.4 elev= 43.2° az=  +1.1° rumo=   -3.3° ataque= 23.3° rol=  -1.5° arf= +14.0° vel= 0.9 T_mão= 5.19 T_nó= 5.25 pernas=4.04/4.04 linha= 30.0 diedro=10/10°
+LAB t=13.80 rabiola 12 nós · presa=false força=0.00 N · minha pipa alt 22.1 az -0°
+LAB t=13.80 dist= 30.4 elev= 43.3° az=  -0.2° rumo=   -1.4° ataque= 23.4° rol=  +1.4° arf= +13.8° vel= 0.5 T_mão= 4.45 T_nó= 4.50 pernas=3.47/3.47 linha= 30.0 diedro= 9/ 9°
+LAB t=14.33 rabiola 12 nós · presa=false força=0.00 N · minha pipa alt 22.0 az -0°
+LAB t=14.33 dist= 30.3 elev= 43.1° az=  -0.3° rumo=   +0.1° ataque= 24.8° rol=  -0.3° arf= +13.7° vel= 0.4 T_mão= 3.96 T_nó= 4.02 pernas=3.10/3.09 linha= 30.0 diedro= 8/ 8°
+LAB t=14.87 rabiola 12 nós · presa=false força=0.00 N · minha pipa alt 21.9 az -0°
+LAB t=14.87 dist= 30.4 elev= 42.6° az=  -0.2° rumo=   +2.3° ataque= 25.7° rol=  +1.1° arf= +14.0° vel= 0.5 T_mão= 4.21 T_nó= 4.27 pernas=3.28/3.29 linha= 30.0 diedro= 9/ 9°
+LAB t=15.40 rabiola 12 nós · presa=false força=0.00 N · minha pipa alt 21.8 az +1°
+LAB t=15.40 dist= 30.4 elev= 42.4° az=  +0.5° rumo=   +3.4° ataque= 25.7° rol=  -0.0° arf= +14.0° vel= 0.6 T_mão= 4.41 T_nó= 4.47 pernas=3.44/3.45 linha= 30.0 diedro= 9/ 9°
+LAB t=15.93 rabiola 12 nós · presa=false força=0.00 N · minha pipa alt 21.8 az +1°
+LAB t=15.93 dist= 30.4 elev= 42.5° az=  +1.4° rumo=   +2.7° ataque= 24.4° rol=  -0.6° arf= +13.7° vel= 0.6 T_mão= 4.89 T_nó= 4.95 pernas=3.82/3.80 linha= 30.0 diedro=10/10°
+LAB t=16.43 rabiola 12 nós · presa=false força=0.00 N · minha pipa alt 21.9 az +2°
+LAB t=16.43 dist= 30.4 elev= 42.6° az=  +1.6° rumo=   -1.4° ataque= 23.4° rol=  -1.3° arf= +13.6° vel= 0.3 T_mão= 4.64 T_nó= 4.70 pernas=3.63/3.60 linha= 30.0 diedro= 9/ 9°
+LAB t=16.93 rabiola 12 nós · presa=false força=0.00 N · minha pipa alt 21.8 az +1°
+LAB t=16.93 dist= 30.4 elev= 42.6° az=  +0.8° rumo=   -3.6° ataque= 24.3° rol=  -0.2° arf= +13.7° vel= 0.7 T_mão= 4.37 T_nó= 4.43 pernas=3.42/3.41 linha= 30.0 diedro= 9/ 9°
+LAB t=17.43 rabiola 12 nós · presa=false força=0.00 N · minha pipa alt 21.8 az +0°
+LAB t=17.43 dist= 30.4 elev= 42.4° az=  +0.2° rumo=   -3.4° ataque= 24.6° rol=  -1.3° arf= +13.9° vel= 0.5 T_mão= 5.03 T_nó= 5.08 pernas=3.91/3.91 linha= 30.0 diedro=10/10°
+LAB EVENTO tail_grabbed t=17.67 Outra → LabRig
+LAB t=17.93 rabiola 12 nós · presa=true força=0.24 N · minha pipa alt 21.8 az -1°
+LAB t=17.93 dist= 30.4 elev= 42.5° az=  -0.6° rumo=   -1.3° ataque= 24.4° rol=  -0.0° arf= +13.7° vel= 0.7 T_mão= 5.12 T_nó= 5.22 pernas=4.03/4.01 linha= 30.0 diedro=10/10°
+LAB t=18.43 rabiola 12 nós · presa=true força=0.89 N · minha pipa alt 21.8 az +0°
+LAB t=18.43 dist= 30.4 elev= 42.5° az=  +0.0° rumo=  +25.7° ataque= 29.4° rol=  +3.0° arf= +11.9° vel= 1.7 T_mão= 5.43 T_nó= 5.48 pernas=4.35/4.09 linha= 30.0 diedro=11/11°
+LAB EVENTO tail_cut t=18.80 Outra → LabRig (rabiola com 3 nós)
+LAB t=18.93 rabiola 3 nós · presa=false força=0.00 N · minha pipa alt 20.9 az +2°
+LAB t=18.93 dist= 30.3 elev= 40.3° az=  +2.1° rumo=  +70.3° ataque= 47.6° rol=  +1.1° arf= +19.5° vel= 4.1 T_mão= 1.76 T_nó= 1.80 pernas=1.26/1.50 linha= 30.0 diedro= 6/ 6°
+LAB t=19.43 rabiola 3 nós · presa=false força=0.00 N · minha pipa alt 20.0 az +7°
+LAB t=19.43 dist= 30.4 elev= 38.0° az=  +7.3° rumo=  +50.1° ataque= 18.0° rol=  -3.7° arf=  +6.0° vel= 5.9 T_mão= 5.45 T_nó= 5.54 pernas=4.74/3.71 linha= 30.0 diedro=11/12°
+LAB t=19.93 rabiola 3 nós · presa=false força=0.00 N · minha pipa alt 20.6 az +7°
+LAB t=19.93 dist= 30.4 elev= 39.3° az=  +7.5° rumo=  -88.8° ataque= 21.2° rol= -25.2° arf= +12.5° vel= 8.0 T_mão= 6.32 T_nó= 6.35 pernas=5.09/4.69 linha= 30.0 diedro=12/13°
+LAB t=20.43 rabiola 3 nós · presa=false força=0.00 N · minha pipa alt 17.1 az +6°
+LAB t=20.43 dist= 30.5 elev= 31.2° az=  +6.4° rumo=  +65.2° ataque= 22.7° rol= -20.8° arf= +11.4° vel= 7.6 T_mão= 8.73 T_nó= 8.75 pernas=7.10/6.35 linha= 30.0 diedro=15/18°
+LAB t=20.93 rabiola 3 nós · presa=false força=0.00 N · minha pipa alt 16.5 az +3°
+LAB t=20.93 dist= 30.5 elev= 29.9° az=  +3.2° rumo= -154.3° ataque= 19.6° rol= -20.2° arf= +13.2° vel=11.3 T_mão= 8.35 T_nó= 8.38 pernas=6.65/6.25 linha= 30.0 diedro=15/16°
+LAB t=21.43 rabiola 3 nós · presa=false força=0.00 N · minha pipa alt 14.6 az +6°
+LAB t=21.43 dist= 30.5 elev= 25.9° az=  +5.7° rumo=  -44.4° ataque= 24.6° rol= -22.9° arf= +12.3° vel= 5.5 T_mão= 9.30 T_nó= 9.31 pernas=7.50/6.82 linha= 30.0 diedro=17/18°
+LAB t=21.93 rabiola 3 nós · presa=false força=0.00 N · minha pipa alt 11.6 az +3°
+LAB t=21.93 dist= 30.5 elev= 19.6° az=  +3.2° rumo=  +77.6° ataque= 22.2° rol= -22.3° arf= +13.4° vel= 8.8 T_mão=10.27 T_nó=10.28 pernas=8.17/7.65 linha= 30.0 diedro=17/21°
+LAB t=22.43 rabiola 3 nós · presa=false força=0.00 N · minha pipa alt 11.2 az +1°
+LAB t=22.43 dist= 30.5 elev= 19.0° az=  +0.6° rumo= -161.0° ataque= 19.6° rol= -19.7° arf= +13.7° vel=10.8 T_mão= 9.00 T_nó= 9.02 pernas=7.12/6.77 linha= 30.0 diedro=16/17°
+LAB t=22.93 rabiola 3 nós · presa=false força=0.00 N · minha pipa alt 9.9 az +3°
+LAB t=22.93 dist= 30.5 elev= 16.4° az=  +2.5° rumo=  -59.5° ataque= 24.6° rol= -22.1° arf= +13.6° vel= 7.0 T_mão= 8.53 T_nó= 8.54 pernas=6.75/6.40 linha= 30.0 diedro=16/17°
+LAB t=23.43 rabiola 3 nós · presa=false força=0.00 N · minha pipa alt 7.0 az -0°
+LAB t=23.43 dist= 30.5 elev= 10.8° az=  -0.4° rumo=  +86.2° ataque= 22.0° rol= -24.9° arf= +13.3° vel= 8.4 T_mão= 9.79 T_nó= 9.78 pernas=7.80/7.25 linha= 30.0 diedro=16/20°
+LAB t=23.93 rabiola 3 nós · presa=false força=0.00 N · minha pipa alt 7.2 az -3°
+LAB t=23.93 dist= 30.6 elev= 11.2° az=  -2.6° rumo= -165.7° ataque= 19.7° rol= -22.4° arf= +14.1° vel=11.0 T_mão=11.35 T_nó=11.34 pernas=8.97/8.49 linha= 30.0 diedro=19/22°
+LAB t=24.43 rabiola 3 nós · presa=false força=0.00 N · minha pipa alt 6.5 az -0°
+LAB t=24.43 dist= 30.5 elev=  9.8° az=  -0.4° rumo=  -88.9° ataque= 23.4° rol= -20.4° arf= +13.3° vel= 7.2 T_mão= 9.75 T_nó= 9.75 pernas=7.74/7.26 linha= 30.0 diedro=18/19°
+LAB t=24.93 rabiola 3 nós · presa=false força=0.00 N · minha pipa alt 4.0 az +1°
+LAB t=24.93 dist= 30.5 elev=  5.1° az=  +0.7° rumo=   +9.5° ataque= 25.6° rol= -23.5° arf= +13.7° vel= 7.6 T_mão=10.60 T_nó=10.58 pernas=8.39/7.90 linha= 30.0 diedro=19/21°
+LAB t=25.43 rabiola 3 nós · presa=false força=0.00 N · minha pipa alt 3.3 az -2°
+LAB t=25.43 dist= 30.5 elev=  3.7° az=  -1.9° rumo= +139.4° ataque= 18.8° rol= -22.0° arf= +13.6° vel=10.4 T_mão=10.54 T_nó=10.53 pernas=8.35/7.85 linha= 30.0 diedro=17/21°
+LAB t=25.93 rabiola 3 nós · presa=false força=0.00 N · minha pipa alt 3.9 az +0°
+LAB t=25.93 dist= 30.5 elev=  4.8° az=  +0.0° rumo= -114.5° ataque= 21.0° rol= -16.4° arf= +13.4° vel= 7.3 T_mão= 9.33 T_nó= 9.32 pernas=7.35/7.00 linha= 30.0 diedro=16/17°
+LAB resumo seq=rabiolacerol: antes (8–12 s) elevação média 43.1° (42.4..43.9), azimute -0.5..1.2°, rumo -3..4°, tração média 4.75 N
+LAB resumo depois (12 s+): rumo -179..179°, azimute -2.8..9.8°, altura 2.6..22.1 m, tração máx 11.5 N, linha 30.0 m
+LAB balanços (picos de giro °/s): +128 -631 
+LAB BALANÇO médio 6° (4 balanços)
+LAB ANDA médio 4.5° (2.4 m a 31 m) por vai-e-volta (20)
+LAB GIRO parado=5°/s toques=7°/s
+LAB SCORE elev=31.2 rumo_rms=72.8 aoa=23.8 y_min=2.6 invertida=7% picos=2

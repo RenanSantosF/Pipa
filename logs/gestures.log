@@ -1,0 +1,26 @@
+Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org
+
+WARNING: Nodes with non-equal opposite anchors will have their size overridden after _ready(). 
+If you want to set size, change the anchors or consider using set_deferred().
+     at: _set_size (scene/gui/control.cpp:1519)
+     GDScript backtrace (most recent call first):
+         [0] start (res://src/main/gesture_probe.gd:19)
+         [1] _attach (res://src/main/main.gd:312)
+         [2] _ready (res://src/main/main.gd:209)
+  ok   toque 1 = balanço para a esquerda (toques 1, lado -1.0)
+  ok   toque 2 = balanço para a direita (toques 2, lado 1.0)
+  ok   cabresto direita (comando +1.00)
+  ok   cabresto solto (comando +0.00)
+  ok   sem desbico nesse gesto
+  ok   cabresto esquerda (comando -1.00)
+  ok   arrastar para baixo não guia
+  ok   puxão recolheu linha (30.00 → 28.81 m)
+  ok   sem desbico nesse gesto
+  ok   cabresto direita (comando +1.00)
+  ok   puxão recolheu linha (28.81 → 27.62 m)
+  ok   toque do 2º dedo desbica
+  ok   arrastar para cima abre a mão (pegada 0.00)
+  ok   faixa do topo = câmera
+GESTOS OK
+WARNING: 11 ObjectDB instances were leaked at exit (run with `--verbose` for details).
+   at: cleanup (core/object/object.cpp:2536)
