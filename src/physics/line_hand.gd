@@ -80,8 +80,8 @@ var _stroke := 0.0
 var _line_pending := 0.0
 ## Velocidade máxima da mão puxando (m/s) com um dedo; dois dedos (uma mão de cada
 ## lado da tela) puxam quase o dobro.
-const PULL_SPEED_ONE := 3.0
-const PULL_SPEED_TWO := 5.5
+const PULL_SPEED_ONE := 1.6
+const PULL_SPEED_TWO := 2.6
 var pull_fingers: int = 1
 ## Braço visual da puxada mão-sobre-mão (só desenho: a linha já entrou pela mão).
 var visual_pull := 0.0

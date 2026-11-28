@@ -300,7 +300,7 @@ func _pilot(delta: float) -> void:
 			if want != 0.0 and signf(rig.heading()) != want:
 				_lh.tap()
 				if rig.next_desbico_side() != want:
-					_lh.tap(0.18)
+					_lh.tap(KiteRig.DESB_CHAIN + 0.1)
 		if pulling and fmod(_t, 0.2) < delta:
 			_lh.pull_line(0.35)
 		rig.hand_rest = _hand_a

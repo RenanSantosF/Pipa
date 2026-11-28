@@ -117,6 +117,12 @@ func _ready() -> void:
 			LineHand.TAP_GIVE = float(a.substr(8))
 		elif a.begins_with("--sdrag="):
 			KiteRig.SPOOL_DRAG = float(a.substr(8))
+		elif a.begins_with("--tcd="):
+			KiteRig.TAIL_CD_PHYSICAL = float(a.substr(6))
+		elif a.begins_with("--tflut="):
+			KiteRig.TAIL_FLUTTER_PHYSICAL = float(a.substr(8))
+		elif a.begins_with("--dchain="):
+			KiteRig.DESB_CHAIN = float(a.substr(9))
 		elif a.begins_with("--dret="):
 			KiteRig.DESB_RETURN = float(a.substr(7))
 		elif a.begins_with("--tapauth="):
@@ -300,6 +306,14 @@ func _plan(seq: String) -> void:
 				t3 += 0.3
 			_log_every = 0.2
 			_end_t = s + 12.0
+		"revirar":
+			# Toques seguidos (0,25 s): continuam girando para o mesmo lado — revira.
+			for k in 4:
+				_ev(s + k * 0.25, "tap")
+			for k in 4:
+				_ev(s + 4.0 + k * 0.25, "tap")
+			_log_every = 0.1
+			_end_t = s + 9.0
 		"volta":
 			# Vira para a direita (2 toques) e PARA de desbicar: ela tem que voltar sozinha
 			# para cima. Depois vira de novo e DESCARREGA (mão aberta 3 s): também volta.
@@ -337,10 +351,11 @@ func _plan(seq: String) -> void:
 			# cortada: a pipa voada e a linha dela caem sobre a minha. Eu recolho.
 			_other = _make_other(HAND + Vector3(0.0, 0.0, 14.0), 48.0, 62.0)
 			_ev(s, "cutother")
-			for k in 120:
+			# Mão puxando a 1,6 m/s (v0.24): recolher 30 m leva ~25 s.
+			for k in 300:
 				_ev(s + 3.0 + k * 0.1, "linepull_if_hooked", 0.15)
 			_log_every = 0.5
-			_end_t = s + 18.0
+			_end_t = s + 36.0
 		"rabiola":
 			# Linha de outra pipa (pura, sem cerol) varrendo de lado na altura da minha rabiola.
 			_other = _make_other(HAND + Vector3(12.0, 11.0, -14.0), 30.0, 50.0)

@@ -160,9 +160,7 @@ func _process(delta: float) -> void:
 	# ZOOM: aproxima a pipa conforme a distância (de longe ela ficava com ~10 px e o
 	# desbico não aparecia). Perto (soltando da mão) volta ao campo de visão normal.
 	var target_fov := BASE_FOV
-	if rig and rig.body and not rig.held and dist > 8.0 and watch_time <= 0.0:
-		var size := (rig.profile.height if rig.profile else 0.65) * rig.visual_scale
-		target_fov = clampf(rad_to_deg(2.0 * atan(size / (2.0 * dist * KITE_SCREEN_FRACTION))), MIN_FOV, BASE_FOV)
+	# Sem zoom (v0.24): a câmera não aproxima a pipa — campo de visão fixo, como o olho.
 	camera.fov = lerpf(camera.fov, target_fov, 1.0 - exp(-1.8 * delta))
 	if input_router:
 		var intent := input_router.intent
@@ -193,6 +191,11 @@ func _apply_rotation() -> void:
 	head.rotation.x = _pitch
 
 
+## Área onde o jogador pode andar (centro e raio, m); 0 = livre.
+var leash_center := Vector3.ZERO
+var leash_radius := 0.0
+
+
 func _physics_process(delta: float) -> void:
 	_phys_prev = global_position
 	var move := Vector2.ZERO
@@ -207,6 +210,15 @@ func _physics_process(delta: float) -> void:
 	else:
 		velocity.y -= _gravity * delta
 	move_and_slide()
+	# Preso na laje: não sai dela (raio em volta do centro da laje).
+	if leash_radius > 0.0:
+		var off := Vector2(global_position.x - leash_center.x, global_position.z - leash_center.z)
+		if off.length() > leash_radius:
+			off = off.normalized() * leash_radius
+			global_position.x = leash_center.x + off.x
+			global_position.z = leash_center.z + off.y
+			velocity.x = 0.0
+			velocity.z = 0.0
 	_phys_cur = global_position
 	_drive_rig(delta)
 	if character:

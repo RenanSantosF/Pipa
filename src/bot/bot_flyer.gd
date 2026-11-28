@@ -423,4 +423,4 @@ func _hunt_physical(alt: float) -> float:
 func _tap_toward(side: float) -> void:
 	_lh.tap()
 	if rig.next_desbico_side() != side:
-		_lh.tap(0.18)
+		_lh.tap(KiteRig.DESB_CHAIN + 0.1)   # depois do encadeamento: vai para o outro lado

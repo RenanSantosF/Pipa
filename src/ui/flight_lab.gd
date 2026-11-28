@@ -35,9 +35,9 @@ const PHYS_PARAMS := [
 	["ret", "Volta do bico depois do balanço (s, 0 = segura)", 0.0, 1.5, 0.05],
 ]
 const PHYS_DEFAULTS := {"angle": 130.0, "time": 0.22, "stiff": 24.0, "force": 1.0, "hold": 1.2, "tug": 4.0,
-	"weight": 1.0, "calm": 1.2, "ret": 0.25}
+	"weight": 1.0, "calm": 1.2, "ret": 0.6}
 ## Arquivo novo a cada versão em que os padrões mudam (valores salvos antigos não valem).
-const PHYS_FILE := "user://desbico_v23.cfg"
+const PHYS_FILE := "user://desbico_v24.cfg"
 
 var rig: KiteRig
 var _readout: Label

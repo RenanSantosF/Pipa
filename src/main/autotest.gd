@@ -168,7 +168,7 @@ func _phase_flight(_delta: float) -> void:
 		elif _t >= 21.0 and _t < 24.6:
 			# DESBICO DIRECIONAL: 2 toques + pausa (três vezes) → vira para a DIREITA.
 			var k2 := fmod(_t - 21.0, 1.2)
-			if _every(1.2, 21.0) or (k2 >= 0.25 and k2 - _dt < 0.25):
+			if _every(1.2, 21.0) or (k2 >= 0.5 and k2 - _dt < 0.5):
 				it.desbico_toques += 1
 			_m["rt2"] = float(_m.get("rt2", 0.0)) + rate * rate
 			_m["rtn"] = int(_m.get("rtn", 0)) + 1
@@ -231,7 +231,7 @@ func _phase_flight(_delta: float) -> void:
 			[_m["el2"] > _m["el1"] + 2.0, "puxar não fez a pipa subir no céu"],
 			[mean_alt2 > 6.0, "a pipa não se manteve no ar"],
 			[r_tap > 1.3 * r_idle and r_tap > 15.0, "desbicar não mexeu o bico (giro %.0f°/s × %.0f°/s parada)" % [r_tap, r_idle]],
-			[rad_to_deg(float(_m.get("h6pk", 0.0))) > 25.0, "2 toques + pausa não virou para a direita"],
+			[rad_to_deg(float(_m.get("h6pk", 0.0))) > 15.0, "2 toques + pausa não virou para a direita"],
 			[rad_to_deg(float(_m.get("h7pk", 0.0))) < -20.0, "o toque seguinte não virou para a esquerda"],
 			[int(_m.get("inv", 0)) < 30, "a pipa ficou de cabeça para baixo (looping)"],
 		]

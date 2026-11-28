@@ -6,7 +6,7 @@ extends MeshInstance3D
 ## vento ao longo da rabiola), abertas em V e tremulando; cores em blocos.
 
 ## Tirinhas (pipa M; escala com o tamanho): espaçamento, comprimento, largura.
-const KNOT_STEP := 0.065
+const KNOT_STEP := 0.11
 const STRIP_LEN := 0.14
 const STRIP_W := 0.022
 ## Fita: ângulo para o lado (rad) e trechos (para ondular).
@@ -122,7 +122,9 @@ func _process(_delta: float) -> void:
 		_soft_quad(a - side, a + side, b + side, b - side, string_col, e)
 	var t_now := Time.get_ticks_msec() / 1000.0
 	var wind := clampf(Wind.get_reference_speed() / 6.0, 0.4, 1.8)
-	var step := KNOT_STEP * k * ex
+	# Longe o espaço entre fitas cresce MAIS que o tamanho delas: poucas fitas maiores
+	# (antes de longe pareciam "mil fitas").
+	var step := KNOT_STEP * k * pow(ex, 1.6)
 	var segs := 2 if far else STRIP_SEGS
 	# Primeiras tirinhas só depois de um pedaço de barbante (como na rabiola de verdade).
 	var acc := GAP * k

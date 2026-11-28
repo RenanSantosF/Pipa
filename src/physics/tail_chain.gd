@@ -33,6 +33,9 @@ static var ITER_OVERRIDE := 0
 const FLUTTER_ACC := 9.0
 ## Escala da tremulação (laboratório).
 static var FLUTTER_SCALE := 1.0
+## Arrasto da rabiola (×): rabiola de sacola arrasta muito — o balanço da pipa morre
+## perto dela em vez de correr a rabiola inteira como um chicote (v0.24).
+static var CD_MUL := 1.0
 
 
 func _init(p_body: KiteRigidBody, p_profile: KiteProfile, length_mult: float = 1.0) -> void:
@@ -78,7 +81,7 @@ func compute_forces() -> void:
 ## k = ½ρ·Cd·A·|v_rel|/m. Estável e igual com física a 30 ou 60 Hz (o arrasto
 ## explícito por tick fazia a rabiola puxar diferente conforme a taxa de física).
 func predict(h: float) -> void:
-	var c := 0.5 * RHO * profile.tail_cd * node_area * inv_m
+	var c := 0.5 * RHO * profile.tail_cd * CD_MUL * node_area * inv_m
 	# Tremulação: as tiras soltam vórtices e a rabiola ondula em S (onda que corre da
 	# pipa para a ponta, mais forte e rápida com mais vento) — não fica uma vara reta.
 	_clock += h

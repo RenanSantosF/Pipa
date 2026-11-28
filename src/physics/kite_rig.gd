@@ -24,7 +24,9 @@ const FEED_DAMP := 2.5
 const MIN_LENGTH := 2.0
 const REEL_HARD_TENSION := 25.0
 ## Atrito mínimo da linha correndo pela mão aberta e pela lata (N), na física real.
-static var SPOOL_DRAG := 1.8
+static var SPOOL_DRAG := 0.9
+## Tração máxima enrolando na lata (N): mais forte que a mão puxando.
+const REEL_MAX_TENSION := 35.0
 ## DESBICO CONTROLADO (física real, v0.20). Cada toque é uma puxadinha que carrega a
 ## perna do cabresto de um lado: o torque (limitado pela tração da linha — linha frouxa
 ## não vira nada) gira o bico em volta da linha. Os lados SEMPRE ALTERNAM: se o último
@@ -52,7 +54,10 @@ static var DESB_TAP_AUTH := 0.0
 ## BALANÇO (v0.23): depois de cada balanço o bico volta para cima com esta constante
 ## de tempo (s) — a pipa balança grande sem sair andando. Puxando, o rumo fica
 ## (ela vai para onde o bico aponta). 0 = segura o rumo (como antes).
-static var DESB_RETURN := 0.25
+static var DESB_RETURN := 0.6
+## Só depois de DESB_RETURN_DELAY s sem tocar (nem puxar) o bico começa a voltar.
+static var DESB_RETURN_DELAY := 0.9
+static var DESB_CHAIN := 0.35
 var _keep_until: float = -10.0
 const DESB_TIME_BY_SIZE := [0.75, 1.0, 1.35]
 const DESB_SEQ_RESET := 0.5
@@ -79,7 +84,10 @@ var tap_slack: bool = false
 func desbico_tap() -> void:
 	if body == null or loose or not physical:
 		return
-	desb_side = -desb_side
+	# Toques SEGUIDOS (até DESB_CHAIN s um do outro) continuam girando para o mesmo lado
+	# — dá para revirar a pipa; depois de uma pausa, o toque vai para o outro lado.
+	if not (desb_active and _desb_clock - desb_last < DESB_CHAIN):
+		desb_side = -desb_side
 	if not desb_active:
 		desb_hold = heading()
 		desb_active = true
@@ -92,7 +100,7 @@ func desbico_tap() -> void:
 
 ## Lado do próximo toque (−1 esquerda, +1 direita).
 func next_desbico_side() -> float:
-	return -desb_side
+	return desb_side if desb_active and _desb_clock - desb_last < DESB_CHAIN else -desb_side
 
 
 ## Puxando: o rumo atual fica mantido (vai reta para onde aponta).
@@ -122,7 +130,7 @@ func _desbico_substep(h: float) -> void:
 		_desb_open = 0.0
 	desb_hold = wrapf(desb_hold + desb_rate * h, -PI, PI)
 	desb_rate *= exp(-h / _desb_tau)
-	if DESB_RETURN > 0.0 and _desb_clock - desb_last > _desb_tau * 1.5 and _desb_clock > _keep_until:
+	if DESB_RETURN > 0.0 and _desb_clock - desb_last > DESB_RETURN_DELAY and _desb_clock > _keep_until:
 		desb_hold = lerp_angle(desb_hold, 0.0, 1.0 - exp(-h / DESB_RETURN))
 	var d := body.x - hand_position()
 	if d.length() < 0.5:
@@ -141,6 +149,10 @@ func _desbico_substep(h: float) -> void:
 
 ## Amortecimento residual de rotação da pipa física (balanços do desbico claros).
 static var ROT_DAMP_PHYSICAL := 1.2
+## Rabiola na física real: sem a onda artificial em S (o tremular é das fitas, no
+## desenho) e com mais arrasto (não vira cobrinha no desbico).
+static var TAIL_FLUTTER_PHYSICAL := 0.0
+static var TAIL_CD_PHYSICAL := 1.5
 ## Comprimento da rabiola na pipa física (× o do perfil), por rabiola [curta, média,
 ## grande]. Na física real é a rabiola que segura a pipa: a curta do perfil (55%)
 ## deixava a pipinha e a média instáveis (davam looping e caíam).
@@ -317,7 +329,8 @@ func launch(hand: Vector3, length: float, elevation_deg: float, direction: Vecto
 	tail = TailChain.new(body, profile, tmul if physical else 1.0)
 	if physical:
 		body.rot_damp_scale = ROT_DAMP_PHYSICAL
-		tail.flutter_scale = 0.5
+		tail.flutter_scale = TAIL_FLUTTER_PHYSICAL
+		TailChain.CD_MUL = TAIL_CD_PHYSICAL
 		body.flex_per_n = flex_per_n
 		body.flex_rest = flex_rest
 	flight = null
@@ -584,7 +597,7 @@ func _update_spool(dt: float) -> void:
 		if r > 0.0 and rope.length() > MIN_LENGTH:
 			var factor := clampf(1.0 - rope.tension_hand / REEL_HARD_TENSION, 0.15, 1.0)
 			var amount := minf(r * factor, rope.length() - MIN_LENGTH)
-			rope.feed(-amount)
+			rope.feed(-amount, REEL_MAX_TENSION)   # a lata enrola mais forte que a mão
 			spool += amount
 
 

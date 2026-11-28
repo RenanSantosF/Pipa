@@ -124,6 +124,9 @@ func _ready() -> void:
 	bot.reseed(randi())
 	var street: StreetBuilder = $World/StreetBuilder
 	player.global_position = street.spawn_point
+	# Você fica EM CIMA DA LAJE (não sai dela).
+	player.leash_center = street.spawn_point
+	player.leash_radius = 2.8
 	var z0 := street.spawn_point.z
 	# Vizinhos em leque contra o vento, dos dois lados, em cima das lajes quando houver.
 	var spots := _bot_spots(street, street.spawn_point, GameConfig.bot_count())

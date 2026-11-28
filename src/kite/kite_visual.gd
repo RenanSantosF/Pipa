@@ -55,10 +55,9 @@ func _process(_delta: float) -> void:
 	# Longe da câmera a pipa é DESENHADA maior (até 3×), em volta do nó do cabresto
 	# (a linha continua presa no mesmo ponto): no celular uma pipa de 65 cm a 40 m
 	# vira um pontinho e o balanço do desbico some.
+	# v0.23+: tamanho REAL em qualquer distância (desenhada maior, de longe ela parecia
+	# grande demais para a distância).
 	var k := 1.0
-	var cam := get_viewport().get_camera_3d()
-	if cam != null:
-		k = clampf(cam.global_position.distance_to(b.x) / VIS_SCALE_DIST, 1.0, VIS_SCALE_MAX)
 	rig.visual_scale = k
 	var kl := _knot_local()
 	var knot := pose.origin + pose.basis * kl

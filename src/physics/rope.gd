@@ -365,11 +365,11 @@ const MAX_NODE_SPEED := 30.0
 
 
 ## Linha entrando (+) ou saindo (−) pela mão. Mantém o material do resto da linha.
-func feed(delta_len: float) -> void:
+func feed(delta_len: float, max_tension: float = MAX_PULL_TENSION) -> void:
 	if pos.size() < 2 or not hand_fixed:
 		return
 	if delta_len < 0.0:
-		if tension_hand > MAX_PULL_TENSION:
+		if tension_hand > max_tension:
 			return
 		var l0 := pos[0].distance_to(pos[1])
 		var min_rest := l0 / (1.0 + MAX_PULL_STRAIN)
