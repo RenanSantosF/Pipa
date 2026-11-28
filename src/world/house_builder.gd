@@ -61,7 +61,7 @@ func build(lot_frame: Transform3D, width: float, front: float, depth: float, dro
 	var hw := width - _rng.randf_range(0.0, 1.2)
 	var house_z := z0 + 0.1 + hw * 0.5 if _rng.randf() < 0.5 else z0 + width - 0.1 - hw * 0.5
 	var r := _rng.randf()
-	var stories := 1 if r < 0.45 else (2 if r < 0.87 else 3)
+	var stories := 1 if r < 0.2 else (2 if r < 0.7 else 3)   # morro: casas empilhadas
 	var fx := front + setback
 	var cx := fx + hd * 0.5
 	var color := _pick(WALL_COLORS)
@@ -88,7 +88,7 @@ func build(lot_frame: Transform3D, width: float, front: float, depth: float, dro
 	var d_cur := hd
 	var top_brick := false
 	for s in stories:
-		var brick := s > 0 and _rng.randf() < 0.06   # casas mais acabadas (v0.22)
+		var brick := s > 0 and _rng.randf() < 0.2   # favela: alguns andares em tijolo
 		var surface := "brick" if brick else "plaster"
 		var col := BRICK if brick else (color if s == 0 or _rng.randf() < 0.6 else _pick(WALL_COLORS))
 		_box(surface, Vector3(fx + d_cur * 0.5, y + STORY_H * 0.5, house_z), Vector3(d_cur, STORY_H, w_cur), col, true)
@@ -105,7 +105,7 @@ func build(lot_frame: Transform3D, width: float, front: float, depth: float, dro
 			d_cur = maxf(d_cur - _rng.randf_range(0.0, 2.5), 3.5)
 
 	# Cobertura.
-	if not top_brick and _rng.randf() < 0.5:
+	if not top_brick and _rng.randf() < 0.3:   # mais laje com caixa d'água
 		_gable_roof(fx + d_cur * 0.5, y, d_cur, w_cur, house_z, color)
 	else:
 		_slab_roof(fx + d_cur * 0.5, y, d_cur, w_cur, house_z, color)
@@ -114,6 +114,26 @@ func build(lot_frame: Transform3D, width: float, front: float, depth: float, dro
 	if detail and _rng.randf() < 0.07 and depth - setback - hd > 2.5:   # menos árvores (v0.22)
 		var tp := frame * Vector3(front + depth - 1.8, 0.0, _rng.randf_range(z0 + 1.5, z0 + width - 1.5))
 		_sb.add_tree(Vector3(tp.x, Ground.height_at(tp.x, tp.z), tp.z), "")
+
+
+## Casa do jogador (v0.23): 2 andares com LAJE e parapeito baixo; a laje tem colisão.
+## O referencial é o do lote (frente em x = 0, cresce para +x). Retorna a altura do
+## piso da laje.
+func build_laje(lot_frame: Transform3D, width: float, depth: float, stories: int, drop: float) -> float:
+	frame = lot_frame
+	_z = lot_frame.origin.z
+	var color := _pick(WALL_COLORS)
+	var cx := depth * 0.5
+	if drop > 0.2:
+		_box("muro", Vector3(cx, -drop * 0.5, 0.0), Vector3(depth, drop, width), Color(0.7, 0.7, 0.68), true)
+	var y := 0.0
+	for s in stories:
+		_box("plaster", Vector3(cx, y + STORY_H * 0.5, 0.0), Vector3(depth, STORY_H, width), color, true)
+		_box("laje", Vector3(cx, y + STORY_H + 0.06, 0.0), Vector3(depth + 0.3, 0.12, width + 0.3), Color(0.75, 0.74, 0.72), s == stories - 1)
+		_facade(0.0, y, 0.0, width, s == 0)
+		y += STORY_H + 0.12
+	_slab_roof(cx, y, depth, width, 0.0, color)
+	return y
 
 
 func _wall_z(x: float, za: float, zb: float, h: float, color: Color) -> void:

@@ -55,7 +55,9 @@ func _process(_delta: float) -> void:
 	# linha (que sai da sua mão) é sempre redesenhada — senão ela "trepidava".
 	var mid_pt := rope.pos[rope.pos.size() / 2]
 	var near_pt := minf(cam.global_position.distance_to(rope.pos[0]), cam.global_position.distance_to(mid_pt))
-	if near_pt > 45.0 and (Engine.get_process_frames() + get_instance_id()) % 2 == 0:
+	# Linha perto de outra (tem contato) é redesenhada SEMPRE: uma desenhada um quadro
+	# atrasada da outra parecia atravessar no cruzamento.
+	if near_pt > 45.0 and rope.render_kinks.is_empty() and (Engine.get_process_frames() + get_instance_id()) % 2 == 0:
 		return
 	_im.clear_surfaces()
 	_pts.resize(0)

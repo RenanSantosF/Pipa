@@ -26,8 +26,10 @@ extends RefCounted
 ## linha sem tração, a vareta desenverga, o bico fica solto) e logo puxa curto (a
 ## linha estica de novo e a pipa sai para onde o bico estiver apontando).
 ## Folga: braço à frente (m), tempo (s), pegada aberta durante a folga.
-static var TAP_SLACK := 0.04
-static var TAP_SLACK_T := 0.06
+## Folga curta com a mão firme (a linha não corre a cada toque: frouxa e correndo,
+## ela cruzava mais com as outras nos testes).
+static var TAP_SLACK := 0.06
+static var TAP_SLACK_T := 0.08
 static var TAP_GIVE := 0.6
 ## Pipa longe: o pipeiro aumenta o braço (a linha comprida estica e faz barriga e
 ## engole um tranco curto). Ganho por metro de linha acima de FAR_FROM e o máximo.
@@ -35,7 +37,7 @@ static var FAR_GAIN := 0.012
 const FAR_FROM := 25.0
 const FAR_MAX := 1.6
 ## Puxadinha: curso (m), subida e volta (s).
-static var TUG_LEN := 0.08
+static var TUG_LEN := 0.04
 static var TUG_UP := 0.07
 static var TUG_DOWN := 0.2
 ## Braçada do puxão: curso (m), arranque, segurada e volta do braço (s).
@@ -226,6 +228,7 @@ func update(delta: float, grip_in: float, reel: float) -> void:
 		s += tp
 		if _tug_t < TAP_SLACK_T:
 			grip = minf(grip, TAP_GIVE)
+		rig.tap_slack = _tug_t < TAP_SLACK_T + 0.05
 		if _tug_t >= _tug_total():
 			_tug_t = -1.0
 			_tug_from = 0.0
@@ -241,6 +244,8 @@ func update(delta: float, grip_in: float, reel: float) -> void:
 	else:
 		_line_pending = 0.0
 		visual_pull = move_toward(visual_pull, 0.0, 1.2 * delta)
+	if _tug_t < 0.0:
+		rig.tap_slack = false
 	_stroke = s
 	rig.stroke = s
 	rig.grip = grip

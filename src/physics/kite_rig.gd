@@ -23,6 +23,8 @@ const FEED_MASS := 0.06      # inércia da linha + lata girando
 const FEED_DAMP := 2.5
 const MIN_LENGTH := 2.0
 const REEL_HARD_TENSION := 25.0
+## Atrito mínimo da linha correndo pela mão aberta e pela lata (N), na física real.
+static var SPOOL_DRAG := 1.8
 ## DESBICO CONTROLADO (física real, v0.20). Cada toque é uma puxadinha que carrega a
 ## perna do cabresto de um lado: o torque (limitado pela tração da linha — linha frouxa
 ## não vira nada) gira o bico em volta da linha. Os lados SEMPRE ALTERNAM: se o último
@@ -34,20 +36,28 @@ const REEL_HARD_TENSION := 25.0
 ## AJUSTÁVEIS (barras na área de testes): ângulo de um balanço (graus, se não for
 ## interrompido pelo próximo toque), tempo do balanço (s), força do cabresto (×) e quanto
 ## tempo o rumo fica segurado sem mexer (s). Por tamanho [P, M, G] o tempo é escalado.
-static var DESB_ANGLE_DEG := 110.0
-static var DESB_TIME := 0.5
+static var DESB_ANGLE_DEG := 130.0
+static var DESB_TIME := 0.22
 static var DESB_FORCE := 1.0
-static var DESB_HOLD := 1.4
+static var DESB_HOLD := 1.2
 ## Os últimos DESB_FADE s do "segurar o rumo" vão soltando aos poucos (ela começa a
 ## voltar para cima com a rabiola, sem tranco). Mão aberta (descarregando) solta logo.
 const DESB_FADE := 0.8
 ## Força mínima do cabresto com a linha frouxa (N): quase nada — linha sem tração
 ## não vira a pipa.
 const DESB_AUTH_FLOOR := 0.2
+## Durante o balanço de um toque (folga do "dá e puxa") o bico cai para o lado pelo
+## cabresto solto, sem precisar de tração: força extra equivalente (N).
+static var DESB_TAP_AUTH := 0.0
+## BALANÇO (v0.23): depois de cada balanço o bico volta para cima com esta constante
+## de tempo (s) — a pipa balança grande sem sair andando. Puxando, o rumo fica
+## (ela vai para onde o bico aponta). 0 = segura o rumo (como antes).
+static var DESB_RETURN := 0.25
+var _keep_until: float = -10.0
 const DESB_TIME_BY_SIZE := [0.75, 1.0, 1.35]
 const DESB_SEQ_RESET := 0.5
 
-static var DESB_WN := 20.0
+static var DESB_WN := 24.0
 const DESB_ZETA := 0.95
 ## Braço da perna do cabresto (m): torque máximo = tração × braço (pipa M).
 const DESB_ARM := 0.13
@@ -61,6 +71,8 @@ var _desb_tau: float = 0.3
 var _desb_until: float = -10.0
 var _desb_clock: float = 0.0
 var _desb_open: float = 0.0
+## A mão está na folga de um toque (não é descarregar): escrito pela LineHand.
+var tap_slack: bool = false
 
 
 ## Um toque de desbico (chamado pela mão quando a puxadinha acontece).
@@ -87,6 +99,7 @@ func next_desbico_side() -> float:
 func desbico_keep() -> void:
 	if desb_active:
 		_desb_until = maxf(_desb_until, _desb_clock + 0.6)
+		_keep_until = _desb_clock + 0.4
 
 
 func _desbico_substep(h: float) -> void:
@@ -99,7 +112,7 @@ func _desbico_substep(h: float) -> void:
 		body.ext_torque = Vector3.ZERO
 		return
 	# Mão aberta (dando linha/descarregando): o cabresto não segura nada.
-	if grip < 0.4:
+	if grip < 0.4 and not tap_slack:
 		_desb_open += h
 		if _desb_open > 0.15:
 			desb_active = false
@@ -109,6 +122,8 @@ func _desbico_substep(h: float) -> void:
 		_desb_open = 0.0
 	desb_hold = wrapf(desb_hold + desb_rate * h, -PI, PI)
 	desb_rate *= exp(-h / _desb_tau)
+	if DESB_RETURN > 0.0 and _desb_clock - desb_last > _desb_tau * 1.5 and _desb_clock > _keep_until:
+		desb_hold = lerp_angle(desb_hold, 0.0, 1.0 - exp(-h / DESB_RETURN))
 	var d := body.x - hand_position()
 	if d.length() < 0.5:
 		body.ext_torque = Vector3.ZERO
@@ -119,7 +134,8 @@ func _desbico_substep(h: float) -> void:
 	var i_d := body.inertia.z * 3.0
 	var tq := i_d * (DESB_WN * DESB_WN * err + 2.0 * DESB_ZETA * DESB_WN * (desb_rate - wd))
 	var fade := clampf((_desb_until - _desb_clock) / DESB_FADE, 0.0, 1.0)
-	var auth := DESB_ARM * DESB_FORCE * (profile.height / 0.65) * (rope.tension_end + DESB_AUTH_FLOOR) * fade
+	var swing := 1.0 if _desb_clock - desb_last < _desb_tau * 2.0 else 0.0
+	var auth := DESB_ARM * DESB_FORCE * (profile.height / 0.65) * (rope.tension_end + DESB_AUTH_FLOOR + DESB_TAP_AUTH * swing) * fade
 	body.ext_torque = d * clampf(tq * fade, -auth, auth)
 
 
@@ -532,7 +548,10 @@ func _update_spool(dt: float) -> void:
 		f_cap = 0.97 * line_type.break_tension
 	if (grip < 0.98 or rope.tension_hand > f_cap) and pile + spool > 0.05:
 		# Atrito da mão cresce com o quadrado da pegada (mão quase aberta = linha corre fácil).
-		var f_grip := minf(grip * grip * GRIP_MAX, f_cap)
+		# Mesmo com a mão aberta a linha corre com o atrito dos dedos e da lata: ela
+		# descarrega ainda um pouco tensa e a pipa vai para trás VOANDO (sem atrito ela
+		# empinava de frente para o vento e "desmontava" por uns segundos).
+		var f_grip := minf(maxf(grip * grip * GRIP_MAX, SPOOL_DRAG if physical else 0.0), f_cap)
 		feed_speed += ((rope.tension_hand - f_grip) / FEED_MASS - FEED_DAMP * feed_speed) * dt
 		feed_speed = maxf(feed_speed, 0.0)
 		# DESCARREGAR (pipa do jogador): com a mão aberta a linha corre com o vento

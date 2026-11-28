@@ -135,6 +135,7 @@ func build() -> void:
 	_build_terrain()
 	_build_roads()
 	_build_campinho()
+	_build_spawn_house()
 	_build_road_lots()
 	_build_block_fill()
 	_build_poles()
@@ -189,7 +190,7 @@ func add_collider(xf: Transform3D, size: Vector3, line_obstacle: bool = true) ->
 ## MORRO (v0.22): o terreno sobe ao longo das ruas (+Z) — as ruas são LADEIRAS — e
 ## desce para onde o vento leva a pipa (−Z). Você fica do meio para cima do morro: a
 ## pipa sai por cima dos telhados de baixo (soltar fica mais fácil).
-const HILL_SLOPE := 0.12
+const HILL_SLOPE := 0.2
 func raw_height(x: float, z: float) -> float:
 	return HILL_SLOPE * z + 0.03 * x + 1.2 * sin(z * 0.03 + x * 0.015) + 1.0 * _noise.get_noise_2d(x, z)
 
@@ -540,8 +541,45 @@ func _build_block_fill() -> void:
 					var origin := Vector3(px, gmax, pz) - out * (depth * 0.5)
 					var basis := Basis(out, Vector3.UP, out.cross(Vector3.UP).normalized())
 					_houses.build(Transform3D(basis, origin), w, 0.0, depth, gmax - gmin, not far)
-			z += 9.0
-		x += 9.5
+			z += 7.5
+		x += 8.0
+
+
+## Casa do jogador: laje de 2 andares ao lado da rua principal, do meio para cima do
+## morro. Você começa EM CIMA DA LAJE (a pipa sai por cima dos telhados de baixo).
+var _spawn_laje := Vector3.ZERO
+func _build_spawn_house() -> void:
+	var pts: PackedVector3Array = roads[0][0]
+	var i := 1
+	for k in range(1, pts.size() - 1):
+		if absf(pts[k].z - 55.0) < absf(pts[i].z - 55.0):
+			i = k
+	var p := pts[i]
+	var t := pts[i + 1] - pts[i - 1]
+	t.y = 0.0
+	t = t.normalized()
+	var out := t.cross(Vector3.UP).normalized()
+	var front: float = float(roads[0][1]) + float(roads[0][2]) + 0.3
+	var width := 8.0
+	var depth := 8.0
+	var z_axis := out.cross(Vector3.UP).normalized()
+	var gmax := -INF
+	var gmin := INF
+	for fd in [front, front + depth * 0.5, front + depth]:
+		for fw in [-0.5, 0.0, 0.5]:
+			var q: Vector3 = p + out * float(fd) + z_axis * (float(fw) * width)
+			gmax = maxf(gmax, Ground.height_at(q.x, q.z))
+			gmin = minf(gmin, Ground.height_at(q.x, q.z))
+	var basis := Basis(out, Vector3.UP, -z_axis)
+	if basis.determinant() < 0.0:
+		basis = Basis(out, Vector3.UP, z_axis)
+	var origin := p + out * front
+	origin.y = gmax + 0.17
+	var xf := Transform3D(basis, origin)
+	var top := _houses.build_laje(xf, width, depth, 2, gmax - gmin)
+	var c := origin + out * (depth * 0.5)
+	_occupied.append([Vector2(c.x, c.z), depth * 0.6])
+	_spawn_laje = xf * Vector3(depth * 0.45, top + 0.15, 0.0)
 
 
 func _build_campinho() -> void:
@@ -844,8 +882,11 @@ func _commit() -> void:
 		add_child(wires)
 	# Pontos de partida.
 	var a: PackedVector3Array = roads[0][0]
-	var sp := _road_point_near(a, 55.0)
-	spawn_point = Vector3(sp.x, Ground.height_at(sp.x, sp.z) + 0.1, sp.z)
+	if _spawn_laje == Vector3.ZERO:
+		var sp := _road_point_near(a, 55.0)
+		spawn_point = Vector3(sp.x, Ground.height_at(sp.x, sp.z) + 0.1, sp.z)
+	else:
+		spawn_point = _spawn_laje
 	var b: PackedVector3Array = roads[1][0]
 	var bp := _road_point_near(b, 25.0)
 	bot_point = Vector3(bp.x - 4.0, Ground.height_at(bp.x - 4.0, bp.z) + 0.2, bp.z)

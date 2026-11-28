@@ -24,7 +24,8 @@ const DETECT_RADIUS := 0.7
 const RELEASE_DISTANCE := 1.0
 const CONTACT_GAP := 0.003
 const BIN := 0.1
-const DAMAGE_SCALE := 0.22
+## Desgaste por atrito (v0.23: 3× mais rápido — relo apertado corta em segundos, não em minuto).
+const DAMAGE_SCALE := 0.66
 const GROUP := 4
 const HOOK_GAP := 0.03
 const MAX_PER_PAIR := 24
@@ -931,9 +932,10 @@ func post_frame(dt: float, h: float, substeps: int) -> void:
 		c.position = (pa + pb) * 0.5
 		c.force = c.impulse / (h * h * float(substeps))
 		c.touching = c.hooked or c.force > 0.005 or pa.distance_to(pb) < 0.02
-		if c.touching or pa.distance_to(pb) < 0.25:
-			# Perto: as duas linhas são desenhadas RETAS ali (a curva suave entre os nós
-			# estufava e passava por dentro da outra linha, mesmo separadas na física).
+		if not c.hooked or c.touching:
+			# Perto (qualquer contato, até ~1 m): as duas linhas são desenhadas RETAS ali,
+			# como na física. A curva suave entre os nós estufa até ~20 cm numa dobra e
+			# desenhada "passava" pela outra linha mesmo separadas na física (v0.23).
 			ra.add_render_kink(c.ia, c.ta)
 			rb.add_render_kink(c.ib, c.tb)
 		if c.touching:
